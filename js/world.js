@@ -66,6 +66,8 @@ const WorldEditor = (() => {
     const side = ws.querySelector("#world-side");
     const zoomLabel = ws.querySelector("#zoom-label");
     const ctx = canvas.getContext("2d");
+    // Force layout now that map-stage is in the DOM (visible workspace)
+    void canvas.parentElement.offsetHeight;
 
     const cells = BQDB.all("SELECT id, GroundTile, ForegroundTile, Name, X, Y, Music, Collision, Enemy FROM world");
     const at = new Map();
@@ -122,11 +124,11 @@ const WorldEditor = (() => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const stage = canvas.parentElement;
       const rect = canvas.getBoundingClientRect();
-      // Prefer stage size — getBoundingClientRect can be 0 before layout settles
       const stageW = stage ? stage.clientWidth : 0;
       const stageH = stage ? stage.clientHeight : 0;
-      cssW = Math.max(1, stageW || rect.width || canvas.clientWidth || 640);
-      cssH = Math.max(1, stageH || rect.height || canvas.clientHeight || 400);
+      cssW = Math.max(0, stageW || rect.width || canvas.clientWidth || 0);
+      cssH = Math.max(0, stageH || rect.height || canvas.clientHeight || 0);
+      if (cssW < 32 || cssH < 32) return false;
       const bw = Math.max(1, Math.round(cssW * dpr));
       const bh = Math.max(1, Math.round(cssH * dpr));
       if (canvas.width !== bw || canvas.height !== bh) {
@@ -134,6 +136,7 @@ const WorldEditor = (() => {
         canvas.height = bh;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return true;
     }
 
     function clampZoom(z) {
@@ -167,17 +170,18 @@ const WorldEditor = (() => {
     }
 
     function fit() {
-      resize();
+      if (!resize()) return false;
       const spanX = (maxX - minX + 1) * TILE;
       const spanY = (maxY - minY + 1) * TILE;
       st.zoom = clampZoom(Math.min(cssW / spanX, cssH / spanY) * 0.95);
       st.camX = (minX + maxX + 1) / 2;
       st.camY = (minY + maxY + 1) / 2;
       scheduleDraw();
+      return true;
     }
 
     function draw() {
-      resize();
+      if (!resize()) return;
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, cssW, cssH);
@@ -555,39 +559,60 @@ const WorldEditor = (() => {
 
     showSide(st.sel);
 
-    let lastStageW = 0, lastStageH = 0;
+    let hadSize = false;
+    let roQuiet = false;
+    let lastRoW = -1, lastRoH = -1;
     function ensureSizedDraw(forceFit) {
-      resize();
-      const tiny = cssW < 40 || cssH < 40;
-      if (!tiny && (forceFit || !st._didAutoFit || lastStageW < 40 || lastStageH < 40)) {
-        st._didAutoFit = true;
-        fit();
-      } else {
-        scheduleDraw();
+      if (roQuiet) return;
+      const ok = resize();
+      if (!ok) {
+        hadSize = false;
+        if (zoomLabel) zoomLabel.textContent = "Waiting for layout…";
+        return;
       }
-      lastStageW = cssW;
-      lastStageH = cssH;
+      const needFit = forceFit || !st._didAutoFit || !hadSize;
+      hadSize = true;
+      roQuiet = true;
+      try {
+        if (needFit) {
+          st._didAutoFit = true;
+          fit();
+        } else {
+          scheduleDraw();
+        }
+      } finally {
+        // Release after paint so ResizeObserver from canvas buffer resize is ignored
+        requestAnimationFrame(() => { roQuiet = false; });
+      }
     }
 
     if (WorldEditor._ro) {
       try { WorldEditor._ro.disconnect(); } catch (_) {}
+      WorldEditor._ro = null;
     }
-    WorldEditor._ro = new ResizeObserver(() => ensureSizedDraw(false));
+    let roTimer = 0;
+    WorldEditor._ro = new ResizeObserver(() => {
+      if (roQuiet) return;
+      const stage = canvas.parentElement;
+      if (!stage) return;
+      const w = stage.clientWidth, h = stage.clientHeight;
+      if (w === lastRoW && h === lastRoH) return;
+      lastRoW = w;
+      lastRoH = h;
+      clearTimeout(roTimer);
+      roTimer = setTimeout(() => ensureSizedDraw(false), 50);
+    });
     if (canvas.parentElement) WorldEditor._ro.observe(canvas.parentElement);
 
-    // Double rAF so newly injected map-stage has non-zero layout before fit
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => ensureSizedDraw(true));
-    });
-
-    // Cleanup note: listeners on window for space — re-render replaces ws so old canvas gone; keys may stack.
-    // Remove prior space handlers if any
-    if (WorldEditor._keyDown) {
-      window.removeEventListener("keydown", WorldEditor._keyDown);
-      window.removeEventListener("keyup", WorldEditor._keyUp);
+    let tries = 0;
+    function bootLoop() {
+      tries += 1;
+      ensureSizedDraw(true);
+      if (!hadSize && tries < 90) requestAnimationFrame(bootLoop);
     }
-    WorldEditor._keyDown = onKey;
-    WorldEditor._keyUp = onKey;
+    requestAnimationFrame(bootLoop);
+    setTimeout(() => ensureSizedDraw(true), 100);
+    setTimeout(() => ensureSizedDraw(true), 400);
   }
 
   return { render };
