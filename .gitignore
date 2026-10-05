@@ -1,0 +1,12 @@
+.DS_Store
+*.log
+node_modules/
+__pycache__/
+.idea/
+.vscode/
+# Never commit live player / secrets
+bq-users.db
+users.db
+*firebase*.json
+*.pem
+.env

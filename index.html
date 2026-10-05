@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BrawlQuest Content Editor</title>
+  <meta name="description" content="Browser-only editor for BrawlQuest bq-content.db — items, enemies, NPCs, quests, dialogue, world, loot, craft.">
+  <meta name="theme-color" content="#0f1419">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand">BrawlQuest <span>Content Editor</span></div>
+      <div class="file-bar" id="file-bar">
+        <button type="button" id="btn-load-sample" class="btn">Load sample</button>
+        <label class="btn file-btn">Open file<input type="file" id="file-input" accept=".db,.sqlite,.sqlite3,application/octet-stream" hidden></label>
+        <button type="button" id="btn-save" class="btn primary" disabled>Download database</button>
+        <span class="status" id="status">No database loaded</span>
+      </div>
+    </div>
+    <nav class="nav" id="nav" aria-label="Editors" hidden>
+      <button type="button" data-tab="items" class="tab active">Items</button>
+      <button type="button" data-tab="enemies" class="tab">Enemies</button>
+      <button type="button" data-tab="npcs" class="tab">NPCs</button>
+      <button type="button" data-tab="quests" class="tab">Quests</button>
+      <button type="button" data-tab="dialogue" class="tab">Dialogue</button>
+      <button type="button" data-tab="world" class="tab">World</button>
+      <button type="button" data-tab="loot" class="tab">Loot</button>
+      <button type="button" data-tab="craft" class="tab">Craft</button>
+      <button type="button" data-tab="forge" class="tab">Forge</button>
+    </nav>
+  </header>
+  <main id="main" class="main">
+    <section class="welcome" id="welcome">
+      <h1>Content Editor</h1>
+      <p class="lede">Load a BrawlQuest <code>bq-content.db</code> (or any matching SQLite catalogue). All edits stay in memory until you download. No passwords, no server, no player data.</p>
+      <ul>
+        <li>Items, enemies (spells + loot), NPCs, quests</li>
+        <li>Dialogue trees with game-compatible <code>Options</code></li>
+        <li>World map painter, craft recipes, forge</li>
+      </ul>
+      <p>Use <strong>Load sample</strong> for the bundled catalogue, or open your own <code>.db</code> / <code>.sqlite</code> file.</p>
+    </section>
+    <section id="workspace" class="workspace" hidden></section>
+  </main>
+  <div id="toast" class="toast" hidden></div>
+  <script src="vendor/sql-wasm.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/options.js"></script>
+  <script src="js/editors.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/dialogue.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
