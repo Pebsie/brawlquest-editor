@@ -555,22 +555,29 @@ const WorldEditor = (() => {
 
     showSide(st.sel);
 
+    let lastStageW = 0, lastStageH = 0;
+    function ensureSizedDraw(forceFit) {
+      resize();
+      const tiny = cssW < 40 || cssH < 40;
+      if (!tiny && (forceFit || !st._didAutoFit || lastStageW < 40 || lastStageH < 40)) {
+        st._didAutoFit = true;
+        fit();
+      } else {
+        scheduleDraw();
+      }
+      lastStageW = cssW;
+      lastStageH = cssH;
+    }
+
     if (WorldEditor._ro) {
       try { WorldEditor._ro.disconnect(); } catch (_) {}
     }
-    WorldEditor._ro = new ResizeObserver(() => scheduleDraw());
-    WorldEditor._ro.observe(canvas.parentElement || canvas);
+    WorldEditor._ro = new ResizeObserver(() => ensureSizedDraw(false));
+    if (canvas.parentElement) WorldEditor._ro.observe(canvas.parentElement);
 
-    // Double rAF so layout has non-zero map-stage size before fit/draw
+    // Double rAF so newly injected map-stage has non-zero layout before fit
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!st._didAutoFit) {
-          st._didAutoFit = true;
-          fit();
-        } else {
-          scheduleDraw();
-        }
-      });
+      requestAnimationFrame(() => ensureSizedDraw(true));
     });
 
     // Cleanup note: listeners on window for space — re-render replaces ws so old canvas gone; keys may stack.
