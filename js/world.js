@@ -12,7 +12,8 @@ const WorldEditor = (() => {
     const s = String(path || "");
     let h = 0;
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    return `hsl(${h % 360} ${35 + (h % 40)}% ${28 + ((h >> 8) % 25)}%)`;
+    // Comma-form HSL — canvas fillStyle often rejects CSS Color 4 space-separated hsl()
+    return `hsl(${h % 360}, ${35 + (h % 40)}%, ${35 + ((h >> 8) % 25)}%)`;
   }
 
   function assetUrl(path) {
@@ -119,9 +120,13 @@ const WorldEditor = (() => {
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const stage = canvas.parentElement;
       const rect = canvas.getBoundingClientRect();
-      cssW = Math.max(1, rect.width);
-      cssH = Math.max(1, rect.height);
+      // Prefer stage size — getBoundingClientRect can be 0 before layout settles
+      const stageW = stage ? stage.clientWidth : 0;
+      const stageH = stage ? stage.clientHeight : 0;
+      cssW = Math.max(1, stageW || rect.width || canvas.clientWidth || 640);
+      cssH = Math.max(1, stageH || rect.height || canvas.clientHeight || 400);
       const bw = Math.max(1, Math.round(cssW * dpr));
       const bh = Math.max(1, Math.round(cssH * dpr));
       if (canvas.width !== bw || canvas.height !== bh) {
@@ -185,55 +190,55 @@ const WorldEditor = (() => {
       const y1 = Math.floor(st.camY + cssH / 2 / tilePx) + 1;
       const useSprites = tilePx >= TILE * SPRITE_ZOOM;
       const size = Math.max(1, Math.ceil(tilePx));
+      let drawn = 0;
 
-      for (let y = y0; y <= y1; y++) {
-        for (let x = x0; x <= x1; x++) {
-          const cell = at.get(x + "," + y);
-          if (!cell) continue;
-          const sx = Math.round((x - st.camX) * tilePx + cssW / 2);
-          const sy = Math.round((y - st.camY) * tilePx + cssH / 2);
-          if (sx + size < 0 || sy + size < 0 || sx > cssW || sy > cssH) continue;
+      // Iterate existing tiles only (50k), cull to viewport — avoids empty-space scan
+      for (const cell of at.values()) {
+        if (cell.X < x0 || cell.X > x1 || cell.Y < y0 || cell.Y > y1) continue;
+        const sx = Math.round((cell.X - st.camX) * tilePx + cssW / 2);
+        const sy = Math.round((cell.Y - st.camY) * tilePx + cssH / 2);
+        if (sx + size < 0 || sy + size < 0 || sx > cssW || sy > cssH) continue;
 
-          if (useSprites) {
-            const g = sprite(cell.GroundTile);
-            if (g) ctx.drawImage(g, sx, sy, size, size);
+        // Always paint ground colour first so the map is visible even if images fail
+        ctx.fillStyle = hashColor(cell.GroundTile);
+        ctx.fillRect(sx, sy, size, size);
+
+        if (useSprites) {
+          const g = sprite(cell.GroundTile);
+          if (g) ctx.drawImage(g, sx, sy, size, size);
+          if (cell.ForegroundTile) {
+            const f = sprite(cell.ForegroundTile);
+            if (f) ctx.drawImage(f, sx, sy, size, size);
             else {
-              ctx.fillStyle = hashColor(cell.GroundTile);
-              ctx.fillRect(sx, sy, size, size);
-            }
-            if (cell.ForegroundTile) {
-              const f = sprite(cell.ForegroundTile);
-              if (f) ctx.drawImage(f, sx, sy, size, size);
-              else {
-                ctx.globalAlpha = 0.65;
-                ctx.fillStyle = hashColor(cell.ForegroundTile);
-                ctx.fillRect(sx, sy, size, size);
-                ctx.globalAlpha = 1;
-              }
-            }
-          } else {
-            // cheap overview: 1-ish px colour
-            ctx.fillStyle = hashColor(cell.GroundTile);
-            ctx.fillRect(sx, sy, size, size);
-            if (cell.ForegroundTile) {
-              ctx.globalAlpha = 0.45;
+              ctx.globalAlpha = 0.55;
               ctx.fillStyle = hashColor(cell.ForegroundTile);
               ctx.fillRect(sx, sy, size, size);
               ctx.globalAlpha = 1;
             }
           }
-
-          if (cell.Collision && tilePx >= 4) {
-            ctx.strokeStyle = "rgba(231,111,81,0.75)";
-            ctx.lineWidth = 1;
-            ctx.strokeRect(sx + 0.5, sy + 0.5, Math.max(0, size - 1), Math.max(0, size - 1));
-          }
-          if (cell.Enemy && tilePx >= 6) {
-            ctx.fillStyle = "#f4a261";
-            const d = Math.max(2, size * 0.28);
-            ctx.fillRect(sx + (size - d) / 2, sy + (size - d) / 2, d, d);
-          }
+        } else if (cell.ForegroundTile) {
+          ctx.globalAlpha = 0.45;
+          ctx.fillStyle = hashColor(cell.ForegroundTile);
+          ctx.fillRect(sx, sy, size, size);
+          ctx.globalAlpha = 1;
         }
+
+        if (cell.Collision && tilePx >= 4) {
+          ctx.strokeStyle = "rgba(231,111,81,0.75)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(sx + 0.5, sy + 0.5, Math.max(0, size - 1), Math.max(0, size - 1));
+        }
+        if (cell.Enemy && tilePx >= 6) {
+          ctx.fillStyle = "#f4a261";
+          const d = Math.max(2, size * 0.28);
+          ctx.fillRect(sx + (size - d) / 2, sy + (size - d) / 2, d, d);
+        }
+        drawn++;
+      }
+      if (zoomLabel && drawn === 0 && at.size) {
+        zoomLabel.textContent += " · no tiles in view — Fit";
+      } else if (zoomLabel) {
+        zoomLabel.dataset.drawn = String(drawn);
       }
 
       if (st.sel) {
@@ -549,9 +554,23 @@ const WorldEditor = (() => {
     }, { passive: false });
 
     showSide(st.sel);
+
+    if (WorldEditor._ro) {
+      try { WorldEditor._ro.disconnect(); } catch (_) {}
+    }
+    WorldEditor._ro = new ResizeObserver(() => scheduleDraw());
+    WorldEditor._ro.observe(canvas.parentElement || canvas);
+
+    // Double rAF so layout has non-zero map-stage size before fit/draw
     requestAnimationFrame(() => {
-      if (!st._didAutoFit) { st._didAutoFit = true; fit(); }
-      else scheduleDraw();
+      requestAnimationFrame(() => {
+        if (!st._didAutoFit) {
+          st._didAutoFit = true;
+          fit();
+        } else {
+          scheduleDraw();
+        }
+      });
     });
 
     // Cleanup note: listeners on window for space — re-render replaces ws so old canvas gone; keys may stack.

@@ -116,7 +116,7 @@ table.mini .num { width: 72px; }
 /* World */
 .world-wrap { display: grid; grid-template-columns: 1fr 300px; gap: 12px; }
 @media (max-width: 900px) { .world-wrap { grid-template-columns: 1fr; } }
-.map-stage { border: 1px solid var(--border); border-radius: 10px; background: #000; height: min(70vh, 720px); position: relative; overflow: hidden; }
+.map-stage { border: 1px solid var(--border); border-radius: 10px; background: #05070a; height: min(70vh, 720px); min-height: 320px; position: relative; overflow: hidden; }
 .map-stage canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
 .map-stage canvas.panning { cursor: grabbing; }
 .world-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
