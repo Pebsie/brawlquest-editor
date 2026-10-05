@@ -104,6 +104,7 @@ const App = (() => {
     window.addEventListener("beforeunload", (e) => {
       if (BQDB.isDirty()) { e.preventDefault(); e.returnValue = ""; }
     });
+    ItemPicker.mountAssetRootControl(document.getElementById("asset-root-host"));
     BQDB.init().catch((e) => console.warn("sql.js init", e));
   }
 

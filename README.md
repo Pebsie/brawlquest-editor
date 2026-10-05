@@ -60,6 +60,10 @@ Strict JSON: `[{"Amount":1,"ItemID":9},{"Amount":-5,"ItemID":11}]` — negative 
 
 Append new ids (`MAX(id)+1`). **Never renumber.** Hardcoded item ids include starter gear 1–3, fish drop 23, Old World Crystal 53, Crystal Fragment 135, reputation currencies 116–118. Renaming enemies/items/Identifiers is a refactor — the editor updates known references or asks before proceeding. `bq-users.db` also holds FKs outside this file.
 
+## Item picker & assets
+
+Every ItemID field uses a searchable picker (icon + name + id). Pixel art is served from bundled `assets/` (paths match game `ImgPath`). Override the asset base URL in the header if you host images elsewhere (e.g. the armoury asset root).
+
 ## Local preview
 
 ```bash

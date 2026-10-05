@@ -172,11 +172,12 @@ const DialogueEditor = (() => {
         </div>`;
       // inject items given
       const igHost = nodeEditor.querySelector("#ig");
-      igHost.innerHTML = `<div class="table-wrap"><table class="mini"><thead><tr><th>ItemID</th><th>Amount</th><th></th></tr></thead>
-        <tbody id="items-given-body">${items.map((it) => `<tr><td><input class="num" data-k="ItemID" type="number" value="${esc(it.ItemID)}"></td>
+      igHost.innerHTML = `<div class="table-wrap"><table class="mini"><thead><tr><th>Item</th><th>Amount</th><th></th></tr></thead>
+        <tbody id="items-given-body">${items.map((it) => `<tr><td>${ItemPicker.controlHtml(it.ItemID, { name: null, dataK: "ItemID" })}</td>
           <td><input class="num" data-k="Amount" type="number" value="${esc(it.Amount)}"></td>
           <td><button type="button" class="btn small danger" data-rm>×</button></td></tr>`).join("")}</tbody></table></div>
         <button type="button" class="btn small" id="items-given-add">Add item</button>`;
+      ItemPicker.wire(nodeEditor);
       // wire opts
       nodeEditor.querySelector("#add-opt").onclick = () => {
         nodeEditor.querySelector("#opt-rows").insertAdjacentHTML("beforeend", `
@@ -189,7 +190,7 @@ const DialogueEditor = (() => {
       });
       igHost.querySelector("#items-given-add").onclick = () => {
         igHost.querySelector("#items-given-body").insertAdjacentHTML("beforeend",
-          `<tr><td><input class="num" data-k="ItemID" type="number" value=""></td><td><input class="num" data-k="Amount" type="number" value="1"></td><td><button type="button" class="btn small danger" data-rm>×</button></td></tr>`);
+          `<tr><td>${ItemPicker.controlHtml("", { name: null, dataK: "ItemID" })}</td><td><input class="num" data-k="Amount" type="number" value="1"></td><td><button type="button" class="btn small danger" data-rm>×</button></td></tr>`);
       };
       igHost.querySelector("#items-given-body").addEventListener("click", (e) => {
         const b = e.target.closest("[data-rm]"); if (b) b.closest("tr").remove();
@@ -204,7 +205,8 @@ const DialogueEditor = (() => {
         const options = BQOptions.serialize(pairs);
         const igList = [];
         igHost.querySelectorAll("#items-given-body tr").forEach((tr) => {
-          const ItemID = Number(tr.querySelector('[data-k="ItemID"]').value);
+          const pick = tr.querySelector("[data-item-pick]");
+          const ItemID = pick ? ItemPicker.readId(pick) : Number(tr.querySelector('[data-k="ItemID"]')?.value);
           const Amount = Number(tr.querySelector('[data-k="Amount"]').value);
           if (Number.isFinite(ItemID)) igList.push({ ItemID, Amount: Number.isFinite(Amount) ? Amount : 0 });
         });

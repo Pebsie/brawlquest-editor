@@ -59,13 +59,13 @@ const Editors = (() => {
   function itemsGivenEditor(list, emptyHint) {
     const rows = (list || []).map((it, i) => `
       <tr data-i="${i}">
-        <td><input class="num" data-k="ItemID" type="number" value="${esc(it.ItemID)}"></td>
+        <td>${ItemPicker.controlHtml(it.ItemID, { name: null, dataK: "ItemID" })}</td>
         <td><input class="num" data-k="Amount" type="number" value="${esc(it.Amount)}"></td>
         <td><button type="button" class="btn small danger" data-rm="${i}">×</button></td>
       </tr>`).join("");
     return `<div class="full" id="items-given-wrap">
       <div class="note">${esc(emptyHint || "JSON ItemsGiven: negative Amount is a cost.")}</div>
-      <div class="table-wrap"><table class="mini"><thead><tr><th>ItemID</th><th>Amount</th><th></th></tr></thead>
+      <div class="table-wrap"><table class="mini"><thead><tr><th>Item</th><th>Amount</th><th></th></tr></thead>
       <tbody id="items-given-body">${rows || ""}</tbody></table></div>
       <button type="button" class="btn small" id="items-given-add">Add item</button>
     </div>`;
@@ -74,7 +74,10 @@ const Editors = (() => {
   function readItemsGiven(root) {
     const out = [];
     root.querySelectorAll("#items-given-body tr").forEach((tr) => {
-      const ItemID = Number(tr.querySelector('[data-k="ItemID"]').value);
+      const pick = tr.querySelector("[data-item-pick]");
+      const ItemID = pick
+        ? ItemPicker.readId(pick)
+        : Number(tr.querySelector('[data-k="ItemID"]')?.value);
       const Amount = Number(tr.querySelector('[data-k="Amount"]').value);
       if (Number.isFinite(ItemID)) out.push({ ItemID, Amount: Number.isFinite(Amount) ? Amount : 0 });
     });
@@ -84,8 +87,9 @@ const Editors = (() => {
   function wireItemsGiven(root, onChange) {
     const body = root.querySelector("#items-given-body");
     if (!body) return;
+    ItemPicker.wire(root);
     root.querySelector("#items-given-add")?.addEventListener("click", () => {
-      body.insertAdjacentHTML("beforeend", `<tr><td><input class="num" data-k="ItemID" type="number" value=""></td><td><input class="num" data-k="Amount" type="number" value="1"></td><td><button type="button" class="btn small danger" data-rm>×</button></td></tr>`);
+      body.insertAdjacentHTML("beforeend", `<tr><td>${ItemPicker.controlHtml("", { name: null, dataK: "ItemID" })}</td><td><input class="num" data-k="Amount" type="number" value="1"></td><td><button type="button" class="btn small danger" data-rm>×</button></td></tr>`);
       onChange?.();
     });
     body.addEventListener("click", (e) => {
@@ -131,7 +135,7 @@ const Editors = (() => {
     function show() {
       const r = BQDB.one("SELECT * FROM items WHERE id=?", [state.sel]);
       if (!r) { editor.innerHTML = noneSelected(); return; }
-      editor.innerHTML = `<h2>${esc(r.Name)}</h2><p class="sub">id ${r.id} · append-only ids; renaming is a refactor</p>
+      editor.innerHTML = `<h2>${ItemPicker.iconHtml(r.ImgPath, "lg")} ${esc(r.Name)}</h2><p class="sub">id ${r.id} · append-only ids; renaming is a refactor</p>
         <form id="f" class="form-grid">
           ${field("Name", "Name", r.Name)}
           ${field("Type", "Type", r.Type, { type: "select", options: ITEM_TYPES })}
@@ -230,7 +234,7 @@ const Editors = (() => {
         <div class="table-wrap"><table class="mini"><thead><tr><th>id</th><th>ItemID</th><th>Chance%</th><th>Amount</th><th>Variance</th><th></th></tr></thead>
         <tbody id="loot-body">${loot.map((l) => `<tr data-id="${l.id}">
           <td>${l.id}</td>
-          <td><input class="num" data-k="ItemID" type="number" value="${esc(l.ItemID)}"></td>
+          <td>${ItemPicker.controlHtml(l.ItemID, { name: null, dataK: "ItemID" })}</td>
           <td><input class="num" data-k="Chance" type="number" value="${esc(l.Chance)}"></td>
           <td><input class="num" data-k="Amount" type="number" value="${esc(l.Amount)}"></td>
           <td><input class="num" data-k="AmountVariance" type="number" value="${esc(l.AmountVariance)}"></td>
@@ -240,6 +244,7 @@ const Editors = (() => {
         <p class="note">Chance: drop if rand(100) &lt; Chance. AmountVariance 0 is treated as 1 by the server. Renaming this enemy requires updating world.Enemy and quest.Value.</p>
         <div class="row-actions"><button type="button" class="btn primary" id="btn-save-children">Apply spells &amp; loot</button></div>`;
 
+      ItemPicker.wire(editor);
       editor.querySelector("#btn-save-row").onclick = () => {
         const d = getForm(editor.querySelector("#f"));
         const oldName = r.Name;
@@ -297,8 +302,10 @@ const Editors = (() => {
         });
         editor.querySelectorAll("#loot-body tr").forEach((tr) => {
           const id = Number(tr.dataset.id);
+          const pick = tr.querySelector("[data-item-pick]");
+          const itemId = pick ? ItemPicker.readId(pick) : Number(tr.querySelector('[data-k="ItemID"]')?.value);
           BQDB.run("UPDATE loot SET ItemID=?, Chance=?, Amount=?, AmountVariance=? WHERE id=?", [
-            Number(tr.querySelector('[data-k="ItemID"]').value) || 0,
+            Number.isFinite(itemId) ? itemId : 0,
             Number(tr.querySelector('[data-k="Chance"]').value) || 0,
             Number(tr.querySelector('[data-k="Amount"]').value) || 0,
             Number(tr.querySelector('[data-k="AmountVariance"]').value) || 0,
@@ -341,18 +348,20 @@ const Editors = (() => {
       editor.innerHTML = `<h2>Loot #${r.id}</h2>
         <form id="f" class="form-grid">
           ${field("EnemyID", "EnemyID", r.EnemyID, { type: "select", options: enemies.map((e)=>[e.id, `${e.id} · ${e.Name}`]) })}
-          ${field("ItemID", "ItemID", r.ItemID, { type: "number" })}
+          <label class="field full">Item${ItemPicker.controlHtml(r.ItemID, { name: "ItemID", dataK: false })}</label>
           ${field("Chance", "Chance", r.Chance, { type: "number" })}
           ${field("Amount", "Amount", r.Amount, { type: "number" })}
           ${field("AmountVariance", "AmountVariance", r.AmountVariance, { type: "number" })}
         </form>
-        <p class="note">Item: ${esc(BQDB.itemName(r.ItemID) || "missing")}</p>
         <div class="row-actions"><button type="button" class="btn primary" id="btn-save-row">Apply</button>
         <button type="button" class="btn danger" id="btn-del">Delete</button></div>`;
+      ItemPicker.wire(editor);
       editor.querySelector("#btn-save-row").onclick = () => {
         const d = getForm(editor.querySelector("#f"));
+        const pick = editor.querySelector("[data-item-pick]");
+        const itemId = pick ? ItemPicker.readId(pick) : Number(d.ItemID);
         BQDB.run("UPDATE loot SET EnemyID=?, ItemID=?, Chance=?, Amount=?, AmountVariance=? WHERE id=?",
-          [Number(d.EnemyID), Number(d.ItemID), Number(d.Chance)||0, Number(d.Amount)||0, Number(d.AmountVariance)||0, r.id]);
+          [Number(d.EnemyID), Number.isFinite(itemId) ? itemId : 0, Number(d.Chance)||0, Number(d.Amount)||0, Number(d.AmountVariance)||0, r.id]);
         toast("Loot saved"); App.syncDirty(); Editors.render("loot", ws, state);
       };
       editor.querySelector("#btn-del").onclick = () => {
@@ -563,17 +572,20 @@ const Editors = (() => {
       try{ingredients=JSON.parse(r.Items||"[]");}catch{ingredients=[];}
       editor.innerHTML=`<h2>Recipe #${r.id}</h2><p class="sub">Result: ${esc(BQDB.itemName(r.ItemID)||r.ItemID)}</p>
         <form id="f" class="form-grid">
-          ${field("Result ItemID","ItemID",r.ItemID,{type:"number"})}
+          <label class="field full">Result item${ItemPicker.controlHtml(r.ItemID, { name: "ItemID", dataK: false })}</label>
           ${field("Chance","Chance",r.Chance,{type:"number"})}
         </form>
         ${itemsGivenEditor(ingredients.map(o=>({ItemID:o.ItemID,Amount:o.Amount})), "Ingredients JSON [{ItemID,Amount}].")}
         <div class="row-actions"><button type="button" class="btn primary" id="btn-save-row">Apply</button>
         <button type="button" class="btn danger" id="btn-del">Delete</button></div>`;
       wireItemsGiven(editor);
+      ItemPicker.wire(editor);
       editor.querySelector("#btn-save-row").onclick=()=>{
         const d=getForm(editor.querySelector("#f"));
+        const pick=editor.querySelector("form [data-item-pick]");
+        const itemId=pick?ItemPicker.readId(pick):Number(d.ItemID);
         const items=JSON.stringify(readItemsGiven(editor).map(o=>({ItemID:o.ItemID,Amount:o.Amount})));
-        BQDB.run("UPDATE craft SET ItemID=?, Items=?, Chance=? WHERE id=?",[Number(d.ItemID),items,Number(d.Chance)||0,r.id]);
+        BQDB.run("UPDATE craft SET ItemID=?, Items=?, Chance=? WHERE id=?",[Number.isFinite(itemId)?itemId:0,items,Number(d.Chance)||0,r.id]);
         toast("Recipe saved"); App.syncDirty(); Editors.render("craft", ws, state);
       };
       editor.querySelector("#btn-del").onclick=()=>{BQDB.run("DELETE FROM craft WHERE id=?",[r.id]);state.sel=null;App.syncDirty();Editors.render("craft",ws,state);};
@@ -605,15 +617,17 @@ const Editors = (() => {
       if(!r){editor.innerHTML=noneSelected();return;}
       editor.innerHTML=`<h2>Forge #${r.id}</h2>
         <form id="f" class="form-grid">
-          ${field("EnterID","EnterID",r.EnterID,{type:"number"})}
-          ${field("ResultID","ResultID",r.ResultID,{type:"number"})}
+          <label class="field full">Enter item${ItemPicker.controlHtml(r.EnterID, { name: "EnterID", dataK: false })}</label>
+          <label class="field full">Result item${ItemPicker.controlHtml(r.ResultID, { name: "ResultID", dataK: false })}</label>
         </form>
-        <p class="note">${esc(BQDB.itemName(r.EnterID)||"?")} → ${esc(BQDB.itemName(r.ResultID)||"?")}</p>
         <div class="row-actions"><button type="button" class="btn primary" id="btn-save-row">Apply</button>
         <button type="button" class="btn danger" id="btn-del">Delete</button></div>`;
+      ItemPicker.wire(editor);
       editor.querySelector("#btn-save-row").onclick=()=>{
-        const d=getForm(editor.querySelector("#f"));
-        BQDB.run("UPDATE forge SET EnterID=?, ResultID=? WHERE id=?",[Number(d.EnterID),Number(d.ResultID),r.id]);
+        const picks=[...editor.querySelectorAll("[data-item-pick]")];
+        const enterId=ItemPicker.readId(picks[0]);
+        const resultId=ItemPicker.readId(picks[1]);
+        BQDB.run("UPDATE forge SET EnterID=?, ResultID=? WHERE id=?",[Number.isFinite(enterId)?enterId:0,Number.isFinite(resultId)?resultId:0,r.id]);
         toast("Forge rule saved"); App.syncDirty(); Editors.render("forge", ws, state);
       };
       editor.querySelector("#btn-del").onclick=()=>{BQDB.run("DELETE FROM forge WHERE id=?",[r.id]);state.sel=null;App.syncDirty();Editors.render("forge",ws,state);};
