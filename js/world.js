@@ -1,90 +1,174 @@
 "use strict";
 
 const WorldEditor = (() => {
-  const esc = (s) => Editors.esc(s);
+  const TILE = 16;
+  const SPRITE_ZOOM = 0.55; // when tile on screen >= ~9px, draw sprites
+
+  function esc(s) {
+    return Editors.esc(s);
+  }
 
   function hashColor(path) {
     const s = String(path || "");
     let h = 0;
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    const hue = h % 360;
-    const sat = 35 + (h % 40);
-    const lit = 28 + ((h >> 8) % 25);
-    return `hsl(${hue} ${sat}% ${lit}%)`;
+    return `hsl(${h % 360} ${35 + (h % 40)}% ${28 + ((h >> 8) % 25)}%)`;
+  }
+
+  function assetUrl(path) {
+    if (!path) return "";
+    if (typeof ItemPicker !== "undefined" && ItemPicker.imgUrl) return ItemPicker.imgUrl(path);
+    return String(path).split("/").map(encodeURIComponent).join("/");
+  }
+
+  function basename(path) {
+    const s = String(path || "");
+    const i = s.lastIndexOf("/");
+    return i >= 0 ? s.slice(i + 1) : s;
   }
 
   function render(ws, state) {
-    if (!state.world) state.world = { mode: "select", paint: {}, zoom: 0.25, camX: 0, camY: 0, sel: null };
+    if (!state.world) {
+      state.world = {
+        mode: "select",
+        paintLayer: "ground", // ground | fore | clearFore
+        paint: { GroundTile: "", ForegroundTile: "" },
+        zoom: 0.2,
+        camX: 0,
+        camY: 0,
+        sel: null,
+        fitted: false,
+        assetFilter: "",
+      };
+    }
     const st = state.world;
 
     ws.innerHTML = `<div class="world-wrap">
       <div>
         <div class="world-tools">
-          <button type="button" class="btn small ${st.mode==="select"?"active":""}" data-mode="select">Select</button>
-          <button type="button" class="btn small ${st.mode==="paint"?"active":""}" data-mode="paint">Paint</button>
-          <button type="button" class="btn small ${st.mode==="collision"?"active":""}" data-mode="collision">Toggle collision</button>
-          <button type="button" class="btn small" id="zoom-out">Zoom −</button>
-          <button type="button" class="btn small" id="zoom-in">Zoom +</button>
+          <button type="button" class="btn small ${st.mode === "select" ? "active" : ""}" data-mode="select">Select</button>
+          <button type="button" class="btn small ${st.mode === "paint" ? "active" : ""}" data-mode="paint">Paint</button>
+          <button type="button" class="btn small ${st.mode === "collision" ? "active" : ""}" data-mode="collision">Toggle collision</button>
+          <button type="button" class="btn small" id="zoom-out" title="Zoom out">Zoom −</button>
+          <button type="button" class="btn small" id="zoom-in" title="Zoom in">Zoom +</button>
           <button type="button" class="btn small" id="zoom-fit">Fit</button>
           <button type="button" class="btn small" id="btn-add-tile">Add tile at…</button>
+          <span class="pill" id="zoom-label"></span>
         </div>
         <div class="map-stage"><canvas id="world-canvas" aria-label="World map editor"></canvas></div>
-        <p class="note">Drag to pan. Scroll to zoom. world.Enemy is enemy Name (empty string = none). Live mobs spawn from Enemy, not the unused mobs table.</p>
+        <p class="note">Drag to pan · scroll / pinch to zoom · close zoom shows real tiles. Paint picks ground/foreground assets. <code>world.Enemy</code> is enemy Name (<code>""</code> = none).</p>
       </div>
-      <aside class="world-side" id="world-side"><div class="empty">Select a tile</div></aside>
+      <aside class="world-side" id="world-side"></aside>
     </div>`;
 
     const canvas = ws.querySelector("#world-canvas");
     const side = ws.querySelector("#world-side");
+    const zoomLabel = ws.querySelector("#zoom-label");
     const ctx = canvas.getContext("2d");
 
-    // Load world into map
     const cells = BQDB.all("SELECT id, GroundTile, ForegroundTile, Name, X, Y, Music, Collision, Enemy FROM world");
     const at = new Map();
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    const grounds = new Set();
-    const fores = new Set();
+    const groundSet = new Set();
+    const foreSet = new Set();
     for (const c of cells) {
       at.set(c.X + "," + c.Y, c);
-      if (c.X < minX) minX = c.X; if (c.X > maxX) maxX = c.X;
-      if (c.Y < minY) minY = c.Y; if (c.Y > maxY) maxY = c.Y;
-      if (c.GroundTile) grounds.add(c.GroundTile);
-      if (c.ForegroundTile) fores.add(c.ForegroundTile);
+      if (c.X < minX) minX = c.X;
+      if (c.X > maxX) maxX = c.X;
+      if (c.Y < minY) minY = c.Y;
+      if (c.Y > maxY) maxY = c.Y;
+      if (c.GroundTile) groundSet.add(c.GroundTile);
+      if (c.ForegroundTile) foreSet.add(c.ForegroundTile);
     }
     if (!Number.isFinite(minX)) { minX = 0; maxX = 10; minY = 0; maxY = 10; }
 
+    const groundList = [...groundSet].sort((a, b) => a.localeCompare(b, "en-GB"));
+    const foreList = [...foreSet].sort((a, b) => a.localeCompare(b, "en-GB"));
+    const musicList = [...new Set(cells.map((c) => c.Music).filter(Boolean))].sort();
+    const enemyNames = BQDB.all("SELECT Name FROM enemies ORDER BY Name").map((r) => r.Name);
+
+    if (!st.paint.GroundTile && groundList[0]) st.paint.GroundTile = groundList[0];
     if (!st.fitted) {
       st.camX = (minX + maxX) / 2;
       st.camY = (minY + maxY) / 2;
       st.fitted = true;
     }
 
-    const groundList = [...grounds].sort();
-    const foreList = [...fores].sort();
-    const musicList = [...new Set(cells.map((c) => c.Music).filter(Boolean))].sort();
-    const enemyNames = BQDB.all("SELECT Name FROM enemies ORDER BY Name").map((r) => r.Name);
-
+    const images = new Map(); // path -> HTMLImageElement | null (failed)
     let cssW = 1, cssH = 1;
-    const TILE = 16;
+    let raf = 0;
+
+    function scheduleDraw() {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; draw(); });
+    }
+
+    function sprite(path) {
+      if (!path) return null;
+      if (images.has(path)) {
+        const img = images.get(path);
+        return img && img.complete && img.naturalWidth ? img : null;
+      }
+      const img = new Image();
+      images.set(path, img);
+      img.onload = () => scheduleDraw();
+      img.onerror = () => { images.set(path, null); };
+      img.src = assetUrl(path);
+      return null;
+    }
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const rect = canvas.getBoundingClientRect();
       cssW = Math.max(1, rect.width);
       cssH = Math.max(1, rect.height);
-      canvas.width = Math.round(cssW * dpr);
-      canvas.height = Math.round(cssH * dpr);
+      const bw = Math.max(1, Math.round(cssW * dpr));
+      const bh = Math.max(1, Math.round(cssH * dpr));
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw;
+        canvas.height = bh;
+      }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function clampZoom(z) {
+      return Math.min(6, Math.max(0.02, z));
     }
 
     function screenToWorld(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
       const sx = clientX - rect.left;
       const sy = clientY - rect.top;
+      const tilePx = TILE * st.zoom;
       return {
-        x: Math.floor(st.camX + (sx - cssW / 2) / (st.zoom * TILE)),
-        y: Math.floor(st.camY + (sy - cssH / 2) / (st.zoom * TILE)),
+        wx: st.camX + (sx - cssW / 2) / tilePx,
+        wy: st.camY + (sy - cssH / 2) / tilePx,
+        tx: Math.floor(st.camX + (sx - cssW / 2) / tilePx),
+        ty: Math.floor(st.camY + (sy - cssH / 2) / tilePx),
+        sx, sy,
       };
+    }
+
+    function zoomAt(clientX, clientY, nextZoom) {
+      const before = screenToWorld(clientX, clientY);
+      st.zoom = clampZoom(nextZoom);
+      const rect = canvas.getBoundingClientRect();
+      const sx = clientX - rect.left;
+      const sy = clientY - rect.top;
+      const tilePx = TILE * st.zoom;
+      st.camX = before.wx - (sx - cssW / 2) / tilePx;
+      st.camY = before.wy - (sy - cssH / 2) / tilePx;
+      scheduleDraw();
+    }
+
+    function fit() {
+      resize();
+      const spanX = (maxX - minX + 1) * TILE;
+      const spanY = (maxY - minY + 1) * TILE;
+      st.zoom = clampZoom(Math.min(cssW / spanX, cssH / spanY) * 0.95);
+      st.camX = (minX + maxX + 1) / 2;
+      st.camY = (minY + maxY + 1) / 2;
+      scheduleDraw();
     }
 
     function draw() {
@@ -93,35 +177,65 @@ const WorldEditor = (() => {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, cssW, cssH);
       const tilePx = TILE * st.zoom;
+      zoomLabel.textContent = `${Math.round(st.zoom * 100)}% · ${tilePx >= TILE * SPRITE_ZOOM ? "sprites" : "overview"}`;
+
       const x0 = Math.floor(st.camX - cssW / 2 / tilePx) - 1;
       const y0 = Math.floor(st.camY - cssH / 2 / tilePx) - 1;
       const x1 = Math.floor(st.camX + cssW / 2 / tilePx) + 1;
       const y1 = Math.floor(st.camY + cssH / 2 / tilePx) + 1;
+      const useSprites = tilePx >= TILE * SPRITE_ZOOM;
       const size = Math.max(1, Math.ceil(tilePx));
+
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
           const cell = at.get(x + "," + y);
           if (!cell) continue;
           const sx = Math.round((x - st.camX) * tilePx + cssW / 2);
           const sy = Math.round((y - st.camY) * tilePx + cssH / 2);
-          ctx.fillStyle = hashColor(cell.GroundTile);
-          ctx.fillRect(sx, sy, size, size);
-          if (cell.ForegroundTile) {
-            ctx.globalAlpha = 0.55;
-            ctx.fillStyle = hashColor(cell.ForegroundTile);
+          if (sx + size < 0 || sy + size < 0 || sx > cssW || sy > cssH) continue;
+
+          if (useSprites) {
+            const g = sprite(cell.GroundTile);
+            if (g) ctx.drawImage(g, sx, sy, size, size);
+            else {
+              ctx.fillStyle = hashColor(cell.GroundTile);
+              ctx.fillRect(sx, sy, size, size);
+            }
+            if (cell.ForegroundTile) {
+              const f = sprite(cell.ForegroundTile);
+              if (f) ctx.drawImage(f, sx, sy, size, size);
+              else {
+                ctx.globalAlpha = 0.65;
+                ctx.fillStyle = hashColor(cell.ForegroundTile);
+                ctx.fillRect(sx, sy, size, size);
+                ctx.globalAlpha = 1;
+              }
+            }
+          } else {
+            // cheap overview: 1-ish px colour
+            ctx.fillStyle = hashColor(cell.GroundTile);
             ctx.fillRect(sx, sy, size, size);
-            ctx.globalAlpha = 1;
+            if (cell.ForegroundTile) {
+              ctx.globalAlpha = 0.45;
+              ctx.fillStyle = hashColor(cell.ForegroundTile);
+              ctx.fillRect(sx, sy, size, size);
+              ctx.globalAlpha = 1;
+            }
           }
-          if (cell.Collision) {
-            ctx.strokeStyle = "rgba(231,111,81,0.7)";
-            ctx.strokeRect(sx + 0.5, sy + 0.5, size - 1, size - 1);
+
+          if (cell.Collision && tilePx >= 4) {
+            ctx.strokeStyle = "rgba(231,111,81,0.75)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(sx + 0.5, sy + 0.5, Math.max(0, size - 1), Math.max(0, size - 1));
           }
-          if (cell.Enemy) {
+          if (cell.Enemy && tilePx >= 6) {
             ctx.fillStyle = "#f4a261";
-            ctx.fillRect(sx + size * 0.35, sy + size * 0.35, size * 0.3, size * 0.3);
+            const d = Math.max(2, size * 0.28);
+            ctx.fillRect(sx + (size - d) / 2, sy + (size - d) / 2, d, d);
           }
         }
       }
+
       if (st.sel) {
         const sx = Math.round((st.sel.X - st.camX) * tilePx + cssW / 2);
         const sy = Math.round((st.sel.Y - st.camY) * tilePx + cssH / 2);
@@ -131,54 +245,119 @@ const WorldEditor = (() => {
       }
     }
 
+    function tilePreview(path, active) {
+      if (!path) {
+        return `<button type="button" class="tile-asset ${active ? "active" : ""}" data-path="" title="(empty)">
+          <span class="tile-thumb ph"></span><span class="tile-asset-name">(none)</span></button>`;
+      }
+      return `<button type="button" class="tile-asset ${active ? "active" : ""}" data-path="${esc(path)}" title="${esc(path)}">
+        <img class="tile-thumb" alt="" src="${esc(assetUrl(path))}" loading="lazy" decoding="async"
+          onerror="this.classList.add('broken')">
+        <span class="tile-asset-name">${esc(basename(path))}</span></button>`;
+    }
+
+    function paintBrushPanel() {
+      const filter = (st.assetFilter || "").toLocaleLowerCase("en-GB");
+      const list = st.paintLayer === "fore" ? foreList : groundList;
+      const filtered = list.filter((p) => !filter || p.toLocaleLowerCase("en-GB").includes(filter));
+      const current = st.paintLayer === "fore" ? (st.paint.ForegroundTile || "") : (st.paint.GroundTile || "");
+      return `
+        <h3>Paint brush</h3>
+        <div class="world-tools" style="margin-bottom:8px">
+          <button type="button" class="btn small ${st.paintLayer === "ground" ? "active" : ""}" data-layer="ground">Ground</button>
+          <button type="button" class="btn small ${st.paintLayer === "fore" ? "active" : ""}" data-layer="fore">Foreground</button>
+          <button type="button" class="btn small ${st.paintLayer === "clearFore" ? "active" : ""}" data-layer="clearFore">Clear fore</button>
+        </div>
+        <p class="note">Ground: <code>${esc(basename(st.paint.GroundTile) || "—")}</code><br>
+           Fore: <code>${esc(basename(st.paint.ForegroundTile) || "(none)")}</code></p>
+        ${st.paintLayer === "clearFore" ? `<p class="note">Click tiles to clear ForegroundTile.</p>` : `
+        <input class="search" id="asset-q" placeholder="Search tile assets…" value="${esc(st.assetFilter || "")}">
+        <div class="tile-asset-list" id="asset-list">
+          ${st.paintLayer === "fore" ? tilePreview("", current === "") : ""}
+          ${filtered.slice(0, 120).map((p) => tilePreview(p, p === current)).join("") || `<div class="empty">No assets match</div>`}
+        </div>`}`;
+    }
+
     function showSide(cell) {
-      if (!cell) { side.innerHTML = `<div class="empty">No tile</div>`; return; }
-      st.sel = cell;
-      side.innerHTML = `<h3>Tile ${cell.X}, ${cell.Y}</h3>
-        <p class="note">db id ${cell.id}</p>
-        <form id="tf" class="form-grid" style="grid-template-columns:1fr">
-          ${Editors.field("Name", "Name", cell.Name)}
-          ${Editors.field("GroundTile", "GroundTile", cell.GroundTile)}
-          ${Editors.field("ForegroundTile", "ForegroundTile", cell.ForegroundTile)}
-          ${Editors.field("Music", "Music", cell.Music)}
-          ${Editors.field("Enemy", "Enemy", cell.Enemy || "")}
-          ${Editors.field("Collision", "Collision", cell.Collision, { type: "checkbox" })}
-        </form>
-        <p class="note">Ground swatches</p>
-        <div class="swatches" id="g-swatch">${groundList.slice(0, 80).map((g) =>
-          `<button type="button" class="swatch ${g===cell.GroundTile?"active":""}" title="${esc(g)}" data-g="${esc(g)}" style="background:${hashColor(g)}"></button>`).join("")}</div>
-        <p class="note">Enemy must match enemies.Name; empty = "".</p>
-        <div class="row-actions">
-          <button type="button" class="btn primary" id="save-tile">Apply</button>
-          <button type="button" class="btn danger" id="del-tile">Delete tile</button>
-        </div>`;
-      side.querySelector("#g-swatch")?.addEventListener("click", (e) => {
-        const b = e.target.closest("[data-g]");
-        if (!b) return;
-        st.paint.GroundTile = b.dataset.g;
-        side.querySelector('[name="GroundTile"]').value = b.dataset.g;
+      let html = "";
+      if (st.mode === "paint") html += paintBrushPanel();
+
+      if (cell) {
+        st.sel = cell;
+        const enemyOk = !cell.Enemy || enemyNames.includes(cell.Enemy);
+        html += `<h3>Tile ${cell.X}, ${cell.Y}</h3>
+          <p class="note">db id ${cell.id}</p>
+          <div class="tile-preview-row">
+            ${cell.GroundTile ? `<img class="tile-thumb lg" alt="" src="${esc(assetUrl(cell.GroundTile))}">` : `<span class="tile-thumb ph lg"></span>`}
+            ${cell.ForegroundTile ? `<img class="tile-thumb lg" alt="" src="${esc(assetUrl(cell.ForegroundTile))}">` : ""}
+          </div>
+          <form id="tf" class="form-grid" style="grid-template-columns:1fr">
+            ${Editors.field("Name", "Name", cell.Name)}
+            ${Editors.field("GroundTile", "GroundTile", cell.GroundTile)}
+            ${Editors.field("ForegroundTile", "ForegroundTile", cell.ForegroundTile)}
+            ${Editors.field("Music", "Music", cell.Music || "*", { type: "select", options: ["*", ...musicList.filter((m) => m !== "*"), ...(cell.Music && cell.Music !== "*" && !musicList.includes(cell.Music) ? [cell.Music] : [])] })}
+            ${Editors.field("Enemy", "Enemy", cell.Enemy || "")}
+            ${Editors.field("Collision", "Collision", cell.Collision, { type: "checkbox" })}
+          </form>
+          <p class="note ${enemyOk ? "" : "err"}">Enemy must match an enemies.Name; empty = "". ${enemyOk ? "" : "Unknown name."}</p>
+          <div class="row-actions">
+            <button type="button" class="btn primary" id="save-tile">Apply</button>
+            <button type="button" class="btn danger" id="del-tile">Delete tile</button>
+          </div>`;
+      } else if (st.mode !== "paint") {
+        html += `<div class="empty">Select a tile · drag to pan · scroll to zoom</div>`;
+      }
+
+      side.innerHTML = html || `<div class="empty">—</div>`;
+
+      side.querySelectorAll("[data-layer]").forEach((b) => {
+        b.onclick = () => { st.paintLayer = b.dataset.layer; showSide(st.sel); };
       });
-      side.querySelector("#save-tile").onclick = () => {
+      const aq = side.querySelector("#asset-q");
+      if (aq) {
+        aq.oninput = () => { st.assetFilter = aq.value; showSide(st.sel); };
+      }
+      side.querySelector("#asset-list")?.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-path]");
+        if (!b) return;
+        const path = b.getAttribute("data-path");
+        if (st.paintLayer === "fore") st.paint.ForegroundTile = path;
+        else st.paint.GroundTile = path || st.paint.GroundTile;
+        showSide(st.sel);
+      });
+
+      side.querySelector("#save-tile")?.addEventListener("click", () => {
+        if (!st.sel) return;
         const d = Editors.getForm(side.querySelector("#tf"));
         const enemy = d.Enemy ?? "";
         if (enemy && !enemyNames.includes(enemy) && !confirm(`Enemy "${enemy}" is not a known Name. Save anyway?`)) return;
         BQDB.run(`UPDATE world SET GroundTile=?, ForegroundTile=?, Name=?, Music=?, Collision=?, Enemy=? WHERE id=?`,
-          [d.GroundTile ?? "", d.ForegroundTile ?? "", d.Name ?? "", d.Music ?? "*", d.Collision ? 1 : 0, enemy, cell.id]);
-        Object.assign(cell, { GroundTile: d.GroundTile ?? "", ForegroundTile: d.ForegroundTile ?? "", Name: d.Name ?? "", Music: d.Music ?? "*", Collision: d.Collision ? 1 : 0, Enemy: enemy });
+          [d.GroundTile ?? "", d.ForegroundTile ?? "", d.Name ?? "", d.Music ?? "*", d.Collision ? 1 : 0, enemy, st.sel.id]);
+        Object.assign(st.sel, {
+          GroundTile: d.GroundTile ?? "",
+          ForegroundTile: d.ForegroundTile ?? "",
+          Name: d.Name ?? "",
+          Music: d.Music ?? "*",
+          Collision: d.Collision ? 1 : 0,
+          Enemy: enemy,
+        });
+        if (d.GroundTile) groundSet.add(d.GroundTile);
+        if (d.ForegroundTile) foreSet.add(d.ForegroundTile);
         Editors.toast("Tile saved");
         App.syncDirty();
-        draw();
-        showSide(cell);
-      };
-      side.querySelector("#del-tile").onclick = () => {
-        if (!confirm(`Delete world tile at ${cell.X},${cell.Y}?`)) return;
-        BQDB.run("DELETE FROM world WHERE id=?", [cell.id]);
-        at.delete(cell.X + "," + cell.Y);
+        scheduleDraw();
+        showSide(st.sel);
+      });
+
+      side.querySelector("#del-tile")?.addEventListener("click", () => {
+        if (!st.sel || !confirm(`Delete world tile at ${st.sel.X},${st.sel.Y}?`)) return;
+        BQDB.run("DELETE FROM world WHERE id=?", [st.sel.id]);
+        at.delete(st.sel.X + "," + st.sel.Y);
         st.sel = null;
         App.syncDirty();
-        draw();
-        side.innerHTML = `<div class="empty">Tile deleted</div>`;
-      };
+        scheduleDraw();
+        showSide(null);
+      });
     }
 
     function applyPaint(x, y) {
@@ -192,38 +371,54 @@ const WorldEditor = (() => {
         App.syncDirty();
         return;
       }
-      if (st.mode === "paint") {
-        const g = st.paint.GroundTile || groundList[0] || "assets/world/grounds/grass.png";
-        const f = st.paint.ForegroundTile ?? "";
-        if (!cell) {
-          // XY unique check
-          const id = BQDB.nextId("world");
-          BQDB.run(`INSERT INTO world (id, GroundTile, ForegroundTile, Name, X, Y, Music, Collision, Enemy) VALUES (?,?,?,?,?,?,?,?,?)`,
-            [id, g, f, st.paint.Name || "", x, y, st.paint.Music || "*", 0, ""]);
-          cell = { id, GroundTile: g, ForegroundTile: f, Name: st.paint.Name || "", X: x, Y: y, Music: st.paint.Music || "*", Collision: 0, Enemy: "" };
-          at.set(key, cell);
-        } else {
-          BQDB.run("UPDATE world SET GroundTile=?, ForegroundTile=? WHERE id=?", [g, f === undefined ? cell.ForegroundTile : f, cell.id]);
-          cell.GroundTile = g;
-          if (f !== undefined) cell.ForegroundTile = f;
-        }
+      if (st.mode !== "paint") return;
+
+      if (st.paintLayer === "clearFore") {
+        if (!cell) return;
+        BQDB.run("UPDATE world SET ForegroundTile=? WHERE id=?", ["", cell.id]);
+        cell.ForegroundTile = "";
         App.syncDirty();
+        return;
       }
+
+      const g = st.paint.GroundTile || groundList[0] || "assets/world/grounds/grass.png";
+      const f = st.paint.ForegroundTile || "";
+
+      if (!cell) {
+        const id = BQDB.nextId("world");
+        const fore = st.paintLayer === "fore" ? f : "";
+        const ground = st.paintLayer === "ground" ? g : g;
+        BQDB.run(`INSERT INTO world (id, GroundTile, ForegroundTile, Name, X, Y, Music, Collision, Enemy) VALUES (?,?,?,?,?,?,?,?,?)`,
+          [id, ground, fore, "", x, y, "*", 0, ""]);
+        cell = { id, GroundTile: ground, ForegroundTile: fore, Name: "", X: x, Y: y, Music: "*", Collision: 0, Enemy: "" };
+        at.set(key, cell);
+      } else if (st.paintLayer === "ground") {
+        BQDB.run("UPDATE world SET GroundTile=? WHERE id=?", [g, cell.id]);
+        cell.GroundTile = g;
+      } else if (st.paintLayer === "fore") {
+        BQDB.run("UPDATE world SET ForegroundTile=? WHERE id=?", [f, cell.id]);
+        cell.ForegroundTile = f;
+      }
+      App.syncDirty();
+      st.sel = cell;
     }
 
     ws.querySelectorAll("[data-mode]").forEach((b) => {
-      b.onclick = () => { st.mode = b.dataset.mode; WorldEditor.render(ws, state); };
+      b.onclick = () => {
+        st.mode = b.dataset.mode;
+        ws.querySelectorAll("[data-mode]").forEach((x) => x.classList.toggle("active", x.dataset.mode === st.mode));
+        showSide(st.sel);
+      };
     });
-    ws.querySelector("#zoom-in").onclick = () => { st.zoom = Math.min(4, st.zoom * 1.25); draw(); };
-    ws.querySelector("#zoom-out").onclick = () => { st.zoom = Math.max(0.02, st.zoom / 1.25); draw(); };
-    ws.querySelector("#zoom-fit").onclick = () => {
-      const spanX = (maxX - minX + 1) * TILE;
-      const spanY = (maxY - minY + 1) * TILE;
-      st.zoom = Math.min(cssW / spanX, cssH / spanY) * 0.95;
-      st.camX = (minX + maxX + 1) / 2;
-      st.camY = (minY + maxY + 1) / 2;
-      draw();
+    ws.querySelector("#zoom-in").onclick = () => {
+      const rect = canvas.getBoundingClientRect();
+      zoomAt(rect.left + cssW / 2, rect.top + cssH / 2, st.zoom * 1.25);
     };
+    ws.querySelector("#zoom-out").onclick = () => {
+      const rect = canvas.getBoundingClientRect();
+      zoomAt(rect.left + cssW / 2, rect.top + cssH / 2, st.zoom / 1.25);
+    };
+    ws.querySelector("#zoom-fit").onclick = () => fit();
     ws.querySelector("#btn-add-tile").onclick = () => {
       const xs = prompt("X coordinate", String(Math.round(st.camX)));
       const ys = prompt("Y coordinate", String(Math.round(st.camY)));
@@ -231,67 +426,142 @@ const WorldEditor = (() => {
       const x = Number(xs), y = Number(ys);
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
       if (at.has(x + "," + y)) { alert("A tile already exists at that X,Y"); return; }
+      const g = st.paint.GroundTile || groundList[0] || "assets/world/grounds/grass.png";
       const id = BQDB.nextId("world");
       BQDB.run(`INSERT INTO world (id, GroundTile, ForegroundTile, Name, X, Y, Music, Collision, Enemy) VALUES (?,?,?,?,?,?,?,?,?)`,
-        [id, groundList[0] || "assets/world/grounds/grass.png", "", "", x, y, "*", 0, ""]);
-      const cell = { id, GroundTile: groundList[0] || "assets/world/grounds/grass.png", ForegroundTile: "", Name: "", X: x, Y: y, Music: "*", Collision: 0, Enemy: "" };
+        [id, g, "", "", x, y, "*", 0, ""]);
+      const cell = { id, GroundTile: g, ForegroundTile: "", Name: "", X: x, Y: y, Music: "*", Collision: 0, Enemy: "" };
       at.set(x + "," + y, cell);
       st.sel = cell;
       App.syncDirty();
-      draw();
+      scheduleDraw();
       showSide(cell);
     };
 
+    // ——— Pointer: pan / paint / pinch ———
+    let spaceDown = false;
+    const onKey = (e) => {
+      if (e.code === "Space") {
+        spaceDown = e.type === "keydown";
+        if (e.type === "keydown") e.preventDefault();
+      }
+    };
+    if (WorldEditor._keyDown) {
+      window.removeEventListener("keydown", WorldEditor._keyDown);
+      window.removeEventListener("keyup", WorldEditor._keyUp);
+    }
+    WorldEditor._keyDown = onKey;
+    WorldEditor._keyUp = onKey;
+    window.addEventListener("keydown", WorldEditor._keyDown);
+    window.addEventListener("keyup", WorldEditor._keyUp);
+
+    const pointers = new Map();
     let drag = null;
+    let pinch = null;
+
     canvas.addEventListener("pointerdown", (e) => {
       canvas.setPointerCapture(e.pointerId);
-      if (e.button === 1 || e.shiftKey || st.mode === "select" && e.altKey) {
-        drag = { x: e.clientX, y: e.clientY, camX: st.camX, camY: st.camY, pan: true };
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointers.size >= 2) {
+        drag = null;
+        pinch = null;
         canvas.classList.add("panning");
         return;
       }
-      const w = screenToWorld(e.clientX, e.clientY);
-      if (st.mode === "select") {
-        const cell = at.get(w.x + "," + w.y) || null;
-        showSide(cell);
-        draw();
-        drag = { pan: true, x: e.clientX, y: e.clientY, camX: st.camX, camY: st.camY, moved: false };
+
+      const panGesture = e.button === 1 || e.button === 2 || e.shiftKey || e.altKey || spaceDown;
+      if (panGesture || st.mode === "select") {
+        drag = { x: e.clientX, y: e.clientY, camX: st.camX, camY: st.camY, moved: false, pan: true, paint: false };
+        canvas.classList.add("panning");
         return;
       }
-      applyPaint(w.x, w.y);
-      drag = { paint: true };
-      draw();
-      if (st.sel || at.get(w.x + "," + w.y)) showSide(at.get(w.x + "," + w.y));
+      // paint / collision
+      const w = screenToWorld(e.clientX, e.clientY);
+      applyPaint(w.tx, w.ty);
+      drag = { paint: true, pan: false };
+      scheduleDraw();
+      showSide(at.get(w.tx + "," + w.ty) || st.sel);
     });
+
     canvas.addEventListener("pointermove", (e) => {
+      if (!pointers.has(e.pointerId) && !drag) return;
+      if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointers.size >= 2) {
+        const pts = [...pointers.values()];
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        if (!pinch) {
+          const w = screenToWorld(midX, midY);
+          pinch = { dist, zoom: st.zoom, wx: w.wx, wy: w.wy };
+        }
+        st.zoom = clampZoom(pinch.zoom * (dist / pinch.dist));
+        const rect = canvas.getBoundingClientRect();
+        const tilePx = TILE * st.zoom;
+        st.camX = pinch.wx - (midX - rect.left - cssW / 2) / tilePx;
+        st.camY = pinch.wy - (midY - rect.top - cssH / 2) / tilePx;
+        scheduleDraw();
+        return;
+      }
+
       if (!drag) return;
       if (drag.pan) {
         const dx = e.clientX - drag.x;
         const dy = e.clientY - drag.y;
         if (dx * dx + dy * dy > 16) drag.moved = true;
-        st.camX = drag.camX - dx / (st.zoom * TILE);
-        st.camY = drag.camY - dy / (st.zoom * TILE);
-        draw();
+        const tilePx = TILE * st.zoom;
+        st.camX = drag.camX - dx / tilePx;
+        st.camY = drag.camY - dy / tilePx;
+        scheduleDraw();
         return;
       }
       if (drag.paint) {
         const w = screenToWorld(e.clientX, e.clientY);
-        applyPaint(w.x, w.y);
-        draw();
+        applyPaint(w.tx, w.ty);
+        scheduleDraw();
       }
     });
-    canvas.addEventListener("pointerup", () => { drag = null; canvas.classList.remove("panning"); });
+
+    function endPointer(e) {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 0) {
+        if (drag && drag.pan && !drag.moved && st.mode === "select") {
+          const w = screenToWorld(e.clientX, e.clientY);
+          const cell = at.get(w.tx + "," + w.ty) || null;
+          showSide(cell);
+          scheduleDraw();
+        }
+        drag = null;
+        canvas.classList.remove("panning");
+      }
+    }
+    canvas.addEventListener("pointerup", endPointer);
+    canvas.addEventListener("pointercancel", endPointer);
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
       const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      st.zoom = Math.min(4, Math.max(0.02, st.zoom * factor));
-      draw();
+      zoomAt(e.clientX, e.clientY, st.zoom * factor);
     }, { passive: false });
 
-    // initial paint brush defaults
-    if (!st.paint.GroundTile && groundList[0]) st.paint.GroundTile = groundList[0];
+    showSide(st.sel);
+    requestAnimationFrame(() => {
+      if (!st._didAutoFit) { st._didAutoFit = true; fit(); }
+      else scheduleDraw();
+    });
 
-    requestAnimationFrame(() => { draw(); if (st.sel) showSide(at.get(st.sel.X + "," + st.sel.Y) || st.sel); });
+    // Cleanup note: listeners on window for space — re-render replaces ws so old canvas gone; keys may stack.
+    // Remove prior space handlers if any
+    if (WorldEditor._keyDown) {
+      window.removeEventListener("keydown", WorldEditor._keyDown);
+      window.removeEventListener("keyup", WorldEditor._keyUp);
+    }
+    WorldEditor._keyDown = onKey;
+    WorldEditor._keyUp = onKey;
   }
 
   return { render };
