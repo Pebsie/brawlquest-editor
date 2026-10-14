@@ -1,0 +1,161 @@
+"use strict";
+// In-browser content database (sql.js). Same rules as the API's editor.go:
+// table/column whitelist, validation, keyed SQL that is also recorded for the
+// SQL migration export.
+const BQ = (() => {
+  let SQL = null, db = null;
+  const st = { name: "", changes: [], dirty: false, warnings: [] };
+  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot"];
+  const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
+  const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
+
+  async function init() {
+    if (!SQL) SQL = await initSqlJs({ locateFile: f => "vendor/" + f });
+  }
+  async function open(buf, name) {
+    await init();
+    if (db) db.close();
+    db = new SQL.Database(new Uint8Array(buf));
+    st.name = name; st.changes = []; st.dirty = false;
+    st.warnings = checkSchema();
+    return st.warnings;
+  }
+  const has = t => !!q("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t]).length;
+  function checkSchema() {
+    for (const t of ["items", "enemies", "npc", "conversation", "world"])
+      if (!has(t)) throw new Error(`This is not a BrawlQuest content database: table "${t}" is missing.`);
+    const w = [];
+    if (!has("quest_def")) w.push("No quest_def table: this database has not had the questline migration (content/migrations/2026-10-13-questline.sql). Quests are read-only empty until you apply it with sqlite3. Items, NPCs, dialogue, loot and the map still work.");
+    if (has("quest")) w.push("Old 'quest' table found: the questline migration drops it.");
+    return w;
+  }
+  function q(sql, params) {
+    const s = db.prepare(sql); const out = [];
+    if (params) s.bind(params);
+    while (s.step()) out.push(s.getAsObject());
+    s.free(); return out;
+  }
+  function cols(t) { return q(`PRAGMA table_info(${t})`).map(r => r.name); }
+  const lit = v => {
+    if (v === null || v === undefined) return "''";
+    if (typeof v === "boolean") return v ? "1" : "0";
+    if (typeof v === "number") { if (!isFinite(v)) throw new Error("bad number"); return String(v); }
+    return "'" + String(v).replace(/'/g, "''") + "'";
+  };
+  function apply(stmts, note) {
+    db.exec("BEGIN");
+    try { for (const s of stmts) db.exec(s); db.exec("COMMIT"); }
+    catch (e) { db.exec("ROLLBACK"); throw new Error(e.message + " (in: " + stmts.find(Boolean).slice(0, 120) + ")"); }
+    st.changes.push(`-- ${new Date().toISOString().replace("T", " ").slice(0, 19)} ${note}\n${stmts.join("\n")}`);
+    st.dirty = true;
+  }
+
+  function validate(table, row) {
+    const need = (k, msg) => { if (!String(row[k] ?? "").trim()) throw new Error(msg); };
+    if (table === "quest_def") {
+      for (const k of ["Steps", "Rewards", "Prereqs"]) {
+        if (!String(row[k] ?? "").trim()) { row[k] = "[]"; continue; }
+        try { JSON.parse(row[k]); } catch (e) { throw new Error(`${k} is not valid JSON: ${e.message}`); }
+      }
+      const steps = JSON.parse(row.Steps);
+      if (!steps.length) throw new Error("a quest needs at least one step");
+      steps.forEach((s, i) => { if (!STEP_TYPES.includes(s.Type)) throw new Error(`step ${i + 1}: unknown type "${s.Type}"`); });
+      need("Title", "title is required");
+    } else if (table === "conversation") {
+      need("Identifier", "identifier is required");
+      const o = String(row.Options || "").trim();
+      if (o && o !== "[]" && !/\[\s*['"].*?['"]\s*,\s*['"][^'"]*['"]\s*\]/.test(o)) throw new Error("options must look like [['Label','next-id']]");
+    } else if (table === "npc") need("Name", "name is required");
+    else if (table === "items") {
+      need("Name", "name is required"); need("Type", "type is required");
+      const a = String(row.Attributes || "None");
+      if (a !== "None" && a !== "" && !/^([A-Z]{3},-?\d+)(;[A-Z]{3},-?\d+)*$/.test(a)) throw new Error("attributes must be None or like STR,10;INT,5");
+    } else if (table === "loot") {
+      if (!q("SELECT id FROM enemies WHERE id=?", [row.EnemyID]).length) throw new Error("unknown enemy");
+      if (!q("SELECT id FROM items WHERE id=?", [row.ItemID]).length) throw new Error("unknown item");
+    }
+  }
+
+  const api = {
+    content() {
+      const quests = has("quest_def") ? q("SELECT * FROM quest_def ORDER BY Level, id") : [];
+      return {
+        quests, hasQuestline: has("quest_def"),
+        npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
+        conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
+        enemies: q("SELECT id, Name, Image, HP, ATK, XP, Width, Height FROM enemies ORDER BY Name"),
+        items: q("SELECT * FROM items ORDER BY Name"),
+        loot: q("SELECT * FROM loot ORDER BY EnemyID, id"),
+        itemTypes: q("SELECT DISTINCT Type FROM items WHERE Type <> '' ORDER BY Type").map(r => r.Type),
+        subtypes: q("SELECT DISTINCT Subtype FROM items WHERE Subtype <> '' ORDER BY Subtype").map(r => r.Subtype),
+      };
+    },
+    world() {
+      const strings = [""], idx = new Map([["", 0]]);
+      const s = v => { v = v == null ? "" : String(v); if (!idx.has(v)) { idx.set(v, strings.length); strings.push(v); } return idx.get(v); };
+      const stmt = db.prepare("SELECT X, Y, IFNULL(GroundTile,''), IFNULL(ForegroundTile,''), IFNULL(Name,''), IFNULL(Collision,0), IFNULL(Enemy,''), IFNULL(Music,'') FROM world");
+      const tiles = [];
+      while (stmt.step()) {
+        const r = stmt.get();
+        const c = r[5] === 1 || r[5] === "1" || String(r[5]).toLowerCase() === "true" ? 1 : 0;
+        tiles.push([r[0], r[1], s(r[2]), s(r[3]), s(r[4]), c, s(r[6]), s(r[7])]);
+      }
+      stmt.free();
+      return { strings, tiles };
+    },
+    save({ table, row }) {
+      if (!EDITABLE.includes(table)) throw new Error("table not editable: " + table);
+      if (table === "quest_def" && !has("quest_def")) throw new Error("This database has no quest_def table. Apply the questline migration first.");
+      const allowed = cols(table);
+      for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
+      let id = +row.id || 0;
+      if (id <= 0) {
+        id = q(`SELECT IFNULL(MAX(id),0)+1 AS n FROM ${table}`)[0].n;
+        if ((table === "quest_def" || table === "npc") && id < 1700) id = 1700;
+        row.id = id;
+      }
+      validate(table, row);
+      const names = allowed.filter(c => c in row);
+      apply([`INSERT OR REPLACE INTO ${table} (${names.join(", ")}) VALUES (${names.map(c => lit(row[c])).join(", ")});`], `save ${table} ${id}`);
+      return { id };
+    },
+    delete({ table, id }) {
+      if (!EDITABLE.includes(table) || !(id > 0)) throw new Error("bad delete");
+      const s = [`DELETE FROM ${table} WHERE id = ${+id};`];
+      if (table === "npc") s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE NPC = ${+id});`, `DELETE FROM routine WHERE NPC = ${+id};`);
+      if (table === "items") s.push(`DELETE FROM loot WHERE ItemID = ${+id};`);
+      apply(s, `delete ${table} ${id}`);
+      return { ok: true };
+    },
+    tiles(patches) {
+      if (patches.length > 5000) throw new Error("too many tiles in one save");
+      const s = [];
+      for (const p of patches) {
+        const sets = [];
+        for (const [k, v] of Object.entries(p.Set)) {
+          if (!WORLD_COLS[k]) throw new Error("world has no editable column " + k);
+          if (k === "Enemy" && v && !q("SELECT 1 FROM enemies WHERE Name=?", [v]).length) throw new Error("unknown enemy " + v);
+          sets.push(`${k} = ${lit(v)}`);
+        }
+        if (!sets.length) continue;
+        const x = Math.trunc(p.X), y = Math.trunc(p.Y);
+        s.push(`INSERT INTO world (GroundTile, ForegroundTile, Name, X, Y, Music, Collision, Enemy) SELECT 'assets/world/grounds/grass.png', '', '', ${x}, ${y}, '', 0, '' WHERE NOT EXISTS (SELECT 1 FROM world WHERE X = ${x} AND Y = ${y});`,
+          `UPDATE world SET ${sets.join(", ")} WHERE X = ${x} AND Y = ${y};`);
+      }
+      if (s.length) apply(s, `tiles x${patches.length}`);
+      return { tiles: patches.length };
+    },
+    export() {
+      const head = `-- BrawlQuest content changes from the editor (${st.name}), ${new Date().toISOString().slice(0, 10)}.\n` +
+        "-- Apply: cp bq-content.db bq-content.db.bak && sqlite3 bq-content.db < this-file.sql\n" +
+        "-- Statements are INSERT OR REPLACE / UPDATE by key, so applying twice is safe.\n.bail on\nBEGIN;\n";
+      return { sql: head + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
+    },
+    clearExport() { st.changes = []; return { ok: true }; },
+  };
+
+  return {
+    init, open, api, st, has: () => !!db,
+    bytes: () => db.export(),
+  };
+})();
