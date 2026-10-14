@@ -458,7 +458,13 @@ function mapDown(e) {
     else if (tl && str(tl[6])) M.drag = { mob: str(tl[6]), from: t };
     else M.drag = { pan: true, sx: e.clientX, sy: e.clientY, cx: M.cx, cy: M.cy };
     drawSide(); drawMap();
-  } else if (M.tool === "spawn") placeSpawns(t);
+  } else if (M.tool === "plot") {
+    const p = plotAt(t.x, t.y);
+    if (p && !e.altKey) { M.plotSel = { ...p }; M.drag = { movePlot: M.plotSel, from: t, ox: p.X, oy: p.Y }; }
+    else M.drag = { plotRect: true, from: t, to: t };
+    drawSide(); drawMap();
+  }
+  else if (M.tool === "spawn") placeSpawns(t);
   else if (M.tool === "erase") { patch(t.x, t.y, { Enemy: "" }); M.drag = { paint: true }; }
   else if (M.tool === "paint") { paintAt(t); M.drag = { paint: true }; }
 }
@@ -467,11 +473,20 @@ function mapMove(e) {
   if (M.drag.pan) { M.cx = M.drag.cx - (e.clientX - M.drag.sx) / M.scale; M.cy = M.drag.cy - (e.clientY - M.drag.sy) / M.scale; drawMap(); return; }
   const t = toTile(e);
   if (M.drag.npc || M.drag.mob) { M.drag.to = t; drawMap(); }
+  else if (M.drag.plotRect) { M.drag.to = t; drawMap(); }
+  else if (M.drag.movePlot) { M.drag.movePlot.X = M.drag.ox + t.x - M.drag.from.x; M.drag.movePlot.Y = M.drag.oy + t.y - M.drag.from.y; drawMap(); }
   else if (M.drag.paint) { if (M.tool === "erase") patch(t.x, t.y, { Enemy: "" }); else paintAt(t); }
 }
 async function mapUp() {
   const d = M.drag; M.drag = null;
   if (!d) return;
+  if (d.plotRect) {
+    const x0 = Math.min(d.from.x, d.to.x), y0 = Math.min(d.from.y, d.to.y);
+    const W = Math.min(PLOT_MAX, Math.abs(d.to.x - d.from.x) + 1), H = Math.min(PLOT_MAX, Math.abs(d.to.y - d.from.y) + 1);
+    M.plotSel = { id: 0, Name: "New plot", X: x0, Y: y0, W: Math.max(W, 3), H: Math.max(H, 3), Rent: 50, MinLevel: 1 };
+    drawSide(); drawMap(); return;
+  }
+  if (d.movePlot) { drawSide(); drawMap(); return; }
   if (d.npc && d.to && (d.to.x !== d.from.x || d.to.y !== d.from.y)) {
     const n = d.npc; await save("npc", { id: n.id, Name: n.Name, ImgPath: n.ImgPath, Faction: n.Faction, Conversation: n.Conversation, SpawnX: d.to.x, SpawnY: d.to.y });
     M.sel = d.to; drawSide(); drawMap();
@@ -528,12 +543,13 @@ function drawSide() {
   const s = M.side; if (!s) return;
   s.textContent = "";
   const tools = h("div", { class: "tools" });
-  for (const [k, l] of [["select", "Select / drag"], ["spawn", "Place mobs"], ["erase", "Erase mobs"], ["paint", "Paint tiles"]])
+  for (const [k, l] of [["select", "Select / drag"], ["spawn", "Place mobs"], ["erase", "Erase mobs"], ["paint", "Paint tiles"], ["plot", "Plots"]])
     tools.append(h("button", { class: M.tool === k ? "on" : "", onclick: () => { M.tool = k; drawSide(); } }, l));
   s.append(h("h3", {}, "Tools"), tools,
     h("p", { class: "hint" }, "Wheel zooms. Right-drag (or drag empty ground) pans. In Select, drag an NPC or a mob to move it."));
   M.spawnEnemy = M.spawnEnemy || enemySelect("");
   M.spawnCount = M.spawnCount || num(3);
+  if (M.tool === "plot") plotSide(s);
   if (M.tool === "spawn") s.append(h("h3", {}, "Place mobs"), h("div", { class: "grid" }, field("Enemy", M.spawnEnemy), field("Count", M.spawnCount)),
     h("p", { class: "hint" }, "Click to place. Mobs go on free walkable tiles, two tiles apart, around the click."));
   if (!M.pGround) {
@@ -598,6 +614,13 @@ function drawMap() {
     mobMarker(g, e, px(x), py(y), sc, r);
   }
   if (M.drag && M.drag.mob && M.drag.to) mobMarker(g, M.drag.mob, px(M.drag.to.x), py(M.drag.to.y), sc, r);
+  // plots
+  for (const p of (S.c.plots || [])) if (!M.plotSel || M.plotSel.id !== p.id) plotRect(g, p, px, py, sc, "rgba(120,255,140,.9)");
+  if (M.plotSel) plotRect(g, M.plotSel, px, py, sc, "#ffd34d", true);
+  if (M.drag && M.drag.plotRect && M.drag.to) {
+    const d = M.drag, x0 = Math.min(d.from.x, d.to.x), y0 = Math.min(d.from.y, d.to.y);
+    plotRect(g, { Name: "", X: x0, Y: y0, W: Math.min(PLOT_MAX, Math.abs(d.to.x - d.from.x) + 1), H: Math.min(PLOT_MAX, Math.abs(d.to.y - d.from.y) + 1) }, px, py, sc, "#fff");
+  }
   // quest reach points
   g.strokeStyle = "#5af";
   for (const q of S.c.quests) for (const s of parseJSON(q.Steps, [])) if (s.Type === "reach") {
@@ -622,6 +645,73 @@ function mobMarker(g, e, x, y, sc, r) {
   if (i) g.drawImage(i, x, y, sc, sc);
   g.fillStyle = "#ff4d4d"; g.beginPath(); g.arc(x + sc / 2, y + sc / 2, i ? 3 : r, 0, 7); g.fill();
   if (sc >= 16) { g.fillStyle = "#fbb"; g.fillText(e, x, y + sc + 10); }
+}
+
+// ------------------------------------------------------------------ plots
+const PLOT_MAX = 12;
+const PLOT_BAD_GROUND = ["Path", "Cobblestone", "Walkway", "Stone Floor", "Wood Floor", "Tiled Floor", "Water", "Lava", "Bridge"];
+const PLOT_DOORS = ["Portal", "Hole", "Door", "Sign", "Class Machine", "Well"];
+function plotAt(x, y) { return (S.c.plots || []).find(p => x >= p.X && x < p.X + p.W && y >= p.Y && y < p.Y + p.H); }
+function plotRect(g, p, px, py, sc, colour, sel) {
+  g.save(); g.strokeStyle = colour; g.lineWidth = sel ? 3 : 2; g.setLineDash([6, 4]);
+  g.strokeRect(px(p.X), py(p.Y), p.W * sc, p.H * sc);
+  g.fillStyle = colour; g.globalAlpha = .12; g.fillRect(px(p.X), py(p.Y), p.W * sc, p.H * sc); g.globalAlpha = 1;
+  if (p.Name && sc >= 4) { g.setLineDash([]); g.font = "12px sans-serif"; g.fillText(p.Name + (p.Rent != null ? `  ${p.Rent}g/wk  Lv${p.MinLevel}+` : ""), px(p.X) + 3, py(p.Y) - 4); }
+  g.restore();
+}
+// Why tiles in a plot can't be built on (the server enforces the same rules).
+function plotProblems(p) {
+  const out = { road: 0, blocked: 0, door: 0, spawn: 0, npc: 0, missing: 0, forest: 0 };
+  for (let y = p.Y; y < p.Y + p.H; y++) for (let x = p.X; x < p.X + p.W; x++) {
+    const t = tile(x, y);
+    if (!t) { out.missing++; continue; }
+    if (str(t[4]) === "Foundation Forest") out.forest++;
+    if (t[5]) out.blocked++;
+    if (PLOT_BAD_GROUND.some(b => str(t[2]).includes(b) || str(t[3]).includes(b))) out.road++;
+    let door = false, spawn = false;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const n = tile(x + dx, y + dy); if (!n) continue;
+      if (PLOT_DOORS.some(d => str(n[3]).includes(d))) door = true;
+      if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && str(n[6])) spawn = true;
+    }
+    if (door) out.door++;
+    if (spawn) out.spawn++;
+    if (S.c.npcs.some(n => Math.abs(n.SpawnX - x) <= 1 && Math.abs(n.SpawnY - y) <= 1)) out.npc++;
+  }
+  return out;
+}
+function plotSide(s) {
+  s.append(h("h3", {}, "Plots"), h("p", { class: "hint" },
+    "Drag a rectangle on the map to make a plot (max " + PLOT_MAX + "x" + PLOT_MAX + "). Click a plot to select it; drag it to move it. Alt-drag draws on top of one. Players lease plots from a Land Agent. Outside Foundation Forest they can only build inside a plot they lease."));
+  const p = M.plotSel;
+  if (p) {
+    const f = { Name: txt(p.Name), X: num(p.X), Y: num(p.Y), W: num(p.W), H: num(p.H), Rent: num(p.Rent), MinLevel: num(p.MinLevel) };
+    for (const [k, el] of Object.entries(f)) el.addEventListener("input", () => { p[k] = k === "Name" ? el.value : +el.value; drawMap(); });
+    f.Name.id = "plot-name"; f.Rent.id = "plot-rent"; f.MinLevel.id = "plot-level";
+    const pr = plotProblems(p), cells = p.W * p.H, warn = [];
+    if (pr.forest) warn.push(`${pr.forest} in Foundation Forest (free building there anyway)`);
+    if (pr.road) warn.push(`${pr.road} on roads, floors or water`);
+    if (pr.blocked) warn.push(`${pr.blocked} blocked`);
+    if (pr.door) warn.push(`${pr.door} within 2 tiles of a doorway or sign`);
+    if (pr.spawn) warn.push(`${pr.spawn} next to a mob spawn`);
+    if (pr.npc) warn.push(`${pr.npc} next to an NPC`);
+    if (pr.missing) warn.push(`${pr.missing} off the map`);
+    s.append(h("h3", { id: "plot-form" }, p.id ? `Plot ${p.id}` : "New plot (not saved yet)"),
+      h("div", { class: "grid" }, field("Name", f.Name), field("X", f.X), field("Y", f.Y), field("Width", f.W), field("Height", f.H),
+        field("Rent (gold/week)", f.Rent), field("Min level", f.MinLevel)),
+      h("p", { class: "hint", id: "plot-check" }, warn.length ? `Can't build on some tiles: ${warn.join("; ")}.` : `All ${cells} tiles look buildable.`),
+      h("div", { class: "bar" },
+        h("button", { class: "primary", id: "plot-save", onclick: async () => {
+          let id; try { id = await save("plot", { id: p.id || 0, Name: p.Name, X: p.X, Y: p.Y, W: p.W, H: p.H, Rent: p.Rent, MinLevel: p.MinLevel }); } catch (e) { return; }
+          M.plotSel = { ...(S.c.plots.find(v => v.id === id) || p) }; drawSide(); drawMap();
+        } }, "Save plot"),
+        p.id ? h("button", { class: "danger", onclick: async () => { if (await del("plot", p.id)) { M.plotSel = null; drawSide(); drawMap(); } } }, "Delete") : null,
+        h("button", { onclick: () => { M.plotSel = null; drawSide(); drawMap(); } }, "Deselect")));
+  }
+  const list = S.c.plots || [];
+  s.append(h("h3", {}, `All plots (${list.length})`));
+  if (!list.length) s.append(h("p", { class: "hint" }, "No plots yet."));
+  for (const v of list) s.append(h("div", { class: "plotrow" }, h("a", { href: "#plot/" + v.id }, v.Name), ` ${v.W}x${v.H} at ${v.X},${v.Y}, ${v.Rent}g/wk, Lv ${v.MinLevel}+`));
 }
 
 // ------------------------------------------------------------------ items
@@ -767,6 +857,7 @@ async function applyRoute() {
   }
   else if (kind === "item") { S.tab = "items"; S.item = { id: +a }; }
   else if (kind === "loot") { S.tab = "loot"; S.lootEnemy = { id: +a }; }
+  else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p }; S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
   else if (kind === "map") { S.tab = "map"; if (a) { const [x, y] = a.split(",").map(Number); S.focus = { x, y }; M.sel = { x, y }; } }
   else if (TABS.includes(kind)) S.tab = kind;
   S.routing = true;

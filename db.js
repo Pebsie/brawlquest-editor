@@ -5,7 +5,9 @@
 const BQ = (() => {
   let SQL = null, db = null;
   const st = { name: "", changes: [], dirty: false, warnings: [] };
-  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot"];
+  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot"];
+  const PLOT_MAX = 12;
+  const PLOT_TABLE = "CREATE TABLE IF NOT EXISTS plot (id INTEGER PRIMARY KEY, Name TEXT NOT NULL DEFAULT '', X INTEGER NOT NULL, Y INTEGER NOT NULL, W INTEGER NOT NULL DEFAULT 8, H INTEGER NOT NULL DEFAULT 8, Rent INTEGER NOT NULL DEFAULT 50, MinLevel INTEGER NOT NULL DEFAULT 1);";
   const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
   const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
 
@@ -26,6 +28,7 @@ const BQ = (() => {
       if (!has(t)) throw new Error(`This is not a BrawlQuest content database: table "${t}" is missing.`);
     const w = [];
     if (!has("quest_def")) w.push("No quest_def table: this database has not had the questline migration (content/migrations/2026-10-13-questline.sql). Quests are read-only empty until you apply it with sqlite3. Items, NPCs, dialogue, loot and the map still work.");
+    if (!has("plot")) w.push("No plot table yet (content/migrations/2026-10-14-plots.sql). It is created for you when you save your first plot.");
     if (has("quest")) w.push("Old 'quest' table found: the questline migration drops it.");
     return w;
   }
@@ -70,6 +73,14 @@ const BQ = (() => {
       need("Name", "name is required"); need("Type", "type is required");
       const a = String(row.Attributes || "None");
       if (a !== "None" && a !== "" && !/^([A-Z]{3},-?\d+)(;[A-Z]{3},-?\d+)*$/.test(a)) throw new Error("attributes must be None or like STR,10;INT,5");
+    } else if (table === "plot") {
+      need("Name", "name is required");
+      for (const k of ["X", "Y", "W", "H", "Rent", "MinLevel"]) { row[k] = Math.trunc(+row[k] || 0); }
+      if (row.W < 1 || row.H < 1 || row.W > PLOT_MAX || row.H > PLOT_MAX) throw new Error(`plots are 1 to ${PLOT_MAX} tiles a side`);
+      if (row.Rent < 0) throw new Error("rent can't be negative");
+      if (row.MinLevel < 1 || row.MinLevel > 40) throw new Error("min level must be 1 to 40");
+      const hit = q("SELECT Name FROM plot WHERE id <> ? AND X < ? AND X + W > ? AND Y < ? AND Y + H > ?", [row.id, row.X + row.W, row.X, row.Y + row.H, row.Y]);
+      if (hit.length) throw new Error("overlaps plot " + hit[0].Name);
     } else if (table === "loot") {
       if (!q("SELECT id FROM enemies WHERE id=?", [row.EnemyID]).length) throw new Error("unknown enemy");
       if (!q("SELECT id FROM items WHERE id=?", [row.ItemID]).length) throw new Error("unknown item");
@@ -81,6 +92,7 @@ const BQ = (() => {
       const quests = has("quest_def") ? q("SELECT * FROM quest_def ORDER BY Level, id") : [];
       return {
         quests, hasQuestline: has("quest_def"),
+        plots: has("plot") ? q("SELECT * FROM plot ORDER BY Name") : [],
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
         enemies: q("SELECT id, Name, Image, HP, ATK, XP, Width, Height FROM enemies ORDER BY Name"),
@@ -106,12 +118,14 @@ const BQ = (() => {
     save({ table, row }) {
       if (!EDITABLE.includes(table)) throw new Error("table not editable: " + table);
       if (table === "quest_def" && !has("quest_def")) throw new Error("This database has no quest_def table. Apply the questline migration first.");
+      if (table === "plot" && !has("plot")) apply([PLOT_TABLE], "create plot table");
       const allowed = cols(table);
       for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
       let id = +row.id || 0;
       if (id <= 0) {
         id = q(`SELECT IFNULL(MAX(id),0)+1 AS n FROM ${table}`)[0].n;
         if ((table === "quest_def" || table === "npc") && id < 1700) id = 1700;
+        if (table === "plot") id = q("SELECT IFNULL(MAX(id),0)+1 AS n FROM plot")[0].n;
         row.id = id;
       }
       validate(table, row);
