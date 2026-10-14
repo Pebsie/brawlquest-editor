@@ -9,7 +9,7 @@ const h = (tag, attrs = {}, ...kids) => {
     else if (v === true) e.setAttribute(k, "");
     else if (v !== false && v != null) e.setAttribute(k, v);
   }
-  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  for (const k of kids.flat(Infinity)) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
   return e;
 };
 
@@ -81,7 +81,8 @@ async function openFile(file) {
     S.world = null; S.quest = S.npc = S.item = null;
     $("#welcome").hidden = true; $("#main").hidden = false; $("#tabs").hidden = false;
     $("#warn").hidden = !warnings.length; $("#warn").textContent = warnings.join(" ");
-    await loadAll(); syncFile(); renderTab();
+    await loadAll(); syncFile();
+    if (location.hash.length > 1) await applyRoute(); else renderTab();
   } catch (e) { status(e.message, true); alert(e.message); }
 }
 function saveDb() {
@@ -101,6 +102,7 @@ async function loadAll() {
   S.c.quests = S.c.quests || []; S.c.conversations = S.c.conversations || [];
   S.convBy = Object.fromEntries(S.c.conversations.map(c => [c.Identifier, c]));
   S.npcBy = Object.fromEntries(S.c.npcs.map(n => [n.id, n]));
+  S.ownerCache = null;
   S.c.items = S.c.items || [];
   S.itemBy = Object.fromEntries(S.c.items.map(i => [i.id, i]));
   S.enemyBy = Object.fromEntries(S.c.enemies.map(e => [e.id, e]));
@@ -190,7 +192,7 @@ function renderQuests(m) {
     return;
   }
   const form = h("div", { class: "form" });
-  const pick = q => { S.quest = q; m.replaceChildren(listPanel(() => S.c.quests, q => `${q.Level} ${q.Title}`, () => S.quest && S.quest.id, pick, newQ), form); questForm(form, q); };
+  const pick = q => { S.quest = q; m.replaceChildren(listPanel(() => S.c.quests, q => `${q.Level} ${q.Title}`, () => S.quest && S.quest.id, it => go("#quest/" + it.id), newQ), form); questForm(form, q); };
   const newQ = () => pick({ id: 0, Act: 1, Zone: "", Title: "New quest", Summary: "", Level: 1, MinLevel: 1, Giver: 0, TurnIn: 0,
     Prereqs: "[]", Offer: "", Accept: "", Progress: "", Complete: "", XP: 100, Gold: 10, Rewards: "[]",
     Steps: JSON.stringify([{ Type: "kill", Target: "", Count: 1, Text: "" }]) });
@@ -201,12 +203,14 @@ function renderQuests(m) {
 function questForm(form, q) {
   form.textContent = "";
   if (!q) return;
+  if (q.id) syncHash("#quest/" + q.id);
   const f = {
     Title: txt(q.Title), Act: num(q.Act), Zone: txt(q.Zone), Level: num(q.Level), MinLevel: num(q.MinLevel),
     Giver: npcSelect(q.Giver), TurnIn: npcSelect(q.TurnIn), Summary: area(q.Summary),
     Offer: area(q.Offer), Accept: area(q.Accept), Progress: area(q.Progress), Complete: area(q.Complete),
     XP: num(q.XP), Gold: num(q.Gold),
   };
+  for (const k of ["Offer", "Accept", "Progress", "Complete", "Summary"]) f[k].id = "qline-" + k;
   const prereqs = new Set(parseJSON(q.Prereqs, []));
   const preBox = h("div");
   const drawPre = () => {
@@ -244,7 +248,7 @@ function questForm(form, q) {
         h("button", { onclick: () => { steps.splice(i, 1); drawSteps(); } }, "×"));
       const text = txt(s.Text, "Objective shown in the tracker"); text.style.width = "100%"; text.oninput = () => (s.Text = text.value);
       const hint = txt(s.Hint, "Hint (optional, shown in the quest log)"); hint.style.width = "100%"; hint.oninput = () => (s.Hint = hint.value);
-      stepBox.append(h("div", { class: "step" }, top, h("div", { class: "hint" }, STEP_HELP[s.Type] || ""), text, hint));
+      stepBox.append(h("div", { class: "step", id: "qstep-" + i }, top, h("div", { class: "hint" }, STEP_HELP[s.Type] || ""), text, hint));
     });
     stepBox.append(h("button", { onclick: () => { steps.push({ Type: "kill", Target: "", Count: 1, Text: "" }); drawSteps(); } }, "+ Step"));
   };
@@ -271,6 +275,7 @@ function questForm(form, q) {
   });
   form.append(
     h("h2", {}, q.id ? `Quest ${q.id}` : "New quest"),
+    q.id ? questLinks(q) : null,
     h("div", { class: "grid" },
       field("Title", f.Title), field("Act / Zone", h("div", {}, f.Act, " ", f.Zone)),
       field("Level / min", h("div", {}, f.Level, " min level ", f.MinLevel)),
@@ -279,6 +284,7 @@ function questForm(form, q) {
       field("Offer", f.Offer), field("Accept", f.Accept), field("In progress", f.Progress), field("Complete", f.Complete),
       field("XP / Gold", h("div", {}, f.XP, " XP  ", f.Gold, " gold"))),
     h("p", { class: "hint" }, "Text can use {SHIELD}, {INTERACT}, {MOUNTS}, {CHARACTER} for the player's keys."),
+    q.id ? questConversation(q) : null,
     h("h3", {}, "Steps (done in order)"), stepBox,
     h("h3", {}, "Item rewards"), rwBox,
     h("div", { class: "bar" },
@@ -311,7 +317,7 @@ function formatOptions(opts) {
 
 function renderNPCs(m) {
   const form = h("div", { class: "form" });
-  const pick = n => { S.npc = n; m.replaceChildren(listPanel(() => S.c.npcs, n => `${n.Name} (${n.SpawnX}, ${n.SpawnY})`, () => S.npc && S.npc.id, pick, newN), form); npcForm(form, n); };
+  const pick = n => { S.npc = n; m.replaceChildren(listPanel(() => S.c.npcs, n => `${n.Name} (${n.SpawnX}, ${n.SpawnY})`, () => S.npc && S.npc.id, it => go("#npc/" + it.id), newN), form); npcForm(form, n); };
   const newN = () => pick({ id: 0, Name: "New NPC", ImgPath: "assets/npc/Person.png", Faction: "", Conversation: "", SpawnX: 0, SpawnY: 0 });
   pick(S.npc ? (S.c.npcs.find(n => n.id === S.npc.id) || S.c.npcs[0]) : S.c.npcs[0]);
 }
@@ -319,6 +325,7 @@ function renderNPCs(m) {
 function npcForm(form, n) {
   form.textContent = "";
   if (!n) return;
+  if (n.id) syncHash("#npc/" + n.id);
   const f = { Name: txt(n.Name), ImgPath: txt(n.ImgPath), Faction: txt(n.Faction), Conversation: txt(n.Conversation), SpawnX: num(n.SpawnX), SpawnY: num(n.SpawnY) };
   const img = sprite(n.ImgPath);
   f.ImgPath.oninput = () => (img.src = assetURL(f.ImgPath.value));
@@ -327,21 +334,18 @@ function npcForm(form, n) {
     h("div", { class: "grid" },
       field("Name", f.Name), field("Sprite", h("div", {}, img, " ", f.ImgPath)), field("Faction", f.Faction),
       field("Greeting node", f.Conversation), field("Position", h("div", {}, "X ", f.SpawnX, "  Y ", f.SpawnY, " ",
-        h("button", { onclick: () => { S.focus = { x: +f.SpawnX.value, y: +f.SpawnY.value }; switchTab("map"); } }, "Show on map")))),
+        link(`#map/${n.SpawnX},${n.SpawnY}`, "Show on map", "btnlink")))),
     h("div", { class: "bar" },
       h("button", { class: "primary", onclick: async () => { const id = await save("npc", collect()); S.npc = { id }; renderTab(); } }, "Save NPC"),
       n.id ? h("button", { class: "danger", onclick: async () => { if (await del("npc", n.id)) { S.npc = null; renderTab(); } } }, "Delete NPC") : null));
   if (!n.id) return;
 
-  const quests = S.c.quests.filter(q => q.Giver === n.id || q.TurnIn === n.id || parseJSON(q.Steps, []).some(s => s.NPC === n.id));
-  form.append(h("h3", {}, "Quest lines spoken by this NPC"));
-  if (!quests.length) form.append(h("div", { class: "hint" }, "None."));
-  for (const q of quests) form.append(h("div", {}, h("a", { href: "#", onclick: e => { e.preventDefault(); S.quest = q; switchTab("quests"); } }, `${q.Level} · ${q.Title}`),
-    h("span", { class: "hint" }, q.Giver === n.id ? "  gives" : "", q.TurnIn === n.id ? "  takes hand-in" : "", q.Giver !== n.id && q.TurnIn !== n.id ? "  talk step" : "")));
+  form.append(npcQuestPanel(n));
 
   form.append(h("h3", {}, "Dialogue tree (free chat when no quest is waiting)"),
     h("p", { class: "hint" }, "Each node is a line and its answers. An answer points to another node, or to 1 to end. Quest offers and hand-ins are added to the menu automatically."));
   const nodes = n.Conversation ? reachable(n.Conversation) : [];
+  if (nodes.length) form.append(h("div", { class: "jump" }, "Nodes: ", nodes.filter(c => !c.missing).map(c => [link("#dialog/" + c.Identifier, c.Identifier), " "])));
   for (const c of nodes) form.append(nodeEditor(c, c.Identifier === n.Conversation, n));
   const prefix = (n.Conversation || "npc-" + n.id).replace(/-\d+$/, "");
   form.append(h("div", { class: "bar" }, h("button", { onclick: () => {
@@ -372,8 +376,12 @@ function nodeEditor(c, isRoot, n) {
   let dl = $("#convIds");
   if (!dl) { dl = h("datalist", { id: "convIds" }); document.body.append(dl); }
   dl.replaceChildren(h("option", { value: "1" }, "end"), ...ids.map(i => h("option", { value: i })));
-  return h("div", { class: "node" + (isRoot ? " root" : "") },
+  const owners = nodeOwners(c.Identifier);
+  const ownerQuests = S.c.quests.filter(q => owners.some(o => q.Giver === o.id || q.TurnIn === o.id));
+  return h("div", { class: "node" + (isRoot ? " root" : ""), id: "node-" + c.Identifier },
     h("div", {}, h("span", { class: "id" }, isRoot ? "greeting · " : ""), ident),
+    h("div", { class: "hint" }, "Spoken by: ", owners.length ? owners.map(o => [link("#npc/" + o.id, o.Name), " "]) : "no NPC (unreachable)",
+      ownerQuests.length ? [" · their quests: ", ownerQuests.map(q => [link("#quest/" + q.id, q.Title), " "])] : null),
     title, optBox, given,
     h("div", { class: "bar" },
       h("button", { class: "primary", onclick: async () => {
@@ -551,8 +559,8 @@ function drawSide() {
         h("button", { onclick: () => { patch(M.sel.x, M.sel.y, { Enemy: sel.value }); flush(); } }, "Set"),
         h("button", { class: "danger", onclick: () => { patch(M.sel.x, M.sel.y, { Enemy: "" }); flush(); } }, "Remove")));
     }
-    if (n) s.append(h("div", { class: "bar" }, sprite(n.ImgPath), h("b", {}, n.Name),
-      h("button", { onclick: () => { S.npc = n; switchTab("npcs"); } }, "Edit NPC & dialogue")));
+    if (n) s.append(h("div", { class: "bar" }, sprite(n.ImgPath), h("b", {}, n.Name), link("#npc/" + n.id, "Edit NPC & dialogue", "btnlink")),
+      h("h3", {}, "Quests here"), npcQuestList(n, true));
   }
   const go = { x: num(Math.round(M.cx)), y: num(Math.round(M.cy)) };
   const npcJump = npcSelect(0, () => { const n = S.npcBy[npcJump.value]; if (n) { M.cx = n.SpawnX; M.cy = n.SpawnY; M.scale = 24; M.sel = { x: n.SpawnX, y: n.SpawnY }; drawSide(); drawMap(); } });
@@ -629,13 +637,14 @@ function assetInput(val, onchange, filter) {
 }
 function renderItems(m) {
   const form = h("div", { class: "form" });
-  const pick = it => { S.item = it; m.replaceChildren(listPanel(() => S.c.items, i => `${i.Name} · ${i.Type} (${i.id})`, () => S.item && S.item.id, pick, newI), form); itemForm(form, it); };
+  const pick = it => { S.item = it; m.replaceChildren(listPanel(() => S.c.items, i => `${i.Name} · ${i.Type} (${i.id})`, () => S.item && S.item.id, it => go("#item/" + it.id), newI), form); itemForm(form, it); };
   const newI = () => pick({ id: 0, Name: "New item", Type: "reagent", Val: "0", ImgPath: "assets/items/Mould.png", Desc: "", Worth: 1, Attributes: "None", Subtype: "None", Cooldown: 1 });
   pick(S.item ? (S.c.items.find(i => i.id === S.item.id) || S.c.items[0]) : S.c.items[0]);
 }
 function itemForm(form, it) {
   form.textContent = "";
   if (!it) return;
+  if (it.id) syncHash("#item/" + it.id);
   const dl = (id, vals) => { let d = document.getElementById(id); if (!d) { d = h("datalist", { id }); document.body.append(d); } d.replaceChildren(...vals.map(v => h("option", { value: v }))); };
   dl("itemTypes", S.c.itemTypes); dl("itemSubtypes", S.c.subtypes.concat(["None"]));
   const f = {
@@ -685,12 +694,13 @@ function itemForm(form, it) {
 // ------------------------------------------------------------------ loot
 function renderLoot(m) {
   const form = h("div", { class: "form" });
-  const pick = e => { S.lootEnemy = e; m.replaceChildren(listPanel(() => S.c.enemies, e => `${e.Name} (${S.c.loot.filter(l => l.EnemyID === e.id).length})`, () => S.lootEnemy && S.lootEnemy.id, pick, null), form); lootForm(form, e); };
+  const pick = e => { S.lootEnemy = e; m.replaceChildren(listPanel(() => S.c.enemies, e => `${e.Name} (${S.c.loot.filter(l => l.EnemyID === e.id).length})`, () => S.lootEnemy && S.lootEnemy.id, it => go("#loot/" + it.id), null), form); lootForm(form, e); };
   pick(S.lootEnemy ? S.enemyBy[S.lootEnemy.id] : S.c.enemies[0]);
 }
 function lootForm(form, e) {
   form.textContent = "";
   if (!e) return;
+  syncHash("#loot/" + e.id);
   form.append(h("h2", {}, `${e.Name} loot`), h("div", { class: "bar" }, sprite(e.Image), h("span", { class: "hint" }, `HP ${e.HP} · ATK ${e.ATK} · XP ${e.XP}`)),
     h("p", { class: "hint" }, "Chance is a percent per kill. Amount ± variance is how many drop."));
   const rows = S.c.loot.filter(l => l.EnemyID === e.id);
@@ -722,9 +732,126 @@ function renderSprites(m) {
 }
 
 // ------------------------------------------------------------------ shell
-function switchTab(t) { S.tab = t; renderTab(); }
+// ------------------------------------------------------------------ navigation
+// Hash routes, so Back/Forward work and links can be shared:
+//   #map  #map/X,Y  #quests  #quest/ID  #quest/ID/line/Offer  #quest/ID/step/N
+//   #npcs  #npc/ID  #npc/ID/quest/QID  #dialog/IDENTIFIER  #items  #item/ID  #loot/ENEMYID  #export  #sprites
+function link(hash, text, cls) { return h("a", { href: hash, class: cls || null }, text); }
+function go(hash) { if (location.hash === hash) applyRoute(); else location.hash = hash; }
+function syncHash(hash) { if (location.hash !== hash && !S.routing) history.replaceState(null, "", hash); }
+function highlight(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ block: "center" });
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  if (el.focus && /TEXTAREA|INPUT/.test(el.tagName)) el.focus({ preventScroll: true });
+}
+function nodeOwners(ident) {
+  if (!S.ownerCache) {
+    S.ownerCache = {};
+    for (const n of S.c.npcs) if (n.Conversation) for (const c of reachable(n.Conversation)) (S.ownerCache[c.Identifier] = S.ownerCache[c.Identifier] || []).push(n);
+  }
+  return S.ownerCache[ident] || [];
+}
+const TABS = ["map", "quests", "npcs", "items", "loot", "export", "sprites"];
+async function applyRoute() {
+  if (!BQ.has() || !S.c) return;
+  const [kind, a, b, c] = location.hash.slice(1).split("/").map(decodeURIComponent);
+  let target = null;
+  if (kind === "quest") { S.tab = "quests"; S.quest = { id: +a }; if (b === "line") target = "qline-" + c; if (b === "step") target = "qstep-" + c; }
+  else if (kind === "npc") { S.tab = "npcs"; S.npc = { id: +a }; if (b === "quest") target = "npcq-" + c; }
+  else if (kind === "dialog") {
+    const owner = nodeOwners(a)[0];
+    if (owner) { S.tab = "npcs"; S.npc = { id: owner.id }; } else { S.tab = "dialog"; S.orphan = a; }
+    target = "node-" + a;
+  }
+  else if (kind === "item") { S.tab = "items"; S.item = { id: +a }; }
+  else if (kind === "loot") { S.tab = "loot"; S.lootEnemy = { id: +a }; }
+  else if (kind === "map") { S.tab = "map"; if (a) { const [x, y] = a.split(",").map(Number); S.focus = { x, y }; M.sel = { x, y }; } }
+  else if (TABS.includes(kind)) S.tab = kind;
+  S.routing = true;
+  try { await renderTab(); } finally { S.routing = false; }
+  if (target) highlight(target);
+}
+window.addEventListener("hashchange", applyRoute);
+
+// Quests that involve an NPC, and in what role.
+function npcRoles(n) {
+  const out = [];
+  for (const q of S.c.quests) {
+    const roles = [];
+    if (q.Giver === n.id) roles.push({ role: "gives", lines: [["Offer", `#quest/${q.id}/line/Offer`], ["Accept", `#quest/${q.id}/line/Accept`]] });
+    if (q.TurnIn === n.id) roles.push({ role: "takes hand-in", lines: [["In progress", `#quest/${q.id}/line/Progress`], ["Complete", `#quest/${q.id}/line/Complete`]] });
+    parseJSON(q.Steps, []).forEach((st, i) => { if (st.Type === "talk" && st.NPC === n.id) roles.push({ role: `talk step ${i + 1}`, lines: [[`Step ${i + 1} line`, `#quest/${q.id}/step/${i}`]] }); });
+    if (roles.length) out.push({ q, roles });
+  }
+  return out.sort((x, y) => x.q.Level - y.q.Level || x.q.id - y.q.id);
+}
+function npcQuestList(n, compact) {
+  const rel = npcRoles(n);
+  if (!rel.length) return h("div", { class: "hint" }, "No quests involve this NPC.");
+  return h("div", { class: "qrel" }, rel.map(({ q, roles }) => h("div", { class: "qcard", id: "npcq-" + q.id },
+    h("div", {}, h("span", { class: "lvl" }, "Lv " + q.Level), " ", link("#quest/" + q.id, q.Title, "qt"), " ",
+      roles.map(r => h("span", { class: "role" }, r.role))),
+    compact ? null : h("div", { class: "why" }, (q.Summary || q.Offer || "").slice(0, 200)),
+    h("div", { class: "lines" }, roles.flatMap(r => r.lines).map(([l, hsh]) => [link(hsh, l), " "])))));
+}
+function npcQuestPanel(n) {
+  return h("div", { class: "panel" }, h("h3", {}, "Quests involving this NPC"),
+    h("p", { class: "hint" }, "Quest lines live on the quest. The free-chat dialogue tree is further down."), npcQuestList(n, false));
+}
+function questLinks(q) {
+  const steps = parseJSON(q.Steps, []);
+  const npcL = id => (S.npcBy[id] ? link("#npc/" + id, S.npcBy[id].Name) : h("span", { class: "hint" }, "none"));
+  const enemyBy = Object.fromEntries(S.c.enemies.map(e => [e.Name, e]));
+  const itemByName = Object.fromEntries(S.c.items.map(i => [i.Name, i]));
+  const targets = [];
+  steps.forEach((st, i) => {
+    let l = null;
+    if ((st.Type === "kill" || st.Type === "boss") && enemyBy[st.Target]) l = link("#loot/" + enemyBy[st.Target].id, `${st.Type} ${st.Target}`);
+    else if (["collect", "craft", "equip"].includes(st.Type) && itemByName[st.Target]) l = link("#item/" + itemByName[st.Target].id, `${st.Type} ${st.Target}`);
+    else if (st.Type === "talk" && S.npcBy[st.NPC]) l = link("#npc/" + st.NPC, "talk to " + S.npcBy[st.NPC].Name);
+    else if (st.Type === "reach") l = link(`#map/${st.X},${st.Y}`, `reach ${st.X},${st.Y}`);
+    else l = h("span", {}, `${st.Type} ${st.Target || st.Count || ""}`);
+    targets.push(h("div", {}, link(`#quest/${q.id}/step/${i}`, `${i + 1}.`), " ", l));
+  });
+  const pre = parseJSON(q.Prereqs, []).map(id => S.c.quests.find(x => x.id === id)).filter(Boolean);
+  const next = S.c.quests.filter(x => parseJSON(x.Prereqs, []).includes(q.id));
+  const rw = parseJSON(q.Rewards, []).filter(r => S.itemBy[r.ItemID]);
+  const ql = list => list.length ? list.map(x => [link("#quest/" + x.id, `${x.Title} (Lv ${x.Level})`), "  "]) : h("span", { class: "hint" }, "none");
+  return h("div", { class: "panel", id: "quest-links" },
+    h("div", { class: "grid" },
+      field("Giver", h("div", {}, npcL(q.Giver), q.Giver ? [" · ", link(`#npc/${q.Giver}/quest/${q.id}`, "see in NPC")] : null)),
+      field("Turn in to", h("div", {}, npcL(q.TurnIn), q.TurnIn && q.TurnIn !== q.Giver ? [" · ", link(`#npc/${q.TurnIn}/quest/${q.id}`, "see in NPC")] : null)),
+      field("Objectives", h("div", {}, targets.length ? targets : h("span", { class: "hint" }, "none"))),
+      rw.length ? field("Rewards", h("div", {}, rw.map(r => [link("#item/" + r.ItemID, `${S.itemBy[r.ItemID].Name} ×${r.Amount}`), "  "]))) : null,
+      field("Needs first", h("div", {}, ql(pre))),
+      field("Leads to", h("div", {}, ql(next)))));
+}
+function questConversation(q) {
+  const who = id => (S.npcBy[id] ? S.npcBy[id].Name : "NPC");
+  const lines = [[q.Giver, "Offer", q.Offer], [0, "Accept", q.Accept], [q.TurnIn, "Progress", q.Progress], [q.TurnIn, "Complete", q.Complete]];
+  return h("div", { class: "panel" }, h("h3", {}, "Quest dialogue, in order"),
+    lines.map(([id, key, text]) => h("div", { class: "bubble" },
+      h("b", {}, id ? link("#npc/" + id, who(id)) : "On accepting", ` (${key === "Progress" ? "in progress" : key.toLowerCase()}): `),
+      text || h("span", { class: "hint" }, "(empty)"), " ", link(`#quest/${q.id}/line/${key}`, "edit", "edit"))),
+    parseJSON(q.Steps, []).map((st, i) => st.Type === "talk" ? h("div", { class: "bubble" },
+      h("b", {}, link("#npc/" + st.NPC, who(st.NPC)), ` (step ${i + 1}): `), st.Line || h("span", { class: "hint" }, "(no line)"), " ",
+      link(`#quest/${q.id}/step/${i}`, "edit", "edit")) : null));
+}
+function renderOrphan(m) {
+  const c = S.convBy[S.orphan];
+  const f = h("div", { class: "form" }, h("h2", {}, "Dialogue node " + S.orphan),
+    h("p", { class: "hint" }, c ? "No NPC's greeting leads to this node, so players can't reach it." : "There is no node with this identifier."));
+  if (c) f.append(nodeEditor(c, false, { ImgPath: c.ImgPath }));
+  m.append(f);
+}
+
+function switchTab(t) { go("#" + t); }
+
 async function renderTab() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
+  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|dialog|map)\//.test(location.hash)) syncHash("#" + S.tab);
   const m = $("#main"); m.textContent = ""; window.onmousemove = window.onmouseup = null; M.cv = null;
   try {
     if (S.tab === "map") { if (!S.world) { status("Loading world…"); await loadWorld(); status(""); } renderMap(m); }
@@ -733,6 +860,7 @@ async function renderTab() {
     else if (S.tab === "items") renderItems(m);
     else if (S.tab === "loot") renderLoot(m);
     else if (S.tab === "sprites") renderSprites(m);
+    else if (S.tab === "dialog") renderOrphan(m);
     else await renderExport(m);
   } catch (e) { status(e.message, true); }
 }

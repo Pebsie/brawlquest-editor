@@ -26,6 +26,18 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
 4. **Export SQL** gives the same edits as a migration (keyed, safe to apply twice)
    for `content/migrations/`.
 
+## Navigation
+
+NPCs, quests and dialogue are linked both ways: an NPC lists the quests it
+gives, takes hand-ins for or is a talk step in (with why, and links to each
+quest line); a quest links to its giver, turn-in and talk NPCs, kill targets
+(their loot page), items, prerequisite and follow-up quests, and shows its
+dialogue in order. Dialogue nodes link back to the NPCs that reach them.
+
+Every view has a URL, so Back/Forward work and links can be shared (after the
+same .db is opened): `#npc/ID`, `#quest/ID`, `#quest/ID/line/Offer`,
+`#quest/ID/step/N`, `#dialog/IDENTIFIER`, `#item/ID`, `#loot/ENEMYID`, `#map/X,Y`.
+
 ## Sprites
 
 The **Sprites** tab picks where art comes from:
