@@ -7,7 +7,13 @@ const BQ = (() => {
   const st = { name: "", changes: [], dirty: false, warnings: [] };
   const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot"];
   const PLOT_MAX = 12;
-  const PLOT_TABLE = "CREATE TABLE IF NOT EXISTS plot (id INTEGER PRIMARY KEY, Name TEXT NOT NULL DEFAULT '', X INTEGER NOT NULL, Y INTEGER NOT NULL, W INTEGER NOT NULL DEFAULT 8, H INTEGER NOT NULL DEFAULT 8, Rent INTEGER NOT NULL DEFAULT 50, MinLevel INTEGER NOT NULL DEFAULT 1);";
+  const PLOT_COLS = "id INTEGER PRIMARY KEY, Name TEXT NOT NULL DEFAULT '', X INTEGER NOT NULL, Y INTEGER NOT NULL, W INTEGER NOT NULL DEFAULT 8, H INTEGER NOT NULL DEFAULT 8, Rent INTEGER NOT NULL DEFAULT 50, MinLevel INTEGER NOT NULL DEFAULT 1, Agent INTEGER NOT NULL DEFAULT 0";
+  const PLOT_TABLE = `CREATE TABLE IF NOT EXISTS plot (${PLOT_COLS});`;
+  // Same as the API's content/migrations/2026-10-19-plot-agents.sql: adds
+  // plot.Agent (Land Agent npc id, 0 = any) and is safe to run twice.
+  const PLOT_UPGRADE = [PLOT_TABLE, "DROP TABLE IF EXISTS plot_upgrade;", `CREATE TABLE plot_upgrade (${PLOT_COLS});`,
+    "INSERT INTO plot_upgrade (id, Name, X, Y, W, H, Rent, MinLevel, Agent) SELECT p.id, p.Name, p.X, p.Y, p.W, p.H, p.Rent, p.MinLevel, IFNULL((SELECT Agent FROM plot q WHERE q.id = p.id), 0) FROM plot p, (SELECT 0 AS Agent) d;",
+    "DROP TABLE plot;", "ALTER TABLE plot_upgrade RENAME TO plot;"];
   const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
   const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
 
@@ -18,8 +24,13 @@ const BQ = (() => {
     await init();
     if (db) db.close();
     db = new SQL.Database(new Uint8Array(buf));
-    st.name = name; st.changes = []; st.dirty = false;
+    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false;
     st.warnings = checkSchema();
+    if (has("plot") && !cols("plot").includes("Agent")) {
+      db.exec("BEGIN;" + PLOT_UPGRADE.join("\n") + "COMMIT;");
+      st.plotUpgraded = true;
+      st.warnings.push("Added the plot.Agent column (which Land Agent lets each plot) to this copy. The server needs content/migrations/2026-10-19-plot-agents.sql, or a restart of the new API, which adds it itself.");
+    }
     return st.warnings;
   }
   const has = t => !!q("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t]).length;
@@ -79,8 +90,15 @@ const BQ = (() => {
       if (row.W < 1 || row.H < 1 || row.W > PLOT_MAX || row.H > PLOT_MAX) throw new Error(`plots are 1 to ${PLOT_MAX} tiles a side`);
       if (row.Rent < 0) throw new Error("rent can't be negative");
       if (row.MinLevel < 1 || row.MinLevel > 40) throw new Error("min level must be 1 to 40");
+      row.Agent = Math.trunc(+row.Agent || 0);
+      if (row.Agent && !q("SELECT 1 FROM npc WHERE id=? AND Faction='Land Agent'", [row.Agent]).length) throw new Error(`npc ${row.Agent} is not a Land Agent`);
       const hit = q("SELECT Name FROM plot WHERE id <> ? AND X < ? AND X + W > ? AND Y < ? AND Y + H > ?", [row.id, row.X + row.W, row.X, row.Y + row.H, row.Y]);
       if (hit.length) throw new Error("overlaps plot " + hit[0].Name);
+      const area = [row.X, row.X + row.W - 1, row.Y, row.Y + row.H - 1];
+      const forest = q("SELECT COUNT(*) AS n FROM world WHERE X BETWEEN ? AND ? AND Y BETWEEN ? AND ? AND (Name = 'Foundation Forest' OR Name LIKE 'Dominion of %')", area)[0].n;
+      if (forest) throw new Error(`${forest} tile(s) are in Foundation Forest, where building is free: plots go outside it`);
+      const onMap = q("SELECT COUNT(DISTINCT X || ',' || Y) AS n FROM world WHERE X BETWEEN ? AND ? AND Y BETWEEN ? AND ?", area)[0].n;
+      if (onMap < row.W * row.H) throw new Error(`${row.W * row.H - onMap} tile(s) are off the map`);
     } else if (table === "loot") {
       if (!q("SELECT id FROM enemies WHERE id=?", [row.EnemyID]).length) throw new Error("unknown enemy");
       if (!q("SELECT id FROM items WHERE id=?", [row.ItemID]).length) throw new Error("unknown item");
@@ -119,6 +137,7 @@ const BQ = (() => {
       if (!EDITABLE.includes(table)) throw new Error("table not editable: " + table);
       if (table === "quest_def" && !has("quest_def")) throw new Error("This database has no quest_def table. Apply the questline migration first.");
       if (table === "plot" && !has("plot")) apply([PLOT_TABLE], "create plot table");
+      if (table === "plot") row.Agent = +row.Agent || 0;
       const allowed = cols(table);
       for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
       let id = +row.id || 0;
@@ -163,7 +182,9 @@ const BQ = (() => {
       const head = `-- BrawlQuest content changes from the editor (${st.name}), ${new Date().toISOString().slice(0, 10)}.\n` +
         "-- Apply: cp bq-content.db bq-content.db.bak && sqlite3 bq-content.db < this-file.sql\n" +
         "-- Statements are INSERT OR REPLACE / UPDATE by key, so applying twice is safe.\n.bail on\nBEGIN;\n";
-      return { sql: head + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
+      const plots = st.plotUpgraded || st.changes.some(c => /\bplot\b/.test(c));
+      const schema = plots ? "-- plot table with the Agent column (as content/migrations/2026-10-19-plot-agents.sql)\n" + PLOT_UPGRADE.join("\n") + "\n" : "";
+      return { sql: head + schema + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
     },
     clearExport() { st.changes = []; return { ok: true }; },
   };

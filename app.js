@@ -329,10 +329,13 @@ function npcForm(form, n) {
   const f = { Name: txt(n.Name), ImgPath: txt(n.ImgPath), Faction: txt(n.Faction), Conversation: txt(n.Conversation), SpawnX: num(n.SpawnX), SpawnY: num(n.SpawnY) };
   const img = sprite(n.ImgPath);
   f.ImgPath.oninput = () => (img.src = assetURL(f.ImgPath.value));
+  const pickImg = () => openPicker({ title: `Sprite for ${f.Name.value || "this NPC"}`, groups: npcSpriteGroups, recentKey: "npc", value: f.ImgPath.value,
+    onPick: v => { if (v) { f.ImgPath.value = v; img.src = assetURL(v); } } });
+  img.addEventListener("click", pickImg); img.style.cursor = "pointer"; img.title = "Pick a sprite";
   const collect = () => ({ id: n.id, Name: f.Name.value, ImgPath: f.ImgPath.value, Faction: f.Faction.value, Conversation: f.Conversation.value, SpawnX: +f.SpawnX.value, SpawnY: +f.SpawnY.value });
   form.append(h("h2", {}, n.id ? `${n.Name} (${n.id})` : "New NPC"),
     h("div", { class: "grid" },
-      field("Name", f.Name), field("Sprite", h("div", {}, img, " ", f.ImgPath)), field("Faction", f.Faction),
+      field("Name", f.Name), field("Sprite", h("div", {}, img, " ", f.ImgPath, " ", h("button", { onclick: pickImg }, "Pick…"))), field("Faction", f.Faction),
       field("Greeting node", f.Conversation), field("Position", h("div", {}, "X ", f.SpawnX, "  Y ", f.SpawnY, " ",
         link(`#map/${n.SpawnX},${n.SpawnY}`, "Show on map", "btnlink")))),
     h("div", { class: "bar" },
@@ -408,8 +411,100 @@ async function renderExport(m) {
     pre));
 }
 
+// ------------------------------------------------------------------ sprite picker
+// A searchable grid of thumbnails from the editor's sprites (bundled, local
+// folder or URL; see the Sprites tab). groups() gives [{id, label, entries}],
+// each entry {value, img?, label?, note?}. Picking calls onPick(value).
+const RECENT_MAX = 14;
+function recentGet(key) { try { return JSON.parse(localStorage.getItem("bqRecent-" + key) || "[]"); } catch { return []; } }
+function recentPush(key, v) { const r = recentGet(key).filter(x => x !== v); r.unshift(v); localStorage.setItem("bqRecent-" + key, JSON.stringify(r.slice(0, RECENT_MAX))); }
+const spriteLabel = p => String(p || "").split("/").pop().replace(/\.png$/i, "");
+function spritePicker(o) {
+  let group = o.group || (o.groups()[0] || {}).id, filter = "";
+  const box = h("div", { class: "picker" });
+  const q = h("input", { type: "search", class: "picker-q", placeholder: o.placeholder || "Search sprites by name…" });
+  const chips = h("div", { class: "picker-chips" }), recent = h("div", { class: "picker-recent" }), grid = h("div", { class: "picker-grid" });
+  if (o.height) grid.style.maxHeight = o.height;
+  const cell = (e, small) => {
+    const c = h("button", { type: "button", class: "pcell" + (e.value === box.value ? " sel" : "") + (small ? " small" : ""), title: e.value || o.noneLabel || "none",
+      onclick: () => pick(e.value) },
+      e.img === null ? h("span", { class: "pnone" }, "×") : h("img", { src: assetURL(e.img || e.value), loading: "lazy", alt: "", onerror: ev => { ev.target.classList.add("missing"); } }),
+      h("span", { class: "plabel" }, e.label || spriteLabel(e.value)), e.note ? h("span", { class: "pnote" }, e.note) : null);
+    c.dataset.value = e.value;
+    return c;
+  };
+  const draw = () => {
+    const groups = o.groups(), byVal = new Map();
+    for (const g of groups) for (const e of g.entries) if (!byVal.has(e.value)) byVal.set(e.value, e);
+    chips.replaceChildren(...groups.map(g => h("button", { type: "button", class: g.id === group ? "on" : "", onclick: () => { group = g.id; draw(); } }, `${g.label} (${g.entries.length})`)));
+    const rec = recentGet(o.recentKey).filter(v => byVal.has(v));
+    recent.replaceChildren(...(rec.length ? [h("span", { class: "plabel" }, "Recent:"), ...rec.map(v => cell(byVal.get(v), true))] : []));
+    const f = filter.trim().toLowerCase();
+    let list = f ? [...byVal.values()].filter(e => (e.value + " " + (e.label || "")).toLowerCase().includes(f))
+      : (groups.find(g => g.id === group) || groups[0] || { entries: [] }).entries;
+    const cells = o.allowNone && !f ? [cell({ value: "", img: null, label: o.noneLabel || "None" })] : [];
+    for (const e of list.slice(0, 500)) cells.push(cell(e));
+    grid.replaceChildren(...cells);
+    if (list.length > 500) grid.append(h("div", { class: "hint wide" }, `${list.length - 500} more. Type to narrow it down.`));
+    if (!cells.length) grid.append(h("div", { class: "hint wide" }, "No sprites match."));
+  };
+  const pick = v => { box.value = v; if (v) recentPush(o.recentKey, v); draw(); o.onPick(v); };
+  q.addEventListener("input", () => { filter = q.value; draw(); });
+  box.value = o.value;
+  box.setValue = v => { box.value = v; draw(); };
+  box.setGroups = (groups, g) => { o.groups = groups; group = g || (groups()[0] || {}).id; draw(); };
+  box.append(q, chips, recent, grid);
+  draw();
+  return box;
+}
+function openPicker(o) {
+  const close = () => { ov.remove(); document.removeEventListener("keydown", esc, true); };
+  const esc = e => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  const p = spritePicker({ ...o, height: "calc(85vh - 190px)", onPick: v => { close(); o.onPick(v); } });
+  const ov = h("div", { class: "modal", onclick: e => { if (e.target === ov) close(); } },
+    h("div", { class: "modal-box" }, h("div", { class: "modal-head" }, h("b", {}, o.title || "Pick a sprite"), h("button", { onclick: close }, "Close (Esc)")), p));
+  document.body.append(ov); document.addEventListener("keydown", esc, true);
+  p.querySelector("input").focus();
+}
+const folderEntries = (...prefixes) => assetPaths().filter(p => prefixes.some(f => p.startsWith(f))).map(v => ({ value: v }));
+function usageCounts() {
+  if (!M.usage) {
+    const g = new Map(), f = new Map();
+    for (const t of S.world.tiles.values()) {
+      const a = str(t[2]), b = str(t[3]);
+      if (a) g.set(a, (g.get(a) || 0) + 1);
+      if (b) f.set(b, (f.get(b) || 0) + 1);
+    }
+    M.usage = { ground: g, fore: f };
+  }
+  return M.usage;
+}
+function worldGroups(layer) {
+  return () => {
+    const used = [...usageCounts()[layer]].sort((a, b) => b[1] - a[1]).map(([v, c]) => ({ value: v, note: c + " tiles" }));
+    const g = [{ id: "used", label: layer === "ground" ? "On the map" : "On the map", entries: used }];
+    if (layer === "ground") g.push({ id: "grounds", label: "Grounds", entries: folderEntries("assets/world/grounds/") },
+      { id: "water", label: "Water", entries: folderEntries("assets/world/water/") });
+    else g.push({ id: "objects", label: "Objects", entries: folderEntries("assets/world/objects/") },
+      { id: "doors", label: "Doors & walls", entries: folderEntries("assets/world/doors/", "assets/world/walls/") },
+      { id: "water", label: "Water", entries: folderEntries("assets/world/water/") });
+    g.push({ id: "all", label: "All world art", entries: folderEntries("assets/world/") });
+    return g;
+  };
+}
+const enemyGroups = () => [{ id: "enemies", label: "Enemies", entries: S.c.enemies.map(e => ({ value: e.Name, img: e.Image || "assets/error.png", label: e.Name, note: `HP ${e.HP} · XP ${e.XP}` })) }];
+const npcSpriteGroups = () => {
+  const used = [...new Set(S.c.npcs.map(n => n.ImgPath).filter(Boolean))].sort().map(v => ({ value: v, note: S.c.npcs.filter(n => n.ImgPath === v).length + " NPCs" }));
+  return [{ id: "npc", label: "NPC art", entries: folderEntries("assets/npc/") }, { id: "used", label: "Used by NPCs", entries: used },
+    { id: "monsters", label: "Monsters", entries: folderEntries("assets/monsters/") }, { id: "player", label: "Player", entries: folderEntries("assets/player/base/", "assets/player/gen/") }];
+};
+const itemSpriteGroups = () => [{ id: "items", label: "Items", entries: folderEntries("assets/items/") }, { id: "gear", label: "Gear", entries: folderEntries("assets/player/gear/") },
+  { id: "spells", label: "Spells", entries: folderEntries("assets/player/spells/", "assets/items/spells/") }, { id: "world", label: "World objects", entries: folderEntries("assets/world/objects/") },
+  { id: "all", label: "Everything", entries: assetPaths().map(v => ({ value: v })) }];
+
 // ------------------------------------------------------------------ map
-const M = { scale: 12, cx: 0, cy: 0, tool: "select", drag: null, pending: new Map(), imgs: {}, colours: {}, sel: null };
+const M = { scale: 12, cx: 0, cy: 0, tool: "select", drag: null, pending: new Map(), imgs: {}, colours: {}, failed: {}, sel: null, hover: null, raf: 0,
+  brush: { ground: null, fore: undefined, coll: "", area: null, size: 1, target: "ground" }, showColl: false, showAreas: false };
 
 function imgFor(path) {
   if (!path) return null;
@@ -417,11 +512,14 @@ function imgFor(path) {
   if (!i) {
     i = M.imgs[path] = new Image();
     i.onload = () => {
-      const c = document.createElement("canvas"); c.width = c.height = 1;
-      const x = c.getContext("2d"); x.drawImage(i, 0, 0, 1, 1);
-      const d = x.getImageData(0, 0, 1, 1).data; M.colours[path] = `rgb(${d[0]},${d[1]},${d[2]})`;
+      try {
+        const c = document.createElement("canvas"); c.width = c.height = 1;
+        const x = c.getContext("2d"); x.drawImage(i, 0, 0, 1, 1);
+        const d = x.getImageData(0, 0, 1, 1).data; M.colours[path] = `rgb(${d[0]},${d[1]},${d[2]})`;
+      } catch { M.colours[path] = "#777"; } // a URL without CORS: no colour, still drawable
       drawMap();
     };
+    i.onerror = () => { M.failed[path] = true; drawMap(); };
     if (ASSETS.mode === "url") i.crossOrigin = "anonymous";
     i.src = assetURL(path);
   }
@@ -429,27 +527,39 @@ function imgFor(path) {
 }
 
 function renderMap(m) {
-  const cv = h("canvas", { id: "map" });
+  const cv = h("canvas", { id: "map", tabindex: 0 });
   const wrap = h("div", { class: "mapwrap" }, cv);
-  const side = h("div", { class: "side" });
+  const side = h("div", { class: "side" + (M.tool === "paint" || M.tool === "spawn" ? " wide" : "") });
   m.append(wrap, side);
-  M.cv = cv; M.side = side;
+  M.cv = cv; M.side = side; M.usage = null;
   if (S.focus) { M.cx = S.focus.x; M.cy = S.focus.y; M.scale = 24; S.focus = null; }
-  new ResizeObserver(() => { cv.width = wrap.clientWidth; cv.height = wrap.clientHeight; drawMap(); }).observe(wrap);
+  if (M.ro) M.ro.disconnect();
+  M.ro = new ResizeObserver(() => { cv.width = wrap.clientWidth; cv.height = wrap.clientHeight; drawMapNow(); });
+  M.ro.observe(wrap);
   cv.addEventListener("wheel", e => { e.preventDefault(); M.scale = Math.max(2, Math.min(48, M.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); drawMap(); }, { passive: false });
   cv.addEventListener("contextmenu", e => e.preventDefault());
   cv.addEventListener("mousedown", mapDown);
+  cv.addEventListener("mouseleave", () => { if (!M.drag) { M.hover = null; drawMap(); } });
   window.onmousemove = mapMove; window.onmouseup = mapUp;
   drawSide();
 }
 
 const toTile = e => { const r = M.cv.getBoundingClientRect(); return { x: Math.floor((e.clientX - r.left - M.cv.width / 2) / M.scale + M.cx), y: Math.floor((e.clientY - r.top - M.cv.height / 2) / M.scale + M.cy) }; };
+const toFrac = e => { const r = M.cv.getBoundingClientRect(); return { x: (e.clientX - r.left - M.cv.width / 2) / M.scale + M.cx, y: (e.clientY - r.top - M.cv.height / 2) / M.scale + M.cy }; };
 const tile = (x, y) => S.world.tiles.get(x + "," + y);
 const str = i => S.world.strings[i] || "";
 function npcAt(x, y) { return S.c.npcs.find(n => n.SpawnX === x && n.SpawnY === y); }
+// Tiles on the line from a to b (so a fast drag leaves no gaps).
+function lineTiles(a, b) {
+  const out = []; let x = a.x, y = a.y;
+  const dx = Math.abs(b.x - x), dy = -Math.abs(b.y - y), sx = x < b.x ? 1 : -1, sy = y < b.y ? 1 : -1; let err = dx + dy;
+  for (let n = 0; n < 4000; n++) { out.push({ x, y }); if (x === b.x && y === b.y) break; const e2 = 2 * err; if (e2 >= dy) { err += dy; x += sx; } if (e2 <= dx) { err += dx; y += sy; } }
+  return out;
+}
 
 function mapDown(e) {
   const t = toTile(e);
+  M.cv.focus({ preventScroll: true });
   if (e.button === 2 || e.button === 1 || (M.tool === "select" && e.shiftKey)) { M.drag = { pan: true, sx: e.clientX, sy: e.clientY, cx: M.cx, cy: M.cy }; return; }
   if (M.tool === "select") {
     const n = npcAt(t.x, t.y), tl = tile(t.x, t.y);
@@ -458,35 +568,39 @@ function mapDown(e) {
     else if (tl && str(tl[6])) M.drag = { mob: str(tl[6]), from: t };
     else M.drag = { pan: true, sx: e.clientX, sy: e.clientY, cx: M.cx, cy: M.cy };
     drawSide(); drawMap();
-  } else if (M.tool === "plot") {
-    const p = plotAt(t.x, t.y);
-    if (p && !e.altKey) { M.plotSel = { ...p }; M.drag = { movePlot: M.plotSel, from: t, ox: p.X, oy: p.Y }; }
-    else M.drag = { plotRect: true, from: t, to: t };
-    drawSide(); drawMap();
-  }
+  } else if (M.tool === "plot") plotDown(e, t);
   else if (M.tool === "spawn") placeSpawns(t);
-  else if (M.tool === "erase") { patch(t.x, t.y, { Enemy: "" }); M.drag = { paint: true }; }
-  else if (M.tool === "paint") { paintAt(t); M.drag = { paint: true }; }
+  else if (M.tool === "erase") { brushTiles(t).forEach(b => patch(b.x, b.y, { Enemy: "" })); M.drag = { paint: true, last: t }; }
+  else if (M.tool === "paint") {
+    if (e.altKey) { eyedrop(t); return; }
+    paintAt(t); M.drag = { paint: true, last: t };
+  }
 }
 function mapMove(e) {
-  if (!M.drag || !M.cv) return;
-  if (M.drag.pan) { M.cx = M.drag.cx - (e.clientX - M.drag.sx) / M.scale; M.cy = M.drag.cy - (e.clientY - M.drag.sy) / M.scale; drawMap(); return; }
+  if (!M.cv) return;
   const t = toTile(e);
+  if (!M.drag) {
+    const r = M.cv.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+    if (M.tool === "plot") M.cv.style.cursor = plotCursor(e);
+    if (!M.hover || M.hover.x !== t.x || M.hover.y !== t.y) { M.hover = t; drawMap(); }
+    return;
+  }
+  if (M.drag.pan) { M.cx = M.drag.cx - (e.clientX - M.drag.sx) / M.scale; M.cy = M.drag.cy - (e.clientY - M.drag.sy) / M.scale; drawMap(); return; }
+  M.hover = t;
   if (M.drag.npc || M.drag.mob) { M.drag.to = t; drawMap(); }
-  else if (M.drag.plotRect) { M.drag.to = t; drawMap(); }
-  else if (M.drag.movePlot) { M.drag.movePlot.X = M.drag.ox + t.x - M.drag.from.x; M.drag.movePlot.Y = M.drag.oy + t.y - M.drag.from.y; drawMap(); }
-  else if (M.drag.paint) { if (M.tool === "erase") patch(t.x, t.y, { Enemy: "" }); else paintAt(t); }
+  else if (M.drag.plotRect || M.drag.movePlot || M.drag.resize) plotMove(t, e);
+  else if (M.drag.paint) {
+    for (const s of lineTiles(M.drag.last, t).slice(1)) {
+      if (M.tool === "erase") brushTiles(s).forEach(b => patch(b.x, b.y, { Enemy: "" })); else paintAt(s);
+    }
+    M.drag.last = t; drawMap();
+  }
 }
 async function mapUp() {
   const d = M.drag; M.drag = null;
   if (!d) return;
-  if (d.plotRect) {
-    const x0 = Math.min(d.from.x, d.to.x), y0 = Math.min(d.from.y, d.to.y);
-    const W = Math.min(PLOT_MAX, Math.abs(d.to.x - d.from.x) + 1), H = Math.min(PLOT_MAX, Math.abs(d.to.y - d.from.y) + 1);
-    M.plotSel = { id: 0, Name: "New plot", X: x0, Y: y0, W: Math.max(W, 3), H: Math.max(H, 3), Rent: 50, MinLevel: 1 };
-    drawSide(); drawMap(); return;
-  }
-  if (d.movePlot) { drawSide(); drawMap(); return; }
+  if (d.plotRect || d.movePlot || d.resize) { plotUp(d); return; }
   if (d.npc && d.to && (d.to.x !== d.from.x || d.to.y !== d.from.y)) {
     const n = d.npc; await save("npc", { id: n.id, Name: n.Name, ImgPath: n.ImgPath, Faction: n.Faction, Conversation: n.Conversation, SpawnX: d.to.x, SpawnY: d.to.y });
     M.sel = d.to; drawSide(); drawMap();
@@ -495,15 +609,17 @@ async function mapUp() {
   } else if (d.paint) await flush();
 }
 
+// Edits show at once: the tile is changed in S.world (what drawMap draws)
+// and a redraw is queued; the database write happens on mouse-up (flush).
 function patch(x, y, set) {
   const k = x + "," + y;
   const p = M.pending.get(k) || { X: x, Y: y, Set: {} };
   Object.assign(p.Set, set); M.pending.set(k, p);
-  // local preview
   let t = tile(x, y);
   if (!t) { t = [x, y, idx("assets/world/grounds/grass.png"), 0, 0, 0, 0, 0]; S.world.tiles.set(k, t); }
   const col = { GroundTile: 2, ForegroundTile: 3, Name: 4, Collision: 5, Enemy: 6 };
   for (const [c, v] of Object.entries(set)) t[col[c]] = c === "Collision" ? (v ? 1 : 0) : idx(v);
+  M.usage = null;
   drawMap();
 }
 function idx(s) { let i = S.world.strings.indexOf(s); if (i < 0) { S.world.strings.push(s); i = S.world.strings.length - 1; } return i; }
@@ -511,13 +627,14 @@ async function flush() {
   if (!M.pending.size) return;
   const list = [...M.pending.values()]; M.pending.clear();
   status("Saving tiles…");
-  try { await api("tiles", list); status(`Saved ${list.length} tile(s) in memory.`); }
+  try { await api("tiles", list); status(`Saved ${list.length} tile(s) in memory. Save .db or Export SQL to keep them.`); }
   catch (e) { status(e.message, true); await loadWorld(); }
-  drawSide(); drawMap();
+  if (M.tool === "select") drawSide();
+  drawMap();
 }
 
 function placeSpawns(t) {
-  const name = M.spawnEnemy.value, count = Math.max(1, +M.spawnCount.value || 1);
+  const name = M.spawnEnemy, count = Math.max(1, +(M.spawnCount && M.spawnCount.value) || 1);
   if (!name) { status("Pick an enemy first", true); return; }
   let placed = 0;
   for (let r = 0; r < 6 && placed < count; r++)
@@ -530,114 +647,212 @@ function placeSpawns(t) {
       }
   flush();
 }
+function brushTiles(t) {
+  const n = M.brush.size || 1, o = Math.floor((n - 1) / 2), out = [];
+  for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) out.push({ x: t.x - o + dx, y: t.y - o + dy });
+  return out;
+}
+function brushSet() {
+  const b = M.brush, set = {};
+  if (b.ground) set.GroundTile = b.ground;
+  if (b.fore !== undefined) set.ForegroundTile = b.fore;
+  if (b.coll !== "") set.Collision = b.coll === "1";
+  if (b.area != null) set.Name = b.area;
+  return set;
+}
 function paintAt(t) {
-  const set = {};
-  if (M.pGround.value) set.GroundTile = M.pGround.value;
-  if (M.pFore.checked) set.ForegroundTile = M.pForeVal.value;
-  if (M.pColl.value !== "") set.Collision = M.pColl.value === "1";
-  if (M.pName.checked) set.Name = M.pNameVal.value;
-  if (Object.keys(set).length) patch(t.x, t.y, set);
+  const set = brushSet();
+  if (!Object.keys(set).length) { status("The brush is empty: pick a ground or object sprite, or set collision or an area.", true); return; }
+  for (const b of brushTiles(t)) patch(b.x, b.y, set);
+}
+function eyedrop(t) {
+  const tl = tile(t.x, t.y); if (!tl) return;
+  M.brush.ground = str(tl[2]) || null; M.brush.fore = str(tl[3]);
+  status(`Brush copied from ${t.x}, ${t.y}: ${spriteLabel(M.brush.ground) || "-"} / ${spriteLabel(M.brush.fore) || "no object"}`);
+  drawSide(); drawMap();
+}
+
+// Segmented buttons: opts [[value, label]].
+function seg(opts, cur, onpick) {
+  return h("div", { class: "seg" }, opts.map(([v, l]) => h("button", { type: "button", class: v === cur ? "on" : "", onclick: () => onpick(v) }, l)));
+}
+function thumb(path, onclick, title) {
+  return h("button", { type: "button", class: "thumb", title: title || path || "", onclick },
+    path ? h("img", { src: assetURL(path), onerror: e => e.target.classList.add("missing") }) : h("span", { class: "pnone" }, path === "" ? "×" : "?"));
 }
 
 function drawSide() {
   const s = M.side; if (!s) return;
+  s.className = "side" + (M.tool === "paint" || M.tool === "spawn" ? " wide" : "");
   s.textContent = "";
   const tools = h("div", { class: "tools" });
   for (const [k, l] of [["select", "Select / drag"], ["spawn", "Place mobs"], ["erase", "Erase mobs"], ["paint", "Paint tiles"], ["plot", "Plots"]])
-    tools.append(h("button", { class: M.tool === k ? "on" : "", onclick: () => { M.tool = k; drawSide(); } }, l));
+    tools.append(h("button", { class: M.tool === k ? "on" : "", onclick: () => { if (M.tool === "plot" && k !== "plot" && !plotConfirmDiscard()) return; M.tool = k; M.cv.style.cursor = ""; drawSide(); drawMap(); } }, l));
   s.append(h("h3", {}, "Tools"), tools,
-    h("p", { class: "hint" }, "Wheel zooms. Right-drag (or drag empty ground) pans. In Select, drag an NPC or a mob to move it."));
-  M.spawnEnemy = M.spawnEnemy || enemySelect("");
-  M.spawnCount = M.spawnCount || num(3);
+    h("p", { class: "hint" }, "Wheel zooms. Right-drag (or drag empty ground in Select) pans. In Select, drag an NPC or a mob to move it."));
   if (M.tool === "plot") plotSide(s);
-  if (M.tool === "spawn") s.append(h("h3", {}, "Place mobs"), h("div", { class: "grid" }, field("Enemy", M.spawnEnemy), field("Count", M.spawnCount)),
-    h("p", { class: "hint" }, "Click to place. Mobs go on free walkable tiles, two tiles apart, around the click."));
-  if (!M.pGround) {
-    const grounds = [...new Set([...S.world.tiles.values()].map(t => str(t[2])))].filter(Boolean).sort();
-    const fores = [...new Set([...S.world.tiles.values()].map(t => str(t[3])))].filter(Boolean).sort();
-    M.pGround = h("select", {}, h("option", { value: "" }, "— keep —"), grounds.map(g => h("option", { value: g }, g.split("/").pop())));
-    M.pFore = h("input", { type: "checkbox" }); M.pForeVal = h("select", {}, h("option", { value: "" }, "(none)"), fores.map(g => h("option", { value: g }, g.split("/").pop())));
-    M.pColl = h("select", {}, h("option", { value: "" }, "— keep —"), h("option", { value: "1" }, "blocked"), h("option", { value: "0" }, "walkable"));
-    M.pName = h("input", { type: "checkbox" }); M.pNameVal = txt("", "Area name");
-  }
-  if (M.tool === "paint") s.append(h("h3", {}, "Paint"), h("div", { class: "grid" },
-    field("Ground", M.pGround), field("Object", h("div", {}, M.pFore, " set ", M.pForeVal)), field("Collision", M.pColl),
-    field("Area", h("div", {}, M.pName, " set ", M.pNameVal))), h("p", { class: "hint" }, "Click or drag to paint. Saved when you let go."));
-  s.append(h("h3", {}, "Overlays"), h("div", { class: "legend" }, h("span", { style: "background:#ffd34d" }), "NPC  ", h("span", { style: "background:#ff4d4d" }), "mob spawn  ", h("span", { style: "background:#5af" }), "quest reach point"));
-  if (M.sel) {
-    const t = tile(M.sel.x, M.sel.y), n = npcAt(M.sel.x, M.sel.y);
-    s.append(h("h3", {}, `Tile ${M.sel.x}, ${M.sel.y}`));
-    if (t) s.append(h("div", { class: "hint" }, `Area: ${str(t[4]) || "—"}`, h("br"), `Ground: ${str(t[2]).split("/").pop()}`, h("br"),
-      `Object: ${str(t[3]).split("/").pop() || "—"}`, h("br"), t[5] ? "Blocked" : "Walkable"));
-    if (t && str(t[6])) {
-      const sel = enemySelect(str(t[6]));
-      s.append(h("div", { class: "bar" }, "Mob: ", sel,
-        h("button", { onclick: () => { patch(M.sel.x, M.sel.y, { Enemy: sel.value }); flush(); } }, "Set"),
-        h("button", { class: "danger", onclick: () => { patch(M.sel.x, M.sel.y, { Enemy: "" }); flush(); } }, "Remove")));
-    }
-    if (n) s.append(h("div", { class: "bar" }, sprite(n.ImgPath), h("b", {}, n.Name), link("#npc/" + n.id, "Edit NPC & dialogue", "btnlink")),
-      h("h3", {}, "Quests here"), npcQuestList(n, true));
-  }
+  if (M.tool === "spawn") spawnSide(s);
+  if (M.tool === "paint") paintSide(s);
+  if (M.tool === "erase") s.append(h("h3", {}, "Erase mobs"), h("div", { class: "row2" }, h("span", {}, "Brush size"), seg([[1, "1"], [2, "2"], [3, "3"], [5, "5"]], M.brush.size, v => { M.brush.size = v; drawSide(); })),
+    h("p", { class: "hint" }, "Click or drag over spawns to remove them."));
+  s.append(h("h3", {}, "Overlays"), h("div", { class: "legend" }, h("span", { style: "background:#ffd34d" }), "NPC  ", h("span", { style: "background:#ff4d4d" }), "mob spawn  ",
+    h("span", { style: "background:#5af" }), "quest reach point  ", h("span", { style: "background:#78ff8c" }), "plot"),
+    h("label", { class: "chk" }, (() => { const c = h("input", { type: "checkbox", onchange: () => { M.showColl = c.checked; drawMap(); } }); c.checked = M.showColl; return c; })(), " Show collision"),
+    h("label", { class: "chk" }, (() => { const c = h("input", { type: "checkbox", onchange: () => { M.showAreas = c.checked; drawMap(); } }); c.checked = M.showAreas; return c; })(), " Show area names"));
+  if (M.sel && M.tool === "select") selSide(s);
   const go = { x: num(Math.round(M.cx)), y: num(Math.round(M.cy)) };
   const npcJump = npcSelect(0, () => { const n = S.npcBy[npcJump.value]; if (n) { M.cx = n.SpawnX; M.cy = n.SpawnY; M.scale = 24; M.sel = { x: n.SpawnX, y: n.SpawnY }; drawSide(); drawMap(); } });
   s.append(h("h3", {}, "Go to"), h("div", { class: "bar" }, "X", go.x, "Y", go.y, h("button", { onclick: () => { M.cx = +go.x.value; M.cy = +go.y.value; drawMap(); } }, "Go")), npcJump);
 }
+function selSide(s) {
+  const t = tile(M.sel.x, M.sel.y), n = npcAt(M.sel.x, M.sel.y);
+  s.append(h("h3", {}, `Tile ${M.sel.x}, ${M.sel.y}`));
+  if (t) s.append(h("div", { class: "tileinfo" }, thumb(str(t[2]), null, "ground"), thumb(str(t[3]) || "", null, "object"),
+    h("div", { class: "hint" }, `Area: ${str(t[4]) || "-"}`, h("br"), `Ground: ${spriteLabel(str(t[2]))}`, h("br"),
+      `Object: ${spriteLabel(str(t[3])) || "-"}`, h("br"), t[5] ? "Blocked" : "Walkable")));
+  if (t && str(t[6])) {
+    const en = S.c.enemies.find(v => v.Name === str(t[6]));
+    s.append(h("div", { class: "bar" }, thumb(en && en.Image, () => openPicker({ title: "Change the mob here", groups: enemyGroups, recentKey: "enemy", value: str(t[6]),
+      onPick: v => { if (v) { patch(M.sel.x, M.sel.y, { Enemy: v }); flush(); } } }), "Change mob"), h("b", {}, str(t[6])),
+      h("button", { onclick: () => openPicker({ title: "Change the mob here", groups: enemyGroups, recentKey: "enemy", value: str(t[6]), onPick: v => { if (v) { patch(M.sel.x, M.sel.y, { Enemy: v }); flush(); } } }) }, "Change…"),
+      h("button", { class: "danger", onclick: () => { patch(M.sel.x, M.sel.y, { Enemy: "" }); flush(); } }, "Remove")));
+  }
+  if (n) {
+    const pickNpc = () => openPicker({ title: `Sprite for ${n.Name}`, groups: npcSpriteGroups, recentKey: "npc", value: n.ImgPath,
+      onPick: async v => { if (!v) return; await save("npc", { id: n.id, Name: n.Name, ImgPath: v, Faction: n.Faction, Conversation: n.Conversation, SpawnX: n.SpawnX, SpawnY: n.SpawnY }); drawSide(); drawMap(); } });
+    s.append(h("div", { class: "bar" }, thumb(n.ImgPath, pickNpc, "Change sprite"), h("b", {}, n.Name), h("button", { onclick: pickNpc }, "Change sprite…"), link("#npc/" + n.id, "Edit NPC & dialogue", "btnlink")),
+      h("h3", {}, "Quests here"), npcQuestList(n, true));
+  }
+}
+function spawnSide(s) {
+  M.spawnCount = M.spawnCount || num(3);
+  const en = S.c.enemies.find(v => v.Name === M.spawnEnemy);
+  s.append(h("h3", {}, "Place mobs"),
+    h("div", { class: "row2" }, h("span", {}, "Enemy"), h("b", { class: "big" }, en ? en.Name : "pick one below"), h("span", {}, "Count"), M.spawnCount),
+    h("p", { class: "hint" }, "Click the map to place. Mobs go on free walkable tiles, two tiles apart, around the click."),
+    spritePicker({ groups: enemyGroups, recentKey: "enemy", value: M.spawnEnemy || "", placeholder: "Search enemies…", height: "50vh",
+      onPick: v => { M.spawnEnemy = v; drawSide(); } }));
+}
+function paintSide(s) {
+  const b = M.brush;
+  const target = b.target;
+  const areas = [...new Set([...S.world.tiles.values()].map(t => str(t[4])))].filter(Boolean).sort();
+  let dl = $("#areaNames"); if (!dl) { dl = h("datalist", { id: "areaNames" }); document.body.append(dl); }
+  dl.replaceChildren(...areas.map(a => h("option", { value: a })));
+  const area = h("input", { type: "text", list: "areaNames", value: b.area ?? "", placeholder: "Area name", oninput: () => { b.area = area.value; drawMap(); } });
+  const refresh = () => { drawSide(); drawMap(); };
+  s.append(h("h3", {}, "Brush"),
+    h("div", { class: "brush" },
+      h("div", { class: "brow" + (target === "ground" ? " target" : "") }, h("span", { class: "bl" }, "Ground"),
+        thumb(b.ground, () => { b.target = "ground"; refresh(); }, "Pick a ground below"),
+        h("span", { class: "bn" }, b.ground ? spriteLabel(b.ground) : "keep"),
+        seg([["keep", "Keep"], ["set", "Paint"]], b.ground ? "set" : "keep", v => { if (v === "keep") b.ground = null; else { b.target = "ground"; b.ground = b.ground || recentGet("ground")[0] || "assets/world/grounds/grass.png"; } refresh(); })),
+      h("div", { class: "brow" + (target === "fore" ? " target" : "") }, h("span", { class: "bl" }, "Object"),
+        thumb(b.fore === undefined ? null : b.fore, () => { b.target = "fore"; refresh(); }, "Pick an object below"),
+        h("span", { class: "bn" }, b.fore === undefined ? "keep" : b.fore === "" ? "clear" : spriteLabel(b.fore)),
+        seg([["keep", "Keep"], ["set", "Paint"], ["clear", "Clear"]], b.fore === undefined ? "keep" : b.fore === "" ? "clear" : "set",
+          v => { if (v === "keep") b.fore = undefined; else if (v === "clear") b.fore = ""; else { b.target = "fore"; b.fore = b.fore || recentGet("fore")[0] || "assets/world/objects/tree.png"; } refresh(); })),
+      h("div", { class: "brow" }, h("span", { class: "bl" }, "Collision"), seg([["", "Keep"], ["1", "Blocked"], ["0", "Walkable"]], b.coll, v => { b.coll = v; refresh(); })),
+      h("div", { class: "brow" }, h("span", { class: "bl" }, "Area"), seg([["keep", "Keep"], ["set", "Set"]], b.area == null ? "keep" : "set", v => { b.area = v === "keep" ? null : (b.area || areas[0] || ""); refresh(); }),
+        b.area != null ? area : null),
+      h("div", { class: "brow" }, h("span", { class: "bl" }, "Size"), seg([[1, "1"], [2, "2"], [3, "3"], [5, "5"]], b.size, v => { b.size = v; refresh(); }))),
+    h("p", { class: "hint" }, "Click or drag on the map to paint; the change shows straight away and is stored when you let go. Alt-click a tile to copy its ground and object into the brush."),
+    h("div", { class: "seg pick-target" }, h("span", {}, "Picking: "),
+      h("button", { type: "button", class: target === "ground" ? "on" : "", onclick: () => { b.target = "ground"; refresh(); } }, "Ground"),
+      h("button", { type: "button", class: target === "fore" ? "on" : "", onclick: () => { b.target = "fore"; refresh(); } }, "Object")),
+    spritePicker({ groups: worldGroups(target === "ground" ? "ground" : "fore"), recentKey: target, value: target === "ground" ? b.ground : b.fore,
+      allowNone: target === "fore", noneLabel: "No object (clear)", height: "48vh",
+      onPick: v => { if (target === "ground") { if (v) b.ground = v; } else b.fore = v; refresh(); } }));
+}
 
-function drawMap() {
-  const cv = M.cv; if (!cv || !S.world) return;
+function drawMap() { if (!M.raf) M.raf = requestAnimationFrame(() => { M.raf = 0; drawMapNow(); }); }
+function drawMapNow() {
+  const cv = M.cv; if (!cv || !S.world || !cv.width) return;
   const g = cv.getContext("2d"); g.imageSmoothingEnabled = false;
   g.fillStyle = "#0b0d10"; g.fillRect(0, 0, cv.width, cv.height);
   const sc = M.scale, w = cv.width / sc / 2 + 1, hh = cv.height / sc / 2 + 1;
   const x0 = Math.floor(M.cx - w), x1 = Math.ceil(M.cx + w), y0 = Math.floor(M.cy - hh), y1 = Math.ceil(M.cy + hh);
   const px = x => (x - M.cx) * sc + cv.width / 2, py = y => (y - M.cy) * sc + cv.height / 2;
   const sprites = sc >= 10;
+  const showColl = M.showColl || (M.tool === "paint" && M.brush.coll !== "");
+  const areaHi = M.tool === "paint" && M.brush.area != null ? M.brush.area : null;
+  const forest = M.tool === "plot";
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const t = tile(x, y); if (!t) continue;
     const gp = str(t[2]), fp = str(t[3]);
     const gi = imgFor(gp);
     if (sprites && gi) g.drawImage(gi, px(x), py(y), sc + .5, sc + .5);
-    else { g.fillStyle = M.colours[gp] || "#3a5"; g.fillRect(px(x), py(y), sc + .5, sc + .5); }
-    if (fp) { const fi = imgFor(fp); if (sprites && fi) g.drawImage(fi, px(x), py(y), sc + .5, sc + .5); else if (M.colours[fp]) { g.fillStyle = M.colours[fp]; g.globalAlpha = .7; g.fillRect(px(x), py(y), sc + .5, sc + .5); g.globalAlpha = 1; } }
-    if (t[5] && !sprites) { g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(px(x), py(y), sc, sc); }
+    else { g.fillStyle = M.failed[gp] ? "#a0a" : M.colours[gp] || "#3a5"; g.fillRect(px(x), py(y), sc + .5, sc + .5); }
+    if (fp) {
+      const fi = imgFor(fp);
+      if (sprites && fi) g.drawImage(fi, px(x), py(y), sc + .5, sc + .5);
+      else if (M.failed[fp]) { g.strokeStyle = "#f0f"; g.beginPath(); g.moveTo(px(x) + 2, py(y) + 2); g.lineTo(px(x) + sc - 2, py(y) + sc - 2); g.moveTo(px(x) + sc - 2, py(y) + 2); g.lineTo(px(x) + 2, py(y) + sc - 2); g.stroke(); }
+      else if (M.colours[fp]) { g.fillStyle = M.colours[fp]; g.globalAlpha = .7; g.fillRect(px(x), py(y), sc + .5, sc + .5); g.globalAlpha = 1; }
+    }
+    if (t[5] && !sprites && !showColl) { g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(px(x), py(y), sc, sc); }
+    if (showColl && t[5]) { g.fillStyle = "rgba(255,40,40,.38)"; g.fillRect(px(x), py(y), sc, sc); }
+    if (areaHi !== null && str(t[4]) === areaHi) { g.fillStyle = "rgba(80,200,255,.28)"; g.fillRect(px(x), py(y), sc, sc); }
+    if (forest && isFreeBuild(str(t[4]))) { g.fillStyle = "rgba(255,140,0,.22)"; g.fillRect(px(x), py(y), sc + .5, sc + .5); }
   }
   // area names
-  if (sc < 10) {
-    g.font = "12px sans-serif"; g.fillStyle = "rgba(255,255,255,.7)"; const shown = new Set();
-    for (let y = y0; y <= y1; y += 6) for (let x = x0; x <= x1; x += 6) { const t = tile(x, y); const n = t && str(t[4]); if (n && !shown.has(n)) { shown.add(n); g.fillText(n, px(x), py(y)); } }
+  if (sc < 10 || M.showAreas || areaHi !== null) {
+    g.font = "bold 13px sans-serif"; const shown = new Set(); const step = Math.max(3, Math.ceil(90 / sc));
+    for (let y = y0; y <= y1; y += step) for (let x = x0; x <= x1; x += step) {
+      const t = tile(x, y); const n = t && str(t[4]);
+      if (n && !shown.has(n)) { shown.add(n); g.fillStyle = "rgba(0,0,0,.6)"; g.fillText(n, px(x) + 1, py(y) + 1); g.fillStyle = "#fff"; g.fillText(n, px(x), py(y)); }
+    }
   }
   // mob spawns
   const r = Math.max(2, sc / 3);
-  g.font = `${Math.max(9, Math.min(13, sc / 2))}px sans-serif`;
+  g.font = `${Math.max(10, Math.min(14, sc / 2))}px sans-serif`;
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const t = tile(x, y); const e = t && str(t[6]); if (!e) continue;
     if (M.drag && M.drag.mob && M.drag.from.x === x && M.drag.from.y === y) continue;
     mobMarker(g, e, px(x), py(y), sc, r);
   }
   if (M.drag && M.drag.mob && M.drag.to) mobMarker(g, M.drag.mob, px(M.drag.to.x), py(M.drag.to.y), sc, r);
-  // plots
-  for (const p of (S.c.plots || [])) if (!M.plotSel || M.plotSel.id !== p.id) plotRect(g, p, px, py, sc, "rgba(120,255,140,.9)");
-  if (M.plotSel) plotRect(g, M.plotSel, px, py, sc, "#ffd34d", true);
-  if (M.drag && M.drag.plotRect && M.drag.to) {
-    const d = M.drag, x0 = Math.min(d.from.x, d.to.x), y0 = Math.min(d.from.y, d.to.y);
-    plotRect(g, { Name: "", X: x0, Y: y0, W: Math.min(PLOT_MAX, Math.abs(d.to.x - d.from.x) + 1), H: Math.min(PLOT_MAX, Math.abs(d.to.y - d.from.y) + 1) }, px, py, sc, "#fff");
-  }
+  drawPlotsLayer(g, px, py, sc);
   // quest reach points
   g.strokeStyle = "#5af";
   for (const q of S.c.quests) for (const s of parseJSON(q.Steps, [])) if (s.Type === "reach") {
     g.beginPath(); g.arc(px(s.X) + sc / 2, py(s.Y) + sc / 2, (s.Radius || 3) * sc, 0, 7); g.stroke();
   }
   // NPCs
+  g.font = `${Math.max(11, Math.min(14, sc / 2))}px sans-serif`;
   for (const n of S.c.npcs) {
     let x = n.SpawnX, y = n.SpawnY;
     if (M.drag && M.drag.npc === n && M.drag.to) { x = M.drag.to.x; y = M.drag.to.y; }
     if (x < x0 || x > x1 || y < y0 || y > y1) continue;
     const i = sprites && imgFor(n.ImgPath);
     if (i) g.drawImage(i, px(x), py(y), sc, sc);
-    g.strokeStyle = "#ffd34d"; g.lineWidth = 2; g.strokeRect(px(x), py(y), sc, sc); g.lineWidth = 1;
-    if (!i) { g.fillStyle = "#ffd34d"; g.fillRect(px(x) + sc / 4, py(y) + sc / 4, sc / 2, sc / 2); }
-    if (sc >= 6) { g.fillStyle = "#ffd34d"; g.fillText(n.Name, px(x), py(y) - 3); }
+    const agent = n.Faction === "Land Agent";
+    g.strokeStyle = agent ? "#ff9ad5" : "#ffd34d"; g.lineWidth = 2; g.strokeRect(px(x), py(y), sc, sc); g.lineWidth = 1;
+    if (!i) { g.fillStyle = g.strokeStyle; g.fillRect(px(x) + sc / 4, py(y) + sc / 4, sc / 2, sc / 2); }
+    if (sc >= 6) { g.fillStyle = agent ? "#ff9ad5" : "#ffd34d"; g.fillText(n.Name + (agent && M.tool === "plot" ? " (Land Agent)" : ""), px(x), py(y) - 3); }
   }
-  if (M.sel) { g.strokeStyle = "#fff"; g.strokeRect(px(M.sel.x) - 1, py(M.sel.y) - 1, sc + 2, sc + 2); }
+  if (M.sel && M.tool === "select") { g.strokeStyle = "#fff"; g.strokeRect(px(M.sel.x) - 1, py(M.sel.y) - 1, sc + 2, sc + 2); }
+  // brush preview under the cursor
+  if (M.hover && (M.tool === "paint" || M.tool === "erase")) {
+    const b = M.brush;
+    for (const t of brushTiles(M.hover)) {
+      if (M.tool === "paint") {
+        g.globalAlpha = .75;
+        const gi = b.ground && imgFor(b.ground), fi = b.fore && imgFor(b.fore);
+        if (gi) g.drawImage(gi, px(t.x), py(t.y), sc, sc);
+        if (fi) g.drawImage(fi, px(t.x), py(t.y), sc, sc);
+        g.globalAlpha = 1;
+      }
+      g.strokeStyle = M.tool === "erase" ? "#f55" : "#fff"; g.lineWidth = 2; g.strokeRect(px(t.x) + 1, py(t.y) + 1, sc - 2, sc - 2); g.lineWidth = 1;
+    }
+  }
+  // hover readout
+  if (M.hover) {
+    const t = tile(M.hover.x, M.hover.y);
+    const txt = `${M.hover.x}, ${M.hover.y}` + (t ? `  ·  ${str(t[4]) || "no area"}  ·  ${spriteLabel(str(t[2]))}${str(t[3]) ? " + " + spriteLabel(str(t[3])) : ""}${t[5] ? "  ·  blocked" : ""}` : "  ·  off the map");
+    g.font = "14px sans-serif"; const tw = g.measureText(txt).width;
+    g.fillStyle = "rgba(0,0,0,.72)"; g.fillRect(8, cv.height - 30, tw + 16, 24);
+    g.fillStyle = "#fff"; g.fillText(txt, 16, cv.height - 13);
+  }
 }
 function mobMarker(g, e, x, y, sc, r) {
   const en = S.c.enemies.find(v => v.Name === e);
@@ -648,71 +863,280 @@ function mobMarker(g, e, x, y, sc, r) {
 }
 
 // ------------------------------------------------------------------ plots
+// Table plot (id, Name, X, Y, W, H, Rent, MinLevel, Agent). X,Y is the top-left
+// tile; W,H are tiles (1-12, the API clamps to that). Agent is the npc id of the
+// Land Agent (Faction 'Land Agent') who lets it, 0 = any. The API lists a plot
+// at its agent's "What plots have you got?" and draws it on the player's map.
 const PLOT_MAX = 12;
 const PLOT_BAD_GROUND = ["Path", "Cobblestone", "Walkway", "Stone Floor", "Wood Floor", "Tiled Floor", "Water", "Lava", "Bridge"];
 const PLOT_DOORS = ["Portal", "Hole", "Door", "Sign", "Class Machine", "Well"];
-function plotAt(x, y) { return (S.c.plots || []).find(p => x >= p.X && x < p.X + p.W && y >= p.Y && y < p.Y + p.H); }
-function plotRect(g, p, px, py, sc, colour, sel) {
-  g.save(); g.strokeStyle = colour; g.lineWidth = sel ? 3 : 2; g.setLineDash([6, 4]);
-  g.strokeRect(px(p.X), py(p.Y), p.W * sc, p.H * sc);
-  g.fillStyle = colour; g.globalAlpha = .12; g.fillRect(px(p.X), py(p.Y), p.W * sc, p.H * sc); g.globalAlpha = 1;
-  if (p.Name && sc >= 4) { g.setLineDash([]); g.font = "12px sans-serif"; g.fillText(p.Name + (p.Rent != null ? `  ${p.Rent}g/wk  Lv${p.MinLevel}+` : ""), px(p.X) + 3, py(p.Y) - 4); }
-  g.restore();
+const PLOT_COLOURS = ["#78ff8c", "#7ac8ff", "#ff9ad5", "#ffb45a", "#c59bff", "#fff36b"];
+const isFreeBuild = name => name === "Foundation Forest" || /^Dominion of /.test(name || "");
+const landAgents = () => S.c.npcs.filter(n => n.Faction === "Land Agent");
+const agentName = id => (+id ? (S.npcBy[id] ? S.npcBy[id].Name : `missing NPC ${id}`) : "Any Land Agent");
+function plotColour(p) {
+  if (!+p.Agent) return PLOT_COLOURS[0];
+  const i = landAgents().findIndex(n => n.id === +p.Agent);
+  return PLOT_COLOURS[1 + ((i < 0 ? 4 : i) % (PLOT_COLOURS.length - 1))];
 }
-// Why tiles in a plot can't be built on (the server enforces the same rules).
-function plotProblems(p) {
-  const out = { road: 0, blocked: 0, door: 0, spawn: 0, npc: 0, missing: 0, forest: 0 };
-  for (let y = p.Y; y < p.Y + p.H; y++) for (let x = p.X; x < p.X + p.W; x++) {
+function plotAt(x, y) { return (S.c.plots || []).find(p => x >= p.X && x < p.X + p.W && y >= p.Y && y < p.Y + p.H); }
+const plotHas = (p, x, y) => x >= p.X && x < p.X + p.W && y >= p.Y && y < p.Y + p.H;
+// Rules the database enforces too (db.js): errors stop a save.
+function plotIssues(p) {
+  const errors = [], warnings = [];
+  if (!String(p.Name || "").trim()) errors.push("Give it a name.");
+  if (!(p.W >= 1 && p.H >= 1 && p.W <= PLOT_MAX && p.H <= PLOT_MAX)) errors.push(`Size must be 1 to ${PLOT_MAX} tiles a side (it is ${p.W} x ${p.H}).`);
+  if (!(p.Rent >= 0)) errors.push("Rent can't be negative.");
+  if (!(p.MinLevel >= 1 && p.MinLevel <= 40)) errors.push("Min level must be 1 to 40.");
+  if (+p.Agent && !landAgents().some(n => n.id === +p.Agent)) errors.push(`${agentName(p.Agent)} is not a Land Agent (Faction 'Land Agent').`);
+  for (const o of S.c.plots || []) if (o.id !== p.id && p.X < o.X + o.W && o.X < p.X + p.W && p.Y < o.Y + o.H && o.Y < p.Y + p.H) errors.push(`Overlaps ${o.Name}.`);
+  let forest = 0, missing = 0;
+  const pr = { road: 0, blocked: 0, door: 0, spawn: 0, npc: 0 }; let unusable = 0;
+  for (let y = p.Y; y < p.Y + Math.min(p.H, 40); y++) for (let x = p.X; x < p.X + Math.min(p.W, 40); x++) {
     const t = tile(x, y);
-    if (!t) { out.missing++; continue; }
-    if (str(t[4]) === "Foundation Forest") out.forest++;
-    if (t[5]) out.blocked++;
-    if (PLOT_BAD_GROUND.some(b => str(t[2]).includes(b) || str(t[3]).includes(b))) out.road++;
+    if (!t) { missing++; continue; }
+    if (isFreeBuild(str(t[4]))) forest++;
+    const before = pr.road + pr.blocked + pr.door + pr.spawn + pr.npc;
+    if (t[5]) pr.blocked++;
+    if (PLOT_BAD_GROUND.some(b => str(t[2]).includes(b) || str(t[3]).includes(b))) pr.road++;
     let door = false, spawn = false;
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const n = tile(x + dx, y + dy); if (!n) continue;
       if (PLOT_DOORS.some(d => str(n[3]).includes(d))) door = true;
       if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && str(n[6])) spawn = true;
     }
-    if (door) out.door++;
-    if (spawn) out.spawn++;
-    if (S.c.npcs.some(n => Math.abs(n.SpawnX - x) <= 1 && Math.abs(n.SpawnY - y) <= 1)) out.npc++;
+    if (door) pr.door++;
+    if (spawn) pr.spawn++;
+    if (S.c.npcs.some(n => Math.abs(n.SpawnX - x) <= 1 && Math.abs(n.SpawnY - y) <= 1)) pr.npc++;
+    if (pr.road + pr.blocked + pr.door + pr.spawn + pr.npc > before) unusable++;
   }
-  return out;
+  if (forest) errors.push(`${forest} tile(s) in Foundation Forest (or a Dominion there). Building is free in the forest, so plots go outside it.`);
+  if (missing) errors.push(`${missing} tile(s) are off the map.`);
+  const cells = p.W * p.H, bad = [];
+  if (pr.road) bad.push(`${pr.road} on roads, floors or water`);
+  if (pr.blocked) bad.push(`${pr.blocked} blocked`);
+  if (pr.door) bad.push(`${pr.door} within 2 tiles of a doorway or sign`);
+  if (pr.spawn) bad.push(`${pr.spawn} next to a mob spawn`);
+  if (pr.npc) bad.push(`${pr.npc} next to an NPC`);
+  if (bad.length) warnings.push(`Players can't build on some tiles: ${bad.join("; ")}.`);
+  if (unusable >= cells && cells > 0) warnings.push("No tile here is buildable at all.");
+  else if (bad.length) warnings.push(`${cells - unusable} of ${cells} tiles are buildable.`);
+  if (!landAgents().length) warnings.push("No NPC has Faction 'Land Agent', so nobody can let this plot.");
+  return { errors, warnings };
+}
+const plotDirty = () => M.plotSel && JSON.stringify(plotRow(M.plotSel)) !== M.plotOrig;
+const plotRow = p => ({ id: p.id || 0, Name: String(p.Name || "").trim(), X: +p.X, Y: +p.Y, W: +p.W, H: +p.H, Rent: +p.Rent, MinLevel: +p.MinLevel, Agent: +p.Agent || 0 });
+function plotConfirmDiscard() {
+  if (!plotDirty()) return true;
+  if (!confirm(`Discard unsaved changes to ${M.plotSel.Name || "this plot"}?`)) return false;
+  M.plotSel = null; return true;
+}
+function selectPlot(p, centre) {
+  M.plotSel = { ...p, Agent: +p.Agent || 0 }; M.plotOrig = p.id ? JSON.stringify(plotRow(M.plotSel)) : "";
+  if (centre) { M.cx = p.X + p.W / 2; M.cy = p.Y + p.H / 2; M.scale = Math.max(M.scale, 16); }
+  if (p.id) syncHash("#plot/" + p.id);
+  drawSide(); drawMap();
+}
+// Which edge or corner of the selected plot the mouse is on ("n", "se", "move", or "").
+function plotHandle(e) {
+  const p = M.plotSel; if (!p) return "";
+  const f = toFrac(e), tol = Math.max(0.3, 7 / M.scale);
+  if (f.x < p.X - tol || f.x > p.X + p.W + tol || f.y < p.Y - tol || f.y > p.Y + p.H + tol) return "";
+  let k = "";
+  if (Math.abs(f.y - p.Y) <= tol) k += "n"; else if (Math.abs(f.y - (p.Y + p.H)) <= tol) k += "s";
+  if (Math.abs(f.x - p.X) <= tol) k += "w"; else if (Math.abs(f.x - (p.X + p.W)) <= tol) k += "e";
+  return k || (plotHas(p, Math.floor(f.x), Math.floor(f.y)) ? "move" : "");
+}
+function plotCursor(e) {
+  const k = plotHandle(e);
+  return { n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize", ne: "nesw-resize", sw: "nesw-resize", nw: "nwse-resize", se: "nwse-resize", move: "move" }[k]
+    || (plotAt(toTile(e).x, toTile(e).y) ? "pointer" : "crosshair");
+}
+function plotDown(e, t) {
+  const k = plotHandle(e);
+  if (k && k !== "move") { M.drag = { resize: k, orig: { ...M.plotSel } }; return; }
+  if (k === "move" && !e.altKey) { M.drag = { movePlot: true, from: t, ox: M.plotSel.X, oy: M.plotSel.Y, moved: false }; return; }
+  const p = plotAt(t.x, t.y);
+  if (p && !e.altKey) {
+    if (!plotConfirmDiscard()) return;
+    selectPlot(p);
+    M.drag = { movePlot: true, from: t, ox: p.X, oy: p.Y, moved: false };
+    return;
+  }
+  M.drag = { plotRect: true, from: t, to: t };
+  drawMap();
+}
+function plotRectOf(d) {
+  const x0 = Math.min(d.from.x, d.to.x), y0 = Math.min(d.from.y, d.to.y);
+  const W = Math.abs(d.to.x - d.from.x) + 1, H = Math.abs(d.to.y - d.from.y) + 1;
+  return { X: d.to.x < d.from.x ? d.from.x - Math.min(W, PLOT_MAX) + 1 : x0, Y: d.to.y < d.from.y ? d.from.y - Math.min(H, PLOT_MAX) + 1 : y0,
+    W: Math.min(W, PLOT_MAX), H: Math.min(H, PLOT_MAX), clamped: W > PLOT_MAX || H > PLOT_MAX };
+}
+function plotMove(t, e) {
+  const d = M.drag, p = M.plotSel;
+  if (d.plotRect) d.to = t;
+  else if (d.movePlot) { const nx = d.ox + t.x - d.from.x, ny = d.oy + t.y - d.from.y; if (nx !== p.X || ny !== p.Y) d.moved = true; p.X = nx; p.Y = ny; }
+  else if (d.resize) {
+    // edges snap to the nearest tile boundary under the mouse
+    const o = d.orig, right = o.X + o.W, bottom = o.Y + o.H, f = e ? toFrac(e) : { x: t.x + .5, y: t.y + .5 };
+    const bx = Math.round(f.x), by = Math.round(f.y);
+    if (d.resize.includes("e")) p.W = Math.max(1, Math.min(PLOT_MAX, bx - o.X));
+    if (d.resize.includes("w")) { const nx = Math.max(right - PLOT_MAX, Math.min(right - 1, bx)); p.X = nx; p.W = right - nx; }
+    if (d.resize.includes("s")) p.H = Math.max(1, Math.min(PLOT_MAX, by - o.Y));
+    if (d.resize.includes("n")) { const ny = Math.max(bottom - PLOT_MAX, Math.min(bottom - 1, by)); p.Y = ny; p.H = bottom - ny; }
+  }
+  drawMap();
+}
+function plotUp(d) {
+  if (d.plotRect) {
+    if (d.from.x === d.to.x && d.from.y === d.to.y) { // a click on empty ground
+      if (M.plotSel && plotConfirmDiscard()) { M.plotSel = null; drawSide(); drawMap(); }
+      return;
+    }
+    if (!plotConfirmDiscard()) return;
+    const r = plotRectOf(d);
+    const t = tile(r.X + Math.floor(r.W / 2), r.Y + Math.floor(r.H / 2));
+    const base = (t && str(t[4])) || "Plot";
+    let n = 1; while ((S.c.plots || []).some(p => p.Name === `${base} plot ${n}`)) n++;
+    M.plotSel = { id: 0, Name: `${base} plot ${n}`, X: r.X, Y: r.Y, W: r.W, H: r.H, Rent: M.lastRent ?? 50, MinLevel: M.lastLevel ?? 1, Agent: M.lastAgent ?? 0 };
+    M.plotOrig = "";
+    if (r.clamped) status(`Plots are at most ${PLOT_MAX} x ${PLOT_MAX}: trimmed to ${r.W} x ${r.H}.`);
+    drawSide(); drawMap();
+    const nm = $("#plot-name"); if (nm) { nm.focus(); nm.select(); }
+    return;
+  }
+  drawSide(); drawMap();
+}
+async function plotSave() {
+  const p = M.plotSel; if (!p) return;
+  const iss = plotIssues(plotRow(p));
+  if (iss.errors.length) { status("Can't save: " + iss.errors[0], true); return; }
+  let id; try { id = await save("plot", plotRow(p)); } catch (e) { return; }
+  M.lastRent = +p.Rent; M.lastLevel = +p.MinLevel; M.lastAgent = +p.Agent || 0;
+  const saved = S.c.plots.find(v => v.id === id);
+  status(`Saved plot ${id} (${saved.Name}) in memory. Save .db or Export SQL to keep it.`);
+  selectPlot(saved);
+}
+async function plotDelete() {
+  const p = M.plotSel; if (!p) return;
+  if (!p.id) { M.plotSel = null; drawSide(); drawMap(); return; }
+  if (await del("plot", p.id)) { M.plotSel = null; drawSide(); drawMap(); }
+}
+function drawPlotsLayer(g, px, py, sc) {
+  const sel = M.plotSel;
+  for (const p of S.c.plots || []) if (!sel || sel.id !== p.id) plotRect(g, p, px, py, sc, plotColour(p), false);
+  if (M.drag && M.drag.plotRect && M.drag.to) {
+    const r = plotRectOf(M.drag);
+    const iss = plotIssues({ ...r, id: -1, Name: "x", Rent: 0, MinLevel: 1, Agent: 0 });
+    plotRect(g, { Name: "", ...r }, px, py, sc, iss.errors.length ? "#ff4d4d" : "#fff", true, `${r.W} x ${r.H}${r.clamped ? " (max)" : ""}`, iss.errors[0]);
+  } else if (sel) {
+    const iss = plotIssues(plotRow(sel));
+    plotRect(g, sel, px, py, sc, iss.errors.length ? "#ff4d4d" : "#ffd34d", true, `${sel.W} x ${sel.H}`, iss.errors[0]);
+    // who lets it
+    const cx = px(sel.X + sel.W / 2), cy = py(sel.Y + sel.H / 2);
+    g.save(); g.setLineDash([4, 6]); g.strokeStyle = "rgba(255,154,213,.8)"; g.lineWidth = 1.5;
+    for (const n of landAgents()) if (!+sel.Agent || n.id === +sel.Agent) { g.beginPath(); g.moveTo(cx, cy); g.lineTo(px(n.SpawnX + .5), py(n.SpawnY + .5)); g.stroke(); }
+    g.restore();
+    if (sc >= 6) for (const [hx, hy] of [[0, 0], [1, 0], [0, 1], [1, 1], [.5, 0], [.5, 1], [0, .5], [1, .5]]) {
+      g.fillStyle = "#fff"; g.fillRect(px(sel.X + sel.W * hx) - 4, py(sel.Y + sel.H * hy) - 4, 8, 8);
+      g.strokeStyle = "#000"; g.strokeRect(px(sel.X + sel.W * hx) - 4, py(sel.Y + sel.H * hy) - 4, 8, 8);
+    }
+  }
+}
+function plotRect(g, p, px, py, sc, colour, sel, centreText, problem) {
+  g.save(); g.strokeStyle = colour; g.lineWidth = sel ? 3 : 2; g.setLineDash(sel ? [] : [6, 4]);
+  g.strokeRect(px(p.X), py(p.Y), p.W * sc, p.H * sc);
+  g.fillStyle = colour; g.globalAlpha = sel ? .2 : .12; g.fillRect(px(p.X), py(p.Y), p.W * sc, p.H * sc); g.globalAlpha = 1;
+  g.setLineDash([]);
+  const fs = Math.max(12, Math.min(16, sc * .7));
+  if (p.Name && sc >= 3) {
+    const label = p.Name + (p.Rent != null ? `  ${p.Rent}g/wk  Lv${p.MinLevel}+  ${+p.Agent ? agentName(p.Agent).split(" ")[0] : "any agent"}` : "");
+    g.font = `bold ${fs}px sans-serif`; const tw = g.measureText(label).width;
+    g.fillStyle = "rgba(0,0,0,.7)"; g.fillRect(px(p.X), py(p.Y) - fs - 8, tw + 10, fs + 6);
+    g.fillStyle = colour; g.fillText(label, px(p.X) + 5, py(p.Y) - 6);
+  }
+  if (centreText) {
+    g.font = `bold ${Math.max(14, Math.min(28, sc))}px sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+    const cx = px(p.X + p.W / 2), cy = py(p.Y + p.H / 2);
+    g.fillStyle = "rgba(0,0,0,.65)"; const tw = g.measureText(centreText).width; g.fillRect(cx - tw / 2 - 6, cy - 16, tw + 12, 32);
+    g.fillStyle = "#fff"; g.fillText(centreText, cx, cy);
+    if (problem) { g.font = "bold 14px sans-serif"; const pw = g.measureText(problem).width; g.fillStyle = "rgba(120,0,0,.85)"; g.fillRect(cx - pw / 2 - 6, cy + 18, pw + 12, 22); g.fillStyle = "#fff"; g.fillText(problem, cx, cy + 29); }
+  }
+  g.restore();
 }
 function plotSide(s) {
-  s.append(h("h3", {}, "Plots"), h("p", { class: "hint" },
-    "Drag a rectangle on the map to make a plot (max " + PLOT_MAX + "x" + PLOT_MAX + "). Click a plot to select it; drag it to move it. Alt-drag draws on top of one. Players lease plots from a Land Agent. Outside Foundation Forest they can only build inside a plot they lease."));
+  const agents = landAgents();
+  s.append(h("h3", {}, "Plots"), h("ul", { class: "steps-help" },
+    h("li", {}, h("b", {}, "Draw: "), `drag on the map (up to ${PLOT_MAX} x ${PLOT_MAX}). Red means it can't go there.`),
+    h("li", {}, h("b", {}, "Edit: "), "click a plot, then drag it to move or drag an edge or corner handle to resize. Arrow keys nudge it, Shift+arrows resize."),
+    h("li", {}, h("b", {}, "Keys: "), "Enter saves, Esc deselects, Delete removes."),
+    h("li", {}, h("span", { class: "sw", style: "background:rgba(255,140,0,.6)" }), " Foundation Forest: no plots (building there is free).")));
   const p = M.plotSel;
   if (p) {
-    const f = { Name: txt(p.Name), X: num(p.X), Y: num(p.Y), W: num(p.W), H: num(p.H), Rent: num(p.Rent), MinLevel: num(p.MinLevel) };
-    for (const [k, el] of Object.entries(f)) el.addEventListener("input", () => { p[k] = k === "Name" ? el.value : +el.value; drawMap(); });
+    const box = h("div", { class: "panel", id: "plot-form-box" });
+    const f = { Name: txt(p.Name), Rent: num(p.Rent), MinLevel: num(p.MinLevel), X: num(p.X), Y: num(p.Y), W: num(p.W), H: num(p.H) };
     f.Name.id = "plot-name"; f.Rent.id = "plot-rent"; f.MinLevel.id = "plot-level";
-    const pr = plotProblems(p), cells = p.W * p.H, warn = [];
-    if (pr.forest) warn.push(`${pr.forest} in Foundation Forest (free building there anyway)`);
-    if (pr.road) warn.push(`${pr.road} on roads, floors or water`);
-    if (pr.blocked) warn.push(`${pr.blocked} blocked`);
-    if (pr.door) warn.push(`${pr.door} within 2 tiles of a doorway or sign`);
-    if (pr.spawn) warn.push(`${pr.spawn} next to a mob spawn`);
-    if (pr.npc) warn.push(`${pr.npc} next to an NPC`);
-    if (pr.missing) warn.push(`${pr.missing} off the map`);
-    s.append(h("h3", { id: "plot-form" }, p.id ? `Plot ${p.id}` : "New plot (not saved yet)"),
-      h("div", { class: "grid" }, field("Name", f.Name), field("X", f.X), field("Y", f.Y), field("Width", f.W), field("Height", f.H),
-        field("Rent (gold/week)", f.Rent), field("Min level", f.MinLevel)),
-      h("p", { class: "hint", id: "plot-check" }, warn.length ? `Can't build on some tiles: ${warn.join("; ")}.` : `All ${cells} tiles look buildable.`),
-      h("div", { class: "bar" },
-        h("button", { class: "primary", id: "plot-save", onclick: async () => {
-          let id; try { id = await save("plot", { id: p.id || 0, Name: p.Name, X: p.X, Y: p.Y, W: p.W, H: p.H, Rent: p.Rent, MinLevel: p.MinLevel }); } catch (e) { return; }
-          M.plotSel = { ...(S.c.plots.find(v => v.id === id) || p) }; drawSide(); drawMap();
-        } }, "Save plot"),
-        p.id ? h("button", { class: "danger", onclick: async () => { if (await del("plot", p.id)) { M.plotSel = null; drawSide(); drawMap(); } } }, "Delete") : null,
-        h("button", { onclick: () => { M.plotSel = null; drawSide(); drawMap(); } }, "Deselect")));
+    const agentSel = h("select", { id: "plot-agent" }, h("option", { value: 0 }, "Any Land Agent"), agents.map(n => h("option", { value: n.id }, `${n.Name} (at ${n.SpawnX}, ${n.SpawnY})`)));
+    if (+p.Agent && !agents.some(n => n.id === +p.Agent)) agentSel.append(h("option", { value: p.Agent }, agentName(p.Agent)));
+    agentSel.value = +p.Agent || 0;
+    const checks = h("div", { id: "plot-check" });
+    const saveBtn = h("button", { class: "primary", id: "plot-save", onclick: plotSave }, p.id ? "Save changes" : "Save new plot");
+    const drawChecks = () => {
+      const iss = plotIssues(plotRow(p));
+      checks.replaceChildren(...[...iss.errors.map(e => h("div", { class: "chk-err" }, "✖ " + e)), ...iss.warnings.map(e => h("div", { class: "chk-warn" }, "⚠ " + e)),
+        !iss.errors.length && !iss.warnings.length ? h("div", { class: "chk-ok" }, `✔ All ${p.W * p.H} tiles look buildable.`) : null,
+        !iss.errors.length && iss.warnings.length ? h("div", { class: "chk-ok" }, "✔ Can be saved.") : null].filter(Boolean));
+      saveBtn.disabled = !!iss.errors.length;
+      dirty.textContent = plotDirty() || !p.id ? (p.id ? "Unsaved changes" : "Not saved yet") : "Saved";
+      dirty.className = "dirtyflag" + (plotDirty() || !p.id ? " on" : "");
+    };
+    const dirty = h("span", { class: "dirtyflag" });
+    for (const [k, el] of Object.entries(f)) el.addEventListener("input", () => { p[k] = k === "Name" ? el.value : +el.value; drawChecks(); drawMap(); });
+    agentSel.addEventListener("change", () => { p.Agent = +agentSel.value; drawChecks(); drawMap(); });
+    box.append(h("h3", { id: "plot-form" }, p.id ? `Plot ${p.id}` : "New plot", " ", dirty),
+      h("div", { class: "grid" }, field("Name", f.Name), field("Offered by", agentSel), field("Rent", h("div", {}, f.Rent, " gold / week")), field("Min level", f.MinLevel),
+        field("Top-left", h("div", {}, "X ", f.X, " Y ", f.Y)), field("Size", h("div", {}, f.W, " x ", f.H, " tiles"))),
+      checks,
+      h("div", { class: "bar" }, saveBtn,
+        p.id ? h("button", { onclick: () => { const o = S.c.plots.find(v => v.id === p.id); if (o) selectPlot(o); } }, "Revert") : null,
+        h("button", { class: "danger", onclick: plotDelete }, p.id ? "Delete" : "Discard"),
+        h("button", { onclick: () => { if (plotConfirmDiscard()) { M.plotSel = null; drawSide(); drawMap(); } } }, "Deselect"),
+        h("button", { onclick: () => { M.cx = p.X + p.W / 2; M.cy = p.Y + p.H / 2; M.scale = Math.max(M.scale, 16); drawMap(); } }, "Zoom to")));
+    if (!agents.length) box.append(h("p", { class: "chk-warn" }, "No NPC in this database has Faction 'Land Agent'. Apply content/migrations/2026-10-14-plots.sql (Gideon and Sharon Gazump), or set an NPC's Faction to Land Agent."));
+    drawChecks();
+    s.append(box);
   }
-  const list = S.c.plots || [];
+  const list = (S.c.plots || []).slice().sort((a, b) => a.Name.localeCompare(b.Name));
   s.append(h("h3", {}, `All plots (${list.length})`));
-  if (!list.length) s.append(h("p", { class: "hint" }, "No plots yet."));
-  for (const v of list) s.append(h("div", { class: "plotrow" }, h("a", { href: "#plot/" + v.id }, v.Name), ` ${v.W}x${v.H} at ${v.X},${v.Y}, ${v.Rent}g/wk, Lv ${v.MinLevel}+`));
+  if (!list.length) s.append(h("p", { class: "hint" }, "No plots yet. Drag on the map outside Foundation Forest to make one."));
+  for (const v of list) {
+    const iss = plotIssues(v);
+    s.append(h("div", { class: "plotrow" + (p && p.id === v.id ? " sel" : ""), onclick: () => { if (plotConfirmDiscard()) selectPlot(v, true); } },
+      h("span", { class: "sw", style: "background:" + plotColour(v) }), h("b", {}, v.Name),
+      h("div", { class: "hint" }, `${v.W} x ${v.H} at ${v.X}, ${v.Y} · ${v.Rent}g/wk · Lv ${v.MinLevel}+ · ${agentName(v.Agent)}`),
+      iss.errors.length ? h("div", { class: "chk-err" }, "✖ " + iss.errors[0]) : null));
+  }
+  if (agents.length) s.append(h("h3", {}, "Land Agents"), ...agents.map(n => h("div", { class: "plotrow", onclick: () => { M.cx = n.SpawnX; M.cy = n.SpawnY; drawMap(); } },
+    h("span", { class: "sw", style: "background:" + plotColour({ Agent: n.id }) }), h("b", {}, n.Name), h("div", { class: "hint" },
+      `at ${n.SpawnX}, ${n.SpawnY} · ${(S.c.plots || []).filter(p => +p.Agent === n.id).length} own plots, plus ${(S.c.plots || []).filter(p => !+p.Agent).length} any-agent plots`))));
 }
+document.addEventListener("keydown", e => {
+  if (S.tab !== "map" || !M.cv || document.querySelector(".modal")) return;
+  const inForm = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
+  if (M.tool === "plot" && M.plotSel) {
+    if (e.key === "Enter" && (!inForm || e.target.closest("#plot-form-box"))) { e.preventDefault(); plotSave(); return; }
+    if (inForm) return;
+    if (e.key === "Escape") { if (plotConfirmDiscard()) { M.plotSel = null; drawSide(); drawMap(); } return; }
+    if (e.key === "Delete") { e.preventDefault(); plotDelete(); return; }
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (d) {
+      e.preventDefault(); const p = M.plotSel;
+      if (e.shiftKey) { p.W = Math.max(1, Math.min(PLOT_MAX, p.W + d[0])); p.H = Math.max(1, Math.min(PLOT_MAX, p.H + d[1])); }
+      else { p.X += d[0]; p.Y += d[1]; }
+      drawMap(); clearTimeout(M.sideT); M.sideT = setTimeout(drawSide, 150);
+    }
+  } else if (!inForm && e.key === "Escape" && M.drag) { M.drag = null; drawMap(); }
+});
 
 // ------------------------------------------------------------------ items
 const STATS = ["STR", "INT", "STA"];
@@ -745,6 +1169,9 @@ function itemForm(form, it) {
   let imgPath = it.ImgPath;
   const img = sprite(imgPath);
   const imgIn = assetInput(imgPath, v => { imgPath = v; img.src = assetURL(v); });
+  const pickImg = () => openPicker({ title: `Image for ${f.Name.value || "this item"}`, groups: itemSpriteGroups, recentKey: "item", value: imgPath,
+    onPick: v => { if (v) { imgPath = v; imgIn.value = v; img.src = assetURL(v); } } });
+  img.addEventListener("click", pickImg); img.style.cursor = "pointer"; img.title = "Pick an image";
   // attributes: None or STAT,N;STAT,N
   const attrs = String(it.Attributes || "None") === "None" || !it.Attributes ? [] : String(it.Attributes).split(";").map(p => p.split(","));
   const attrBox = h("div");
@@ -766,7 +1193,7 @@ function itemForm(form, it) {
   const drops = S.c.loot.filter(l => l.ItemID === it.id);
   form.append(h("h2", {}, it.id ? `${it.Name} (${it.id})` : "New item"),
     h("div", { class: "grid" },
-      field("Name", f.Name), field("Image", h("div", {}, img, " ", imgIn)), field("Type", f.Type),
+      field("Name", f.Name), field("Image", h("div", {}, img, " ", h("button", { onclick: pickImg }, "Pick…"), " ", imgIn)), field("Type", f.Type),
       field("Val", h("div", {}, f.Val, h("div", { class: "hint" }, "Power for gear, HP for potions, mount speed, spell id… depends on Type."))),
       field("Description", f.Desc), field("Worth", f.Worth), field("Attributes", attrBox),
       field("Subtype", h("div", {}, f.Subtype, h("div", { class: "hint" }, "Gear weight (Light / Medium / Heavy / High Mastery) or None."))),
@@ -857,7 +1284,7 @@ async function applyRoute() {
   }
   else if (kind === "item") { S.tab = "items"; S.item = { id: +a }; }
   else if (kind === "loot") { S.tab = "loot"; S.lootEnemy = { id: +a }; }
-  else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p }; S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
+  else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p, Agent: +p.Agent || 0 }; M.plotOrig = JSON.stringify(plotRow(M.plotSel)); S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
   else if (kind === "map") { S.tab = "map"; if (a) { const [x, y] = a.split(",").map(Number); S.focus = { x, y }; M.sel = { x, y }; } }
   else if (TABS.includes(kind)) S.tab = kind;
   S.routing = true;
@@ -942,7 +1369,7 @@ function switchTab(t) { go("#" + t); }
 
 async function renderTab() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
-  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|dialog|map)\//.test(location.hash)) syncHash("#" + S.tab);
+  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|dialog|map|plot)\//.test(location.hash)) syncHash("#" + S.tab);
   const m = $("#main"); m.textContent = ""; window.onmousemove = window.onmouseup = null; M.cv = null;
   try {
     if (S.tab === "map") { if (!S.world) { status("Loading world…"); await loadWorld(); status(""); } renderMap(m); }
