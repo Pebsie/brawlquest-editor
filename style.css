@@ -124,3 +124,11 @@ img.missing{opacity:.25}
 .chk-err{color:#ff8a8a;margin:3px 0;font-size:13px}.chk-warn{color:#ffd27a;margin:3px 0;font-size:13px}.chk-ok{color:#8eef9e;margin:3px 0;font-size:13px}
 .dirtyflag{font-size:12px;color:#8a9;font-weight:400}.dirtyflag.on{color:#ffcc66}
 #plot-form-box input.num{width:68px}
+/* mobs */
+.mobsplit{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.mobprims{flex:1;min-width:480px}
+.mobprev{position:sticky;top:0;width:440px}
+.mobcv{width:420px;height:420px;border:1px solid #3a404c;display:block;margin:6px 0;cursor:grab}
+.pgrid{grid-template-columns:110px 1fr;margin-top:6px}
+.phead{grid-column:1/-1;border-top:1px solid #2e3440;padding-top:6px;margin-top:4px}
+.prim .top select{font-weight:600}
