@@ -23,7 +23,7 @@ async function api(path, body) {
   if (!BQ.has()) throw new Error("Open a bq-content.db first");
   const fn = { content: () => BQ.api.content(), world: () => BQ.api.world(), save: () => BQ.api.save(body),
     delete: () => BQ.api.delete(body), tiles: () => BQ.api.tiles(body), patterns: () => BQ.api.patterns(body),
-    export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()) }[path];
+    export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()), portraits: () => BQ.api.portraits(body) }[path];
   const out = fn();
   syncFile();
   return out;
@@ -211,6 +211,7 @@ function questForm(form, q) {
     XP: num(q.XP), Gold: num(q.Gold),
   };
   for (const k of ["Offer", "Accept", "Progress", "Complete", "Summary"]) f[k].id = "qline-" + k;
+  for (const k of QUEST_LINES) f[k].addEventListener("input", () => { if (conv) conv.refresh(); });
   const prereqs = new Set(parseJSON(q.Prereqs, []));
   const preBox = h("div");
   const drawPre = () => {
@@ -240,6 +241,7 @@ function questForm(form, q) {
         else if (k === "Consume") { el = h("input", { type: "checkbox", onchange: () => (s.Consume = el.checked) }); el.checked = !!s.Consume; }
         else if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) { el = enemySelect(s.Target); el.onchange = () => (s.Target = el.value); }
         else if (k === "Target") { el = txt(s.Target); el.oninput = () => (s.Target = el.value); }
+        else if (k === "Line") { el = txt(s.Line || "", "What the NPC says"); el.classList.add("qline-in"); el.dataset.step = i; el.oninput = () => { s.Line = el.value; if (conv) conv.refresh(); }; }
         else { el = num(s[k]); el.oninput = () => (s[k] = +el.value); }
         top.append(h("span", { class: "hint" }, k), el);
       }
@@ -251,7 +253,9 @@ function questForm(form, q) {
       stepBox.append(h("div", { class: "step", id: "qstep-" + i }, top, h("div", { class: "hint" }, STEP_HELP[s.Type] || ""), text, hint));
     });
     stepBox.append(h("button", { onclick: () => { steps.push({ Type: "kill", Target: "", Count: 1, Text: "" }); drawSteps(); } }, "+ Step"));
+    if (conv) conv.refresh();
   };
+  let conv = null;
   drawSteps();
 
   const rewards = parseJSON(q.Rewards, []);
@@ -284,7 +288,7 @@ function questForm(form, q) {
       field("Offer", f.Offer), field("Accept", f.Accept), field("In progress", f.Progress), field("Complete", f.Complete),
       field("XP / Gold", h("div", {}, f.XP, " XP  ", f.Gold, " gold"))),
     h("p", { class: "hint" }, "Text can use {SHIELD}, {INTERACT}, {MOUNTS}, {CHARACTER} for the player's keys."),
-    q.id ? questConversation(q) : null,
+    q.id ? (conv = questConversation(q, f, steps, stepBox)) : null,
     h("h3", {}, "Steps (done in order)"), stepBox,
     h("h3", {}, "Item rewards"), rwBox,
     h("div", { class: "bar" },
@@ -339,7 +343,17 @@ function npcForm(form, n) {
       field("Greeting node", f.Conversation), field("Position", h("div", {}, "X ", f.SpawnX, "  Y ", f.SpawnY, " ",
         link(`#map/${n.SpawnX},${n.SpawnY}`, "Show on map", "btnlink")))),
     h("div", { class: "bar" },
-      h("button", { class: "primary", onclick: async () => { const id = await save("npc", collect()); S.npc = { id }; renderTab(); } }, "Save NPC"),
+      h("button", { class: "primary", onclick: async () => {
+        const row = collect(), old = n.ImgPath || "";
+        const id = await save("npc", row); S.npc = { id };
+        // Nodes holding the old sprite were copies (older editors saved the NPC
+        // sprite into every node): clear them so the portrait follows.
+        if (n.id && old && old !== row.ImgPath) {
+          const ids = treeNodes(row.Conversation).filter(c => c.ImgPath === old).map(c => c.id);
+          if (ids.length) { await api("portraits", { ids, from: old }); await loadAll(); status(`Saved NPC ${id}; ${ids.length} dialogue node(s) that copied the old sprite now use the NPC sprite.`); }
+        }
+        renderTab();
+      } }, "Save NPC"),
       n.id ? h("button", { class: "danger", onclick: async () => { if (await del("npc", n.id)) { S.npc = null; renderTab(); } } }, "Delete NPC") : null));
   if (!n.id) return;
 
@@ -349,15 +363,23 @@ function npcForm(form, n) {
     h("p", { class: "hint" }, "Each node is a line and its answers. An answer points to another node, or to 1 to end. Quest offers and hand-ins are added to the menu automatically."));
   const nodes = n.Conversation ? reachable(n.Conversation) : [];
   if (nodes.length) form.append(h("div", { class: "jump" }, "Nodes: ", nodes.filter(c => !c.missing).map(c => [link("#dialog/" + c.Identifier, c.Identifier), " "])));
+  const overrides = nodes.filter(c => !c.missing && hasPortrait(c));
+  if (overrides.length) form.append(h("div", { class: "panel", id: "portrait-overrides" },
+    h("b", {}, `${overrides.length} node(s) override the portrait`), " ",
+    h("span", { class: "hint" }, "the game shows a node's own portrait instead of the NPC sprite: ", overrides.map(c => `${c.Identifier} (${spriteLabel(c.ImgPath)})`).join(", "), ". "),
+    h("button", { onclick: async () => { await api("portraits", { ids: overrides.map(c => c.id) }); await loadAll(); status(`${overrides.length} node(s) now use ${n.Name}'s sprite. Save .db or Export SQL to keep it.`); renderTab(); } }, "Use the NPC sprite on all")));
   for (const c of nodes) form.append(nodeEditor(c, c.Identifier === n.Conversation, n));
   const prefix = (n.Conversation || "npc-" + n.id).replace(/-\d+$/, "");
   form.append(h("div", { class: "bar" }, h("button", { onclick: () => {
     let i = 1; while (S.convBy[`${prefix}-${i}`]) i++;
     const id = `${prefix}-${i}`;
-    form.append(nodeEditor({ id: 0, Identifier: id, Title: "", ImgPath: n.ImgPath, Options: "[['Goodbye.','1']]", ItemsGiven: "", ReputationChange: "", QuestStart: 0 }, false, n));
+    form.append(nodeEditor({ id: 0, Identifier: id, Title: "", ImgPath: "", Options: "[['Goodbye.','1']]", ItemsGiven: "", ReputationChange: "", QuestStart: 0 }, false, n));
   } }, "+ New node"), !n.Conversation ? h("span", { class: "hint" }, "Create a node, then set it as the greeting node above.") : null));
 }
 
+const hasPortrait = c => !!c.ImgPath && c.ImgPath !== "None";
+// Nodes reachable from a greeting node (empty list for none).
+const treeNodes = root => (root ? reachable(root).filter(c => !c.missing) : []);
 function nodeEditor(c, isRoot, n) {
   if (c.missing) return h("div", { class: "node err" }, `Missing node ${c.Identifier}`);
   const ident = txt(c.Identifier); ident.style.width = "260px";
@@ -379,16 +401,29 @@ function nodeEditor(c, isRoot, n) {
   let dl = $("#convIds");
   if (!dl) { dl = h("datalist", { id: "convIds" }); document.body.append(dl); }
   dl.replaceChildren(h("option", { value: "1" }, "end"), ...ids.map(i => h("option", { value: i })));
+  // Portrait: blank = the speaking NPC's sprite (follows it); set = this node's own override.
+  let portrait = hasPortrait(c) ? c.ImgPath : "";
+  const pBox = h("div", { class: "portrait" });
+  const drawPortrait = () => {
+    const npcImg = n.ImgPath || "";
+    pBox.replaceChildren(h("span", { class: "hint" }, "Portrait: "), sprite(portrait || npcImg || "assets/npc/Person.png"), " ",
+      portrait ? h("span", { class: "povr" }, "override ", h("code", {}, portrait), portrait === npcImg ? h("span", { class: "hint" }, " (same as the NPC sprite: use the NPC sprite so it follows changes)") : null)
+        : h("span", { class: "hint" }, npcImg ? `NPC sprite (${spriteLabel(npcImg)}), follows it` : "the speaking NPC's sprite"),
+      " ", h("button", { onclick: () => openPicker({ title: `Portrait override for ${c.Identifier}`, groups: npcSpriteGroups, recentKey: "npc", value: portrait || npcImg, onPick: v => { if (v) { portrait = v; drawPortrait(); } } }) }, portrait ? "Change override…" : "Override…"),
+      portrait ? h("button", { class: "use-npc", onclick: () => { portrait = ""; drawPortrait(); } }, "Use NPC sprite") : null,
+      portrait !== (hasPortrait(c) ? c.ImgPath : "") ? h("span", { class: "dirtyflag on" }, "unsaved: Save node") : null);
+  };
+  drawPortrait();
   const owners = nodeOwners(c.Identifier);
   const ownerQuests = S.c.quests.filter(q => owners.some(o => q.Giver === o.id || q.TurnIn === o.id));
   return h("div", { class: "node" + (isRoot ? " root" : ""), id: "node-" + c.Identifier },
     h("div", {}, h("span", { class: "id" }, isRoot ? "greeting · " : ""), ident),
     h("div", { class: "hint" }, "Spoken by: ", owners.length ? owners.map(o => [link("#npc/" + o.id, o.Name), " "]) : "no NPC (unreachable)",
       ownerQuests.length ? [" · their quests: ", ownerQuests.map(q => [link("#quest/" + q.id, q.Title), " "])] : null),
-    title, optBox, given,
+    pBox, title, optBox, given,
     h("div", { class: "bar" },
       h("button", { class: "primary", onclick: async () => {
-        const row = { id: c.id, Identifier: ident.value.trim(), Title: title.value, ImgPath: c.ImgPath || n.ImgPath, Options: formatOptions(opts),
+        const row = { id: c.id, Identifier: ident.value.trim(), Title: title.value, ImgPath: portrait, Options: formatOptions(opts),
           ItemsGiven: given.value, ReputationChange: c.ReputationChange || "", QuestStart: c.QuestStart || 0 };
         await save("conversation", row); renderTab();
       } }, "Save node"),
@@ -1348,22 +1383,71 @@ function questLinks(q) {
       field("Needs first", h("div", {}, ql(pre))),
       field("Leads to", h("div", {}, ql(next)))));
 }
-function questConversation(q) {
+// Quest dialogue, in order: every line is quest_def text (Offer, Accept,
+// Progress, Complete columns; talk steps' Line inside Steps JSON). "edit" or a
+// click on the text opens it inline; Save writes that one field to the stored
+// row (so Save .db / Export SQL include it) and to the form above, leaving
+// other unsaved form edits alone.
+const QUEST_LINES = ["Offer", "Accept", "Progress", "Complete"];
+function questConversation(q, f, steps, stepBox) {
   const who = id => (S.npcBy[id] ? S.npcBy[id].Name : "NPC");
-  const lines = [[q.Giver, "Offer", q.Offer], [0, "Accept", q.Accept], [q.TurnIn, "Progress", q.Progress], [q.TurnIn, "Complete", q.Complete]];
-  return h("div", { class: "panel" }, h("h3", {}, "Quest dialogue, in order"),
-    lines.map(([id, key, text]) => h("div", { class: "bubble" },
-      h("b", {}, id ? link("#npc/" + id, who(id)) : "On accepting", ` (${key === "Progress" ? "in progress" : key.toLowerCase()}): `),
-      text || h("span", { class: "hint" }, "(empty)"), " ", link(`#quest/${q.id}/line/${key}`, "edit", "edit"))),
-    parseJSON(q.Steps, []).map((st, i) => st.Type === "talk" ? h("div", { class: "bubble" },
-      h("b", {}, link("#npc/" + st.NPC, who(st.NPC)), ` (step ${i + 1}): `), st.Line || h("span", { class: "hint" }, "(no line)"), " ",
-      link(`#quest/${q.id}/step/${i}`, "edit", "edit")) : null));
+  const box = h("div", { class: "panel", id: "quest-dialogue" });
+  let editing = null; // key being edited ("Offer" … or "step:N")
+  const stored = () => S.c.quests.find(x => x.id === q.id);
+  async function commit(key, text) {
+    const row = { ...stored() };
+    if (!row.id) throw new Error("save the quest first");
+    if (key.startsWith("step:")) {
+      const i = +key.slice(5), ss = parseJSON(row.Steps, []);
+      if (!ss[i] || ss[i].Type !== "talk" || ss[i].NPC !== steps[i].NPC) throw new Error(`step ${i + 1} differs from the saved quest: press Save on the quest first`);
+      ss[i].Line = text; row.Steps = JSON.stringify(ss);
+      steps[i].Line = text;
+      const inp = stepBox.querySelector(`.qline-in[data-step="${i}"]`); if (inp) inp.value = text;
+    } else { row[key] = text; f[key].value = text; }
+    q[key.startsWith("step:") ? "Steps" : key] = row[key.startsWith("step:") ? "Steps" : key];
+    await save("quest_def", row);
+  }
+  const lines = () => [
+    ...QUEST_LINES.map(k => ({ key: k, id: k === "Accept" ? 0 : k === "Offer" ? +f.Giver.value : +f.TurnIn.value, label: k === "Progress" ? "in progress" : k.toLowerCase(), text: f[k].value })),
+    ...steps.map((st, i) => st.Type === "talk" ? { key: "step:" + i, id: st.NPC, label: `step ${i + 1}`, text: st.Line || "" } : null).filter(Boolean)];
+  function bubble(l) {
+    const b = h("div", { class: "bubble", "data-line": l.key });
+    const speaker = h("b", {}, l.id ? link("#npc/" + l.id, who(l.id)) : l.key === "Accept" ? "On accepting" : "(no NPC)", ` (${l.label}): `);
+    if (editing !== l.key) {
+      const t = h("span", { class: "btext", title: "Click to edit" }, l.text || h("span", { class: "hint" }, l.key.startsWith("step:") ? "(no line)" : "(empty)"));
+      t.addEventListener("click", () => open(l.key));
+      b.append(speaker, t, " ", h("a", { href: "#", class: "edit", onclick: ev => { ev.preventDefault(); open(l.key); } }, "edit"));
+      return b;
+    }
+    const ta = h("textarea", { class: "bedit", rows: 2 }); ta.value = l.text;
+    const grow = () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + 2 + "px"; };
+    const done = async ok => {
+      if (ok) { try { await commit(l.key, ta.value); } catch (e) { status(e.message, true); return; } status(`Saved the ${l.label} line of quest ${q.id} in memory. Use Save .db or Export SQL to keep it.`); }
+      editing = null; refresh();
+    };
+    ta.addEventListener("input", grow);
+    ta.addEventListener("keydown", ev => {
+      if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); done(false); }
+      else if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); done(true); }
+    });
+    b.append(speaker, ta, h("div", { class: "bar", style: "margin:4px 0 0" },
+      h("button", { class: "primary", onclick: () => done(true) }, "Save"), h("button", { onclick: () => done(false) }, "Cancel"),
+      h("span", { class: "hint" }, "Enter saves, Shift+Enter new line, Esc cancels. Tokens like {SHIELD} and {INTERACT} are kept as typed.")));
+    requestAnimationFrame(() => { grow(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); });
+    return b;
+  }
+  function open(key) { editing = key; refresh(); }
+  function refresh() { box.replaceChildren(h("h3", {}, "Quest dialogue, in order"), ...lines().map(bubble)); }
+  refresh();
+  box.refresh = () => { if (!editing) refresh(); };
+  box.open = open;
+  return box;
 }
 function renderOrphan(m) {
   const c = S.convBy[S.orphan];
   const f = h("div", { class: "form" }, h("h2", {}, "Dialogue node " + S.orphan),
     h("p", { class: "hint" }, c ? "No NPC's greeting leads to this node, so players can't reach it." : "There is no node with this identifier."));
-  if (c) f.append(nodeEditor(c, false, { ImgPath: c.ImgPath }));
+  if (c) f.append(nodeEditor(c, false, {}));
   m.append(f);
 }
 

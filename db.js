@@ -280,6 +280,14 @@ const BQ = (() => {
       return { sql: head + schema + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
     },
     clearExport() { st.changes = []; return { ok: true }; },
+    // Clear dialogue node portrait overrides (ids); with from, only nodes that
+    // still hold that image. The node then shows the speaking NPC's sprite.
+    portraits({ ids, from }) {
+      const list = (ids || []).map(Math.trunc).filter(i => i > 0);
+      if (!list.length) return { n: 0 };
+      apply([`UPDATE conversation SET ImgPath = '' WHERE id IN (${list.join(", ")})` + (from ? ` AND ImgPath = ${lit(from)}` : "") + ";"], `dialogue portraits follow the NPC sprite (${list.length} node(s))`);
+      return { n: list.length };
+    },
   };
 
   return {
