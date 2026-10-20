@@ -6,6 +6,7 @@ const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider
 const PRIM_NEW = {
   zone: { every: 3, do: "zone", target: "target", radius: 1, maxRadius: 1, windup: 2, once: true, damage: 20, duration: 2 },
   soak: { every: 10, do: "soak", target: "target", radius: 1.5, damage: 60, duration: 4, failRadius: 8 },
+  projectile: { every: 5, do: "projectile", target: "target", cast: 0.6, speed: 7, range: 5, radius: 0.3, visual: "web" },
 };
 const PRIM_PRESETS = {
   "Ring burst": { every: 6, do: "zone", target: "target", radius: 0.75, maxRadius: 0.75, windup: 2, once: true, damage: 30, duration: 1, count: 8, formation: "ring", anchor: "boss", spacing: 2.5 },
@@ -14,15 +15,27 @@ const PRIM_PRESETS = {
   "Rolling wave": { every: 7, do: "zone", target: "target", radius: 1, maxRadius: 1, damage: 20, duration: 5, count: 5, formation: "line", anchor: "boss", aim: true, angle: 90, spacing: 1.5, move: "dir", speed: 2 },
   "Orbiting blades": { every: 12, do: "zone", target: "target", radius: 0.75, damage: 15, duration: 10, count: 3, formation: "ring", anchor: "boss", spacing: 2.5, move: "orbit", spin: 90 },
   "Homing orb": { every: 9, do: "zone", target: "target", radius: 1, maxRadius: 1, windup: 1, damage: 20, duration: 6, formation: "list", offsets: [[0, -4]], move: "follow", speed: 1.5 },
+  "Spider web (projectile)": { every: 5, do: "projectile", target: "target", cast: 0.6, speed: 7, range: 5, radius: 0.3, effect: 1, visual: "web" },
+  "Web fan x3 (projectile)": { every: 7, do: "projectile", target: "target", cast: 0.8, speed: 6, range: 6, radius: 0.3, effect: 1, visual: "web", count: 3, spread: 20 },
   "Stepping tiles": { every: 6, do: "zone", target: "target", tile: true, radius: 0.5, maxRadius: 0.5, windup: 2, once: true, damage: 40, duration: 1, formation: "list", offsets: [[-1, 0], [0, 0], [1, 0]], stagger: 1 },
 };
 // [key, label, kind, help, show(a)]
-const isZone = a => a.do === "zone", isScr = a => isZone(a);
+const isZone = a => a.do === "zone", isScr = a => isZone(a), isProj = a => a.do === "projectile", notProj = a => !isProj(a);
 const PRIM_FIELDS = [
   ["every", "Every (s)", "num", "seconds between casts while aggro'd"],
-  ["damage", "Damage", "num", "per hit (zone: every second it is active; soak: split between players inside)"],
-  ["duration", "Duration (s)", "num", "seconds active (zone) or until it resolves (soak)"],
-  ["radius", "Radius", "num", "tiles; zone is capped at Max radius (0.75 unless raised), soak at 3"],
+  ["damage", "Damage", "num", "per hit (zone: every second it is active; soak: split between players inside; projectile: on hit, 0 = effect only)"],
+  ["duration", "Duration (s)", "num", "seconds active (zone) or until it resolves (soak)", notProj],
+  ["radius", "Radius", "num", "tiles; zone is capped at Max radius (0.75 unless raised), soak at 3, projectile hit size (default 0.3, max 1.5)"],
+  ["effect", "Applies effect", "effect", "status effect put on the player it hits (Effects tab)", isProj],
+  ["visual", "Visual", "vis", "how the client draws the cast, shot and splat: web (others draw a plain bolt)", isProj],
+  ["cast", "Cast (s)", "num", "telegraph before it fires (default 0.5, max 5); aim is locked when the cast starts, so it can be dodged", isProj],
+  ["speed", "Speed", "num", "tiles/second (default 6, max 20)", isProj],
+  ["range", "Range", "num", "tiles (default 6, max 15); not cast while the target is farther", isProj],
+  ["count", "Count", "num", "shots per cast (max 24)", isProj],
+  ["spread", "Spread (deg)", "num", "angle between shots of a fan (default 15)", isProj],
+  ["formation", "Formation", "sel:|ring", "ring = count shots evenly all round", isProj],
+  ["angle", "Angle (deg)", "num", "added to the aim", isProj],
+  ["stagger", "Stagger (ticks)", "num", "1/20 s between each shot of a cast (0 = together)", isProj],
   ["maxRadius", "Max radius", "num", "zone only: raises the 0.75 cap (up to 6)", isZone],
   ["windup", "Windup (s)", "num", "telegraph before it hurts (the cast tick counts one off)", isZone],
   ["once", "Once", "chk", "hit once when it lands, then vanish", isZone],
@@ -94,7 +107,7 @@ function mobForm(form, e) {
   const spells = (S.c.spells || []).filter(s => s.EnemyID === e.id);
   form.append(h("h2", {}, e.id ? `${e.Name} (${e.id})` : "New mob"), grid,
     h("div", { class: "bar" },
-      h("button", { class: "primary", onclick: async () => { const r = collect(); const id = await save("enemies", r); S.mob = { id }; if (!e.id && S.mobDraft) { await savePatterns(id, S.mobDraft); } renderTab(); } }, e.id ? "Save mob" : "Create mob"),
+      h("button", { class: "primary", onclick: async () => { try { const r = collect(); const id = await save("enemies", r); S.mob = { id }; if (!e.id && S.mobDraft) { await savePatterns(id, S.mobDraft); } renderTab(); } catch { /* shown in the status bar */ } } }, e.id ? "Save mob" : "Create mob"),
       e.id ? h("button", { onclick: () => { const c = collect(); c.id = 0; c.Name += " (copy)"; S.mobDraft = mobPatterns(e.id); S.mob = c; mobForm(form, c); } }, "Duplicate") : null,
       e.id ? h("button", { class: "danger", onclick: async () => { if (await del("enemies", e.id)) { S.mob = null; renderTab(); } } }, "Delete") : null,
       e.id ? link("#loot/" + e.id, "Loot table →", "btnlink") : null),
@@ -141,9 +154,9 @@ function patternEditor(form, e, initial, imgOf, collect) {
   const move = (i, d) => { const j = i + d; if (j < 0 || j >= acts.length) return; [acts[i], acts[j]] = [acts[j], acts[i]]; draw(); changed(); };
   function primCard(a, i) {
     const g = h("div", { class: "grid pgrid" });
-    const kind = h("select", { onchange: () => { const keep = { every: a.every, damage: a.damage, target: a.target }; acts[i] = { ...PRIM_NEW[kind.value], ...keep }; draw(); changed(); } },
-      h("option", { value: "zone" }, "zone"), h("option", { value: "soak" }, "soak"));
-    kind.value = a.do === "soak" ? "soak" : "zone";
+    const kind = h("select", { onchange: () => { const keep = { every: a.every, target: a.target }; acts[i] = { ...PRIM_NEW[kind.value], ...keep }; draw(); changed(); } },
+      BQSim.KINDS.map(k => h("option", { value: k }, k)));
+    kind.value = BQSim.KINDS.includes(a.do) ? a.do : "zone";
     for (const [k, lbl, type, hint, show] of PRIM_FIELDS) {
       if (show && !show(a)) continue;
       if (type === "head") { g.append(h("div", { class: "phead" }, h("b", {}, lbl), " ", h("span", { class: "hint" }, hint))); continue; }
@@ -152,6 +165,12 @@ function patternEditor(form, e, initial, imgOf, collect) {
       if (type === "num") { el = h("input", { type: "number", class: "num", step: "any", value: a[k] ?? "" }); el.addEventListener("input", () => set(el.value === "" ? "" : +el.value)); }
       else if (type === "chk") { el = h("input", { type: "checkbox" }); el.checked = !!a[k]; el.addEventListener("change", () => set(el.checked)); }
       else if (type === "text") { el = txt(a[k] || ""); el.addEventListener("input", () => set(el.value)); }
+      else if (type === "effect") {
+        el = h("select", {}, h("option", { value: "" }, "(none)"), (S.c.effects || []).map(x => h("option", { value: x.id }, `${x.Name} (${x.id})`)));
+        el.value = a[k] || ""; el.addEventListener("change", () => set(el.value ? +el.value : ""));
+        if (a[k] && !(S.c.effects || []).some(x => x.id === +a[k])) el.append(h("option", { value: a[k] }, `missing effect ${a[k]}`)), el.value = a[k];
+      }
+      else if (type === "vis") { el = h("input", { type: "text", list: "shotVisuals", value: a[k] || "" }); el.style.width = "120px"; el.addEventListener("input", () => set(el.value.trim())); }
       else if (type === "pts") { el = txt(fmtPts(a[k]), "e.g. 0,-2; 2,0; 0,2"); el.addEventListener("input", () => { const p = parsePts(el.value); set(p.length ? p : ""); }); }
       else { el = h("select", {}, type.slice(4).split("|").map(o => h("option", { value: o }, o || "(none)"))); el.value = a[k] || ""; el.addEventListener("change", () => { set(el.value); draw(); }); }
       el.dataset.key = k;
@@ -159,7 +178,7 @@ function patternEditor(form, e, initial, imgOf, collect) {
     }
     return h("div", { class: "step prim", "data-i": i },
       h("div", { class: "top" }, h("b", {}, `#${i + 1}`), kind,
-        h("span", { class: "hint" }, a.do === "soak" ? "shared circle on the target; resolves when its timer runs out" : BQSim.scripted(a) ? "scripted zone" : "plain zone on the target"),
+        h("span", { class: "hint" }, a.do === "soak" ? "shared circle on the target; resolves when its timer runs out" : isProj(a) ? "cast, then shots fly at the target; walls stop them" : BQSim.scripted(a) ? "scripted zone" : "plain zone on the target"),
         h("span", { style: "flex:1" }),
         h("button", { title: "Move up", onclick: () => move(i, -1) }, "↑"), h("button", { title: "Move down", onclick: () => move(i, 1) }, "↓"),
         h("button", { onclick: () => { acts.splice(i + 1, 0, JSON.parse(JSON.stringify(a))); draw(); changed(); } }, "Duplicate"),
@@ -170,16 +189,19 @@ function patternEditor(form, e, initial, imgOf, collect) {
   const preview = mobPreview(e, imgOf);
   S.mobPreview = preview;
   form.append(h("h3", {}, "Boss pattern primitives ", flag),
-    h("p", { class: "hint" }, "Mobs and bosses use only these primitives (boss_patterns). Each one runs on its own timer while the mob is aggro'd; the first cast is one second after aggro."),
+    h("p", { class: "hint" }, "Mobs and bosses use only these primitives (boss_patterns). Each one runs on its own timer while the mob is aggro'd; the first cast is one second after aggro. Projectiles apply effects from the ", link("#effects", "Effects tab"), "."),
+    h("datalist", { id: "shotVisuals" }, h("option", { value: "web" })),
     h("div", { class: "mobsplit" },
       h("div", { class: "mobprims" }, list,
         h("div", { class: "bar" },
           h("button", { onclick: () => { acts.push({ ...PRIM_NEW.zone }); draw(); changed(); } }, "+ Zone"),
-          h("button", { onclick: () => { acts.push({ ...PRIM_NEW.soak }); draw(); changed(); } }, "+ Soak"), preset,
+          h("button", { onclick: () => { acts.push({ ...PRIM_NEW.soak }); draw(); changed(); } }, "+ Soak"),
+          h("button", { onclick: () => { const p = { ...PRIM_NEW.projectile }; if ((S.c.effects || [])[0]) p.effect = S.c.effects[0].id; acts.push(p); draw(); changed(); } }, "+ Projectile"), preset,
           h("button", { class: "primary", id: "save-patterns", onclick: async () => {
             if (!e.id) { status("Create the mob first: its patterns are saved with it.", true); return; }
             try { acts.forEach((a, i) => BQSim.validate(BQSim.clean(a), i)); } catch (err) { status(err.message, true); return; }
-            await savePatterns(e.id, acts); S.mob = { id: e.id }; dirty = false; renderTab();
+            try { await savePatterns(e.id, acts); } catch { return; }
+            S.mob = { id: e.id }; dirty = false; renderTab();
           } }, "Save patterns")),
         h("details", {}, h("summary", { class: "hint" }, "Stored JSON (boss_patterns.Pattern)"), json)),
       preview.el));
@@ -196,7 +218,14 @@ function mobPreview(e, imgOf) {
   let player = { x: 4, y: 0 };
   const boss = { x: 0, y: 0, w: Math.max(1, +e.Width || 1), h: Math.max(1, +e.Height || 1) };
   let bossImg = new Image(); bossImg.src = assetURL(imgOf());
-  const reset = () => { st = BQSim.create({ boss, player: { ...player }, patterns: pats }); acc = 0; };
+  const effDefs = () => Object.fromEntries((S.c.effects || []).map(x => [x.id, x]));
+  const reset = () => { st = BQSim.create({ boss, player: { ...player }, patterns: pats, effects: effDefs() }); acc = 0; };
+  const webImg = new Image(); webImg.src = assetURL("assets/world/objects/Web.png");
+  const webStar = (g, x, y, rad, rot) => {
+    g.save(); g.translate(x, y); g.rotate(rot); g.strokeStyle = "#555"; g.lineWidth = 1.5; g.beginPath();
+    for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.moveTo(0, 0); g.lineTo(Math.cos(a) * rad, Math.sin(a) * rad); }
+    g.stroke(); g.beginPath(); g.arc(0, 0, rad * .55, 0, Math.PI * 2); g.stroke(); g.restore();
+  };
   const toScr = (x, y) => [W / 2 + x * sc, H / 2 + y * sc];
   const toWorld = (px, py) => [(px - W / 2) / sc, (py - H / 2) / sc];
   function drawNow() {
@@ -229,10 +258,36 @@ function mobPreview(e, imgOf) {
       const o = f.zone || f.soak; if (!o) continue;
       g.globalAlpha = 1 - (st.tick - f.t) / 8; g.lineWidth = 3; shape(o, f.zone ? "rgba(255,30,20,.5)" : "rgba(240,190,20,.5)", "#c00"); g.globalAlpha = 1;
     }
+    // projectile casts (aim line, locked at cast start), shots and splats
+    const [bcx, bcy] = toScr(boss.x - .5 + boss.w / 2, boss.y - .5 + boss.h / 2);
+    for (const c of st.casts) {
+      const [ax, ay] = toScr(c.tx - .5, c.ty - .5), k = 1 - c.left / Math.max(1, c.total);
+      g.setLineDash([5, 4]); g.strokeStyle = `rgba(90,90,90,${.3 + .5 * k})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(bcx, bcy); g.lineTo(ax, ay); g.stroke(); g.setLineDash([]);
+      g.fillStyle = "#fff"; g.strokeStyle = "#555"; g.beginPath(); g.arc(bcx, bcy, 2 + 4 * k, 0, Math.PI * 2); g.fill(); g.stroke();
+    }
+    for (const s of st.shots) {
+      if (s.wait > 0) continue;
+      const [x, y] = toScr(s.x - .5, s.y - .5);
+      if (s.visual === "web") webStar(g, x, y, Math.max(5, s.r * sc * 1.4), st.tick * .3);
+      else { g.fillStyle = "#7a3d8c"; g.beginPath(); g.arc(x, y, Math.max(3, s.r * sc), 0, Math.PI * 2); g.fill(); }
+    }
+    for (const f of st.flashes) {
+      if (!f.splat) continue;
+      const k = (st.tick - f.t) / 12, [x, y] = toScr(f.splat.x - .5, f.splat.y - .5);
+      g.globalAlpha = 1 - k;
+      if (f.splat.visual === "web" && webImg.complete && webImg.naturalWidth) { const w = sc * (.6 + .8 * Math.min(1, k * 3)); g.drawImage(webImg, x - w / 2, y - w / 2, w, w); }
+      else { g.strokeStyle = "#7a3d8c"; g.beginPath(); g.arc(x, y, 4 + 10 * k, 0, Math.PI * 2); g.stroke(); }
+      g.globalAlpha = 1;
+    }
     const [px, py] = toScr(st.player.x, st.player.y);
-    g.fillStyle = "#2a62c9"; g.beginPath(); g.arc(px, py, sc * .35, 0, Math.PI * 2); g.fill();
+    const mult = BQSim.moveMult(st);
+    g.fillStyle = mult < 1 ? "#6d8fcf" : "#2a62c9"; g.beginPath(); g.arc(px, py, sc * .35, 0, Math.PI * 2); g.fill();
+    const defs = st.effectDefs;
+    if (st.effects.some(e => (defs[e.id] || {}).Visual === "web") && webImg.complete && webImg.naturalWidth) g.drawImage(webImg, px - sc * .5, py - sc * .5, sc, sc);
     g.fillStyle = "#222"; g.font = "12px system-ui"; g.fillText("player (drag)", px + sc * .45, py + 4);
-    info.textContent = `t = ${(st.tick / BQSim.TPS).toFixed(1)}s · zones ${st.zones.length} · soaks ${st.soaks.length} · player hit ${st.hits}× for ${st.damage} · ${speed}x${playing ? "" : " (paused)"}`;
+    st.effects.forEach((e, i) => { const d = defs[e.id] || {}; g.fillText(`${d.Name || "effect " + e.id} ${e.left.toFixed(1)}s${e.stacks > 1 ? " x" + e.stacks : ""}`, px + sc * .45, py + 18 + i * 14); });
+    info.textContent = `t = ${(st.tick / BQSim.TPS).toFixed(1)}s · zones ${st.zones.length} · soaks ${st.soaks.length} · shots ${st.shots.length} · player hit ${st.hits}× for ${st.damage}` +
+      (mult !== 1 ? ` · move x${mult.toFixed(2)}` : "") + ` · ${speed}x${playing ? "" : " (paused)"}`;
   }
   function loop(now) {
     raf = requestAnimationFrame(loop);

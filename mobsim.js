@@ -1,13 +1,15 @@
 "use strict";
 // Boss-pattern simulator for the Mobs tab preview. A port of the API's
-// enemies.go (runBossPatterns, spawnZone, tickZones, spawnSoak, tickSoaks) and
-// zone_script.go (formations, stagger, movement): 20 ticks a second, patterns
+// enemies.go (runBossPatterns, spawnZone, tickZones, spawnSoak, tickSoaks),
+// zone_script.go (formations, stagger, movement), mob_shots.go (projectile)
+// and effects.go (status effects on the player): 20 ticks a second, patterns
 // and damage once a second, zone movement every tick. Positions are tiles.
 const BQSim = (() => {
   const TPS = 20, MAX_ZONES = 24;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const FORMATIONS = ["", "ring", "line", "spread", "list"];
   const MOVES = ["", "dir", "out", "follow", "orbit", "path"];
+  const KINDS = ["zone", "soak", "projectile"];
   const SCRIPT_KEYS = ["count", "formation", "spacing", "offsets", "anchor", "angle", "aim", "delay", "stagger", "move", "speed", "spin", "path", "loop"];
 
   function scripted(a) {
@@ -35,6 +37,7 @@ const BQSim = (() => {
 
   function create(o) {
     return { tick: 0, zones: [], soaks: [], timers: [], seq: 0, hits: 0, damage: 0, flashes: [],
+      casts: [], shots: [], effects: [], effectDefs: o.effects || {},
       boss: o.boss || { x: 0, y: 0, w: 1, h: 1 }, player: o.player || { x: 4, y: 0 }, patterns: o.patterns || [], rnd: o.rnd || Math.random };
   }
 
@@ -119,6 +122,89 @@ const BQSim = (() => {
     }
     st.soaks = kept;
   }
+  // ---- projectile (mob_shots.go) and status effects (effects.go)
+  const SHOT_SUB = 0.2, SPLAT_TICKS = 12, INSET = 0.2;
+  function shotDefaults(a) {
+    let cast = a.cast > 0 ? a.cast : (a.windup > 0 ? a.windup : 0.5); cast = clamp(cast, 0, 5);
+    const speed = Math.min(a.speed > 0 ? a.speed : 6, 20), rng = Math.min(a.range > 0 ? a.range : 6, 15), r = Math.min(a.radius > 0 ? a.radius : 0.3, 1.5);
+    return { cast, speed, rng, r };
+  }
+  function startCast(st, a) {
+    const p = st.player, [cx, cy] = centre(st.boss), d = shotDefaults(a);
+    const tx = p.x + .5, ty = p.y + .5;
+    if (Math.hypot(tx - (cx + .5), ty - (cy + .5)) > d.rng + .5) return;
+    if (st.casts.length) return; // one cast at a time per mob
+    const ticks = Math.round(d.cast * TPS);
+    st.casts.push({ left: ticks, total: ticks, tx, ty, a });
+  }
+  function fire(st, c) {
+    const a = c.a, d = shotDefaults(a), b = st.boss;
+    const ox = b.x + Math.max(1, b.w || 1) / 2, oy = b.y + Math.max(1, b.h || 1) / 2;
+    const base = Math.atan2(c.ty - oy, c.tx - ox) + (a.angle || 0) * Math.PI / 180;
+    const n = clamp(Math.trunc(a.count) || 1, 1, MAX_ZONES), spread = a.spread || 15, stagger = Math.max(0, Math.trunc(a.stagger || 0));
+    for (let i = 0; i < n; i++) {
+      const ang = a.formation === "ring" ? base + 2 * Math.PI * i / n : base + (i - (n - 1) / 2) * spread * Math.PI / 180;
+      st.shots.push({ id: ++st.seq, x: ox, y: oy, dx: Math.cos(ang), dy: Math.sin(ang), speed: d.speed, r: d.r, rng: d.rng, traveled: 0,
+        damage: Math.max(0, a.damage || 0), effect: a.effect || 0, visual: a.visual || "", wait: i * stagger });
+    }
+  }
+  function shotHitsPlayer(st, x, y, r) {
+    const p = st.player, L = p.x + INSET, T = p.y + INSET, R = p.x + 1 - INSET, B = p.y + 1 - INSET;
+    return x - r < R && x + r > L && y - r < B && y + r > T;
+  }
+  function applyEffect(st, id) {
+    const d = st.effectDefs[id]; if (!d) return false;
+    const dur = d.Duration > 0 ? d.Duration : 3, max = Math.max(1, d.MaxStacks || 1), mode = d.Stacking || "refresh";
+    const a = st.effects.find(e => e.id === id);
+    if (!a) { st.effects.push({ id, left: dur, stacks: 1, dur }); return true; }
+    if (mode === "ignore") return false;
+    if (mode === "extend") a.left = Math.min(a.left + dur, dur * max);
+    else { if (mode === "stack" && a.stacks < max) a.stacks++; a.left = dur; }
+    return true;
+  }
+  function moveMult(st) {
+    let m = 1;
+    for (const e of st.effects) for (const mod of parseMods(st.effectDefs[e.id])) {
+      if (mod.type === "move_speed" && mod.mult >= 0) m *= Math.pow(mod.mult, e.stacks);
+      if (mod.type === "stun") m = 0;
+    }
+    return clamp(m, 0, 3);
+  }
+  function parseMods(d) { if (!d) return []; if (Array.isArray(d.Modifiers)) return d.Modifiers; try { return JSON.parse(d.Modifiers || "[]") || []; } catch { return []; } }
+  function tickShots(st) {
+    st.casts = st.casts.filter(c => { c.left--; if (c.left > 0) return true; fire(st, c); return false; });
+    const live = [];
+    for (const s of st.shots) {
+      if (s.wait > 0) { s.wait--; live.push(s); continue; }
+      const step = s.speed / TPS; let moved = 0, done = false, hit = false;
+      while (moved < step - 1e-9 && !done) {
+        let d = Math.min(SHOT_SUB, step - moved);
+        if (s.traveled + d > s.rng) d = s.rng - s.traveled;
+        s.x += s.dx * d; s.y += s.dy * d; s.traveled += d; moved += d;
+        if (shotHitsPlayer(st, s.x, s.y, s.r)) done = hit = true;
+        else if (s.traveled >= s.rng - 1e-9) done = true;
+      }
+      if (!done) { live.push(s); continue; }
+      const sp = { t: st.tick, splat: { x: hit ? st.player.x + .5 : s.x, y: hit ? st.player.y + .5 : s.y, visual: s.visual, hit } };
+      if (hit) { if (s.damage > 0) hit_(st, s.damage, "projectile"); if (s.effect) applyEffect(st, s.effect); }
+      st.flashes.push(sp);
+    }
+    st.shots = live;
+  }
+  function tickEffects(st, dt) {
+    st.effects = st.effects.filter(e => {
+      e.left -= dt;
+      const d = st.effectDefs[e.id];
+      for (const mod of parseMods(d)) if (mod.type === "dot" && mod.damage > 0) {
+        const every = Math.max(0.25, mod.every || 1);
+        e.dot = (e.dot === undefined ? every : e.dot) - dt;
+        if (e.dot <= 1e-9) { e.dot += every; hit_(st, mod.damage * e.stacks, "dot"); }
+      }
+      return e.left > 1e-9;
+    });
+  }
+  const hit_ = (st, dmg, what) => hit(st, dmg, what);
+
   function step(st) {
     st.tick++;
     const second = st.tick % TPS === 0;
@@ -128,19 +214,31 @@ const BQSim = (() => {
         st.timers[i]--;
         if (st.timers[i] > 0) return;
         st.timers[i] = Math.max(1, Math.trunc(a.every) || 1);
-        if (a.do === "zone") spawnZone(st, a); else if (a.do === "soak") spawnSoak(st, a);
+        if (a.do === "zone") spawnZone(st, a); else if (a.do === "soak") spawnSoak(st, a); else if (a.do === "projectile") startCast(st, a);
       });
     }
     motion(st, 1 / TPS);
+    tickShots(st);
+    tickEffects(st, 1 / TPS);
     if (second) { tickZones(st); tickSoaks(st); }
-    st.flashes = st.flashes.filter(f => st.tick - f.t < 8);
+    st.flashes = st.flashes.filter(f => st.tick - f.t < (f.splat ? SPLAT_TICKS : 8));
   }
 
   // Clean one primitive for storage: drop defaults and unknown keys, keep the
   // key names the server reads. Old rows stay as they were.
   function clean(a) {
-    const out = { every: Math.max(1, Math.trunc(+a.every || 1)), do: a.do === "soak" ? "soak" : "zone", target: a.target || "target" };
-    const numk = a.do === "soak" ? ["radius", "damage", "duration", "failRadius"] : ["radius", "maxRadius", "windup", "damage", "duration"];
+    const kind = KINDS.includes(a.do) ? a.do : "zone";
+    const out = { every: Math.max(1, Math.trunc(+a.every || 1)), do: kind, target: a.target || "target" };
+    if (kind === "projectile") {
+      for (const k of ["cast", "speed", "range", "radius", "damage", "spread", "angle"]) if (+a[k]) out[k] = +a[k];
+      if (+a.effect > 0) out.effect = Math.trunc(+a.effect);
+      if (a.visual) out.visual = String(a.visual);
+      if ((+a.count || 0) > 1) out.count = Math.trunc(+a.count);
+      if (a.formation === "ring") out.formation = "ring";
+      if (+a.stagger > 0) out.stagger = Math.trunc(+a.stagger);
+      return out;
+    }
+    const numk = kind === "soak" ? ["radius", "damage", "duration", "failRadius"] : ["radius", "maxRadius", "windup", "damage", "duration"];
     for (const k of numk) if (+a[k]) out[k] = +a[k];
     if (out.do === "zone") {
       if (a.once) out.once = true;
@@ -163,7 +261,7 @@ const BQSim = (() => {
   }
   function validate(a, i) {
     const w = `primitive ${i + 1}: `;
-    if (a.do !== "zone" && a.do !== "soak") throw new Error(w + `only "zone" and "soak" exist (got "${a.do}")`);
+    if (!KINDS.includes(a.do)) throw new Error(w + `only ${KINDS.map(k => '"' + k + '"').join(", ")} exist (got "${a.do}")`);
     if (!(a.every >= 1)) throw new Error(w + "every must be at least 1 second");
     if (a.formation && !FORMATIONS.includes(a.formation)) throw new Error(w + "unknown formation " + a.formation);
     if (a.move && !MOVES.includes(a.move)) throw new Error(w + "unknown move " + a.move);
@@ -171,6 +269,6 @@ const BQSim = (() => {
     if (a.move === "path" && !(a.path || []).length) throw new Error(w + "a path move needs waypoints");
     for (const k of ["offsets", "path"]) if (a[k] && !(Array.isArray(a[k]) && a[k].every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))) throw new Error(w + k + " must be [[dx,dy],...]");
   }
-  return { TPS, create, step, clean, validate, scripted, FORMATIONS, MOVES, SCRIPT_KEYS, centre };
+  return { TPS, create, step, clean, validate, scripted, FORMATIONS, MOVES, SCRIPT_KEYS, KINDS, centre, moveMult, applyEffect, shotDefaults };
 })();
 if (typeof module !== "undefined") module.exports = BQSim;
