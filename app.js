@@ -184,6 +184,52 @@ const STEP_HELP = {
   craft: "Target = item name crafted", equip: "Target = item name or slot", level: "Count = level to reach",
 };
 
+// Reach step: a small map around X,Y with the completion radius (the blue
+// ring players see in game). Click a tile to move the target there.
+const MINI_REDRAW = new Set();
+function reachMap(s, onPick) {
+  const W = 300, H = 180, sc = 8;
+  const cv = h("canvas", { class: "reachmap", width: W, height: H, title: "Click to set the reach target" });
+  const info = h("span", { class: "hint" });
+  const el = h("div", { class: "reachbox" }, cv, h("div", {}, info, " ", h("a", { href: "#", onclick: ev => { ev.preventDefault(); go(`#map/${s.X || 0},${s.Y || 0}`); } }, "open on map")));
+  const draw = () => {
+    if (!cv.isConnected && el.dataset.drawn) { MINI_REDRAW.delete(draw); return; }
+    el.dataset.drawn = 1;
+    const g = cv.getContext("2d"); g.imageSmoothingEnabled = false;
+    g.fillStyle = "#0b0d10"; g.fillRect(0, 0, W, H);
+    const cx = +s.X || 0, cy = +s.Y || 0, R = (+s.Radius > 0 ? +s.Radius : 3);
+    info.textContent = `Target ${cx},${cy}, radius ${R} tile${R === 1 ? "" : "s"}` + (S.world ? "" : " (loading world…)");
+    const px = x => Math.round((x - cx) * sc + W / 2 - sc / 2), py = y => Math.round((y - cy) * sc + H / 2 - sc / 2);
+    if (S.world) {
+      const hw = Math.ceil(W / sc / 2) + 1, hh = Math.ceil(H / sc / 2) + 1;
+      for (let y = cy - hh; y <= cy + hh; y++) for (let x = cx - hw; x <= cx + hw; x++) {
+        const t = tile(x, y); if (!t) continue;
+        const gp = str(t[2]), fp = str(t[3]);
+        imgFor(gp); g.fillStyle = M.colours[gp] || "#3a5"; g.fillRect(px(x), py(y), sc, sc);
+        if (fp) { imgFor(fp); if (M.colours[fp]) { g.fillStyle = M.colours[fp]; g.globalAlpha = .7; g.fillRect(px(x), py(y), sc, sc); g.globalAlpha = 1; } }
+        if (t[5]) { g.fillStyle = "rgba(0,0,0,.3)"; g.fillRect(px(x), py(y), sc, sc); }
+      }
+      g.fillStyle = "#ffd34d";
+      for (const n of S.c.npcs) if (Math.abs(n.SpawnX - cx) <= hw && Math.abs(n.SpawnY - cy) <= hh) g.fillRect(px(n.SpawnX) + 2, py(n.SpawnY) + 2, sc - 4, sc - 4);
+    }
+    const mx = W / 2, my = H / 2;
+    g.fillStyle = "rgba(77,166,255,.22)"; g.beginPath(); g.arc(mx, my, R * sc, 0, 7); g.fill();
+    g.strokeStyle = "#4da6ff"; g.lineWidth = 2; g.beginPath(); g.arc(mx, my, R * sc, 0, 7); g.stroke(); g.lineWidth = 1;
+    g.strokeStyle = "#fff"; g.strokeRect(px(cx) - .5, py(cy) - .5, sc + 1, sc + 1);
+  };
+  cv.addEventListener("click", ev => {
+    const r = cv.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) * (W / r.width), my = (ev.clientY - r.top) * (H / r.height);
+    s.X = (+s.X || 0) + Math.floor((mx - W / 2 + sc / 2) / sc);
+    s.Y = (+s.Y || 0) + Math.floor((my - H / 2 + sc / 2) / sc);
+    onPick(); draw();
+  });
+  MINI_REDRAW.add(draw);
+  if (!S.world) loadWorld().then(() => MINI_REDRAW.forEach(f => f())).catch(e => (info.textContent = "World not loaded: " + e.message));
+  setTimeout(draw, 0);
+  return { el, draw };
+}
+
 function renderQuests(m) {
   if (!S.c.hasQuestline) {
     m.append(h("div", { class: "form" }, h("h2", {}, "No questline in this database"),
@@ -235,6 +281,8 @@ function questForm(form, q) {
       const type = h("select", { onchange: () => { s.Type = type.value; drawSteps(); } }, Object.keys(STEP_FIELDS).map(t => h("option", { value: t }, t)));
       type.value = s.Type;
       const top = h("div", { class: "top" }, h("b", {}, `${i + 1}.`), type);
+      const inputs = {};
+      let mini = null;
       for (const k of STEP_FIELDS[s.Type] || []) {
         let el;
         if (k === "NPC") { el = npcSelect(s.NPC, () => (s.NPC = +el.value)); }
@@ -242,7 +290,8 @@ function questForm(form, q) {
         else if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) { el = enemySelect(s.Target); el.onchange = () => (s.Target = el.value); }
         else if (k === "Target") { el = txt(s.Target); el.oninput = () => (s.Target = el.value); }
         else if (k === "Line") { el = txt(s.Line || "", "What the NPC says"); el.classList.add("qline-in"); el.dataset.step = i; el.oninput = () => { s.Line = el.value; if (conv) conv.refresh(); }; }
-        else { el = num(s[k]); el.oninput = () => (s[k] = +el.value); }
+        else { el = num(s[k]); el.oninput = () => { s[k] = +el.value; if (mini) mini.draw(); }; }
+        inputs[k] = el;
         top.append(h("span", { class: "hint" }, k), el);
       }
       top.append(h("span", { style: "flex:1" }),
@@ -250,7 +299,8 @@ function questForm(form, q) {
         h("button", { onclick: () => { steps.splice(i, 1); drawSteps(); } }, "×"));
       const text = txt(s.Text, "Objective shown in the tracker"); text.style.width = "100%"; text.oninput = () => (s.Text = text.value);
       const hint = txt(s.Hint, "Hint (optional, shown in the quest log)"); hint.style.width = "100%"; hint.oninput = () => (s.Hint = hint.value);
-      stepBox.append(h("div", { class: "step", id: "qstep-" + i }, top, h("div", { class: "hint" }, STEP_HELP[s.Type] || ""), text, hint));
+      if (s.Type === "reach") mini = reachMap(s, () => { inputs.X.value = s.X; inputs.Y.value = s.Y; });
+      stepBox.append(h("div", { class: "step", id: "qstep-" + i }, top, h("div", { class: "hint" }, STEP_HELP[s.Type] || ""), mini ? mini.el : "", text, hint));
     });
     stepBox.append(h("button", { onclick: () => { steps.push({ Type: "kill", Target: "", Count: 1, Text: "" }); drawSteps(); } }, "+ Step"));
     if (conv) conv.refresh();
@@ -553,6 +603,7 @@ function imgFor(path) {
         const d = x.getImageData(0, 0, 1, 1).data; M.colours[path] = `rgb(${d[0]},${d[1]},${d[2]})`;
       } catch { M.colours[path] = "#777"; } // a URL without CORS: no colour, still drawable
       drawMap();
+      MINI_REDRAW.forEach(f => f());
     };
     i.onerror = () => { M.failed[path] = true; drawMap(); };
     if (ASSETS.mode === "url") i.crossOrigin = "anonymous";
