@@ -1,0 +1,1643 @@
+{
+"note": "Effect sprites for boss_patterns / effects. Built by tools/build_fx_sprites.py. Tome tiles: David E. Gervais, CC BY 3.0.",
+"sprites": [
+{
+"path": "assets/fx/sparkle-gold.png",
+"name": "sparkle gold",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"sparkle",
+"holy"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 0-0"
+},
+{
+"path": "assets/fx/sparkle-green.png",
+"name": "sparkle green",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"sparkle",
+"poison"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 1-1"
+},
+{
+"path": "assets/fx/sparkle-blue.png",
+"name": "sparkle blue",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"sparkle",
+"ice"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 2-2"
+},
+{
+"path": "assets/fx/sparkle-orange.png",
+"name": "sparkle orange",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"sparkle",
+"fire"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 3-3"
+},
+{
+"path": "assets/fx/sparkle-purple.png",
+"name": "sparkle purple",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"sparkle",
+"arcane"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 4-4"
+},
+{
+"path": "assets/fx/sparkle-red.png",
+"name": "sparkle red",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"sparkle",
+"fire"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 5-5"
+},
+{
+"path": "assets/fx/poison-skulls.png",
+"name": "poison skulls",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"poison",
+"shadow"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 6-6"
+},
+{
+"path": "assets/fx/ring-burst-fire.png",
+"name": "ring burst fire",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ring",
+"explosion",
+"fire"
+],
+"fps": 12,
+"loop": false,
+"src": "SpellFXAnim1.PNG rows 11-11"
+},
+{
+"path": "assets/fx/ring-burst-ice.png",
+"name": "ring burst ice",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ring",
+"explosion",
+"ice"
+],
+"fps": 12,
+"loop": false,
+"src": "SpellFXAnim1.PNG rows 12-12"
+},
+{
+"path": "assets/fx/ring-burst-poison.png",
+"name": "ring burst poison",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ring",
+"explosion",
+"poison"
+],
+"fps": 12,
+"loop": false,
+"src": "SpellFXAnim1.PNG rows 13-13"
+},
+{
+"path": "assets/fx/ring-burst-arcane.png",
+"name": "ring burst arcane",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ring",
+"explosion",
+"arcane"
+],
+"fps": 12,
+"loop": false,
+"src": "SpellFXAnim1.PNG rows 14-14"
+},
+{
+"path": "assets/fx/starburst-gold.png",
+"name": "starburst gold",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"lightning"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 15-15"
+},
+{
+"path": "assets/fx/starburst-ice.png",
+"name": "starburst ice",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"ice"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 16-16"
+},
+{
+"path": "assets/fx/starburst-poison.png",
+"name": "starburst poison",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"poison"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 17-17"
+},
+{
+"path": "assets/fx/web-grow.png",
+"name": "web grow",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"web"
+],
+"fps": 10,
+"loop": false,
+"src": "SpellFXAnim1.PNG rows 19-19"
+},
+{
+"path": "assets/fx/torch-flame.png",
+"name": "torch flame",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire"
+],
+"fps": 10,
+"loop": true,
+"src": "SpellFXAnim1.PNG rows 20-20"
+},
+{
+"path": "assets/fx/frost-gust.png",
+"name": "frost gust",
+"frames": 16,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ice",
+"swirl"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim2.PNG rows 0-1"
+},
+{
+"path": "assets/fx/star-ring-gold.png",
+"name": "star ring gold",
+"frames": 15,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rune",
+"holy",
+"ring"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim2.PNG rows 2-3"
+},
+{
+"path": "assets/fx/shockwave-pink.png",
+"name": "shockwave pink",
+"frames": 14,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ring",
+"shockwave",
+"arcane"
+],
+"fps": 12,
+"loop": false,
+"src": "SpellFXAnim2.PNG rows 4-5"
+},
+{
+"path": "assets/fx/sparks-blue.png",
+"name": "sparks blue",
+"frames": 16,
+"fw": 32,
+"fh": 32,
+"cats": [
+"lightning",
+"ice",
+"explosion"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim2.PNG rows 14-15"
+},
+{
+"path": "assets/fx/sparks-red.png",
+"name": "sparks red",
+"frames": 16,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire",
+"explosion"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim2.PNG rows 16-17"
+},
+{
+"path": "assets/fx/bubbles-purple.png",
+"name": "bubbles purple",
+"frames": 20,
+"fw": 32,
+"fh": 32,
+"cats": [
+"poison",
+"arcane"
+],
+"fps": 10,
+"loop": true,
+"src": "SpellFXAnim2.PNG rows 18-20"
+},
+{
+"path": "assets/fx/vortex.png",
+"name": "vortex",
+"frames": 16,
+"fw": 32,
+"fh": 32,
+"cats": [
+"swirl",
+"arcane"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim3.PNG rows 2-3"
+},
+{
+"path": "assets/fx/target-shrink.png",
+"name": "target shrink",
+"frames": 16,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ring",
+"telegraph"
+],
+"fps": 12,
+"loop": false,
+"src": "SpellFXAnim3.PNG rows 8-9"
+},
+{
+"path": "assets/fx/rune-circle-pink.png",
+"name": "rune circle pink",
+"frames": 15,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rune",
+"ring",
+"arcane"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim3.PNG rows 12-13"
+},
+{
+"path": "assets/fx/rune-circle-blue.png",
+"name": "rune circle blue",
+"frames": 15,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rune",
+"ring",
+"ice"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim3.PNG rows 14-15"
+},
+{
+"path": "assets/fx/rune-circle-green.png",
+"name": "rune circle green",
+"frames": 15,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rune",
+"ring",
+"poison"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim3.PNG rows 16-17"
+},
+{
+"path": "assets/fx/rune-circle-orange.png",
+"name": "rune circle orange",
+"frames": 15,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rune",
+"ring",
+"fire"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim3.PNG rows 18-19"
+},
+{
+"path": "assets/fx/ring-burst-gold.png",
+"name": "ring burst gold",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ring",
+"holy",
+"explosion"
+],
+"fps": 12,
+"loop": false,
+"src": "SpellFXAnim4.PNG rows 0-0"
+},
+{
+"path": "assets/fx/pulse-pink.png",
+"name": "pulse pink",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"arcane"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim4.PNG rows 3-3"
+},
+{
+"path": "assets/fx/pulse-sun.png",
+"name": "pulse sun",
+"frames": 8,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire",
+"holy"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim4.PNG rows 4-4"
+},
+{
+"path": "assets/fx/rain-fire.png",
+"name": "rain fire",
+"frames": 24,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rain",
+"fire"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim4.PNG rows 12-14",
+"fit": "tile"
+},
+{
+"path": "assets/fx/rain-ice.png",
+"name": "rain ice",
+"frames": 24,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rain",
+"ice"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim4.PNG rows 15-17",
+"fit": "tile"
+},
+{
+"path": "assets/fx/rain-poison.png",
+"name": "rain poison",
+"frames": 24,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rain",
+"poison"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim4.PNG rows 18-20",
+"fit": "tile"
+},
+{
+"path": "assets/fx/rain-lightning.png",
+"name": "rain lightning",
+"frames": 24,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rain",
+"lightning"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim5.PNG rows 0-2",
+"fit": "tile"
+},
+{
+"path": "assets/fx/rain-arcane.png",
+"name": "rain arcane",
+"frames": 24,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rain",
+"arcane"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim5.PNG rows 3-5",
+"fit": "tile"
+},
+{
+"path": "assets/fx/rain-chaos.png",
+"name": "rain chaos",
+"frames": 24,
+"fw": 32,
+"fh": 32,
+"cats": [
+"rain",
+"arcane"
+],
+"fps": 12,
+"loop": true,
+"src": "SpellFXAnim5.PNG rows 6-8",
+"fit": "tile"
+},
+{
+"path": "assets/fx/explode-fire.png",
+"name": "explode fire",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire",
+"explosion"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 0"
+},
+{
+"path": "assets/fx/impact-white.png",
+"name": "impact white",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 1"
+},
+{
+"path": "assets/fx/impact-blue.png",
+"name": "impact blue",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ice",
+"lightning",
+"explosion"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 2"
+},
+{
+"path": "assets/fx/impact-green.png",
+"name": "impact green",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"poison",
+"explosion"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 3"
+},
+{
+"path": "assets/fx/splash-blood.png",
+"name": "splash blood",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"blood"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 4"
+},
+{
+"path": "assets/fx/shatter-ice.png",
+"name": "shatter ice",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ice",
+"explosion"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 5"
+},
+{
+"path": "assets/fx/splash-fire.png",
+"name": "splash fire",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire",
+"explosion"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 6"
+},
+{
+"path": "assets/fx/splat-acid.png",
+"name": "splat acid",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"poison"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 7"
+},
+{
+"path": "assets/fx/sonic-purple.png",
+"name": "sonic purple",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"shockwave",
+"arcane"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 8"
+},
+{
+"path": "assets/fx/impact-pink.png",
+"name": "impact pink",
+"frames": 3,
+"fw": 32,
+"fh": 32,
+"cats": [
+"arcane",
+"explosion"
+],
+"fps": 10,
+"loop": false,
+"src": "DamageFX.PNG row 9"
+},
+{
+"path": "assets/fx/arrow-red.png",
+"name": "arrow red",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 0 (east frame)"
+},
+{
+"path": "assets/fx/arrow-green.png",
+"name": "arrow green",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"poison",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 1 (east frame)"
+},
+{
+"path": "assets/fx/bolt-arcane-wave.png",
+"name": "bolt arcane wave",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"arcane",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 2 (east frame)"
+},
+{
+"path": "assets/fx/bolt-arcane.png",
+"name": "bolt arcane",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"arcane",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 3 (east frame)"
+},
+{
+"path": "assets/fx/glob-poison.png",
+"name": "glob poison",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"poison",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 4 (east frame)"
+},
+{
+"path": "assets/fx/dart-poison.png",
+"name": "dart poison",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"poison",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 5 (east frame)"
+},
+{
+"path": "assets/fx/fireball.png",
+"name": "fireball",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 6 (east frame)"
+},
+{
+"path": "assets/fx/bolt-fire.png",
+"name": "bolt fire",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"fire",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 7 (east frame)"
+},
+{
+"path": "assets/fx/iceball.png",
+"name": "iceball",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ice",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 8 (east frame)"
+},
+{
+"path": "assets/fx/bolt-ice.png",
+"name": "bolt ice",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"ice",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 9 (east frame)"
+},
+{
+"path": "assets/fx/bolt-lightning.png",
+"name": "bolt lightning",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"lightning",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 10 (east frame)"
+},
+{
+"path": "assets/fx/bolt-lightning-2.png",
+"name": "bolt lightning 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"lightning",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 11 (east frame)"
+},
+{
+"path": "assets/fx/pellet-white.png",
+"name": "pellet white",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 12 (east frame)"
+},
+{
+"path": "assets/fx/pellet-gold.png",
+"name": "pellet gold",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"holy",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 13 (east frame)"
+},
+{
+"path": "assets/fx/shuriken.png",
+"name": "shuriken",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 14 (east frame)"
+},
+{
+"path": "assets/fx/orb-shadow-spiked.png",
+"name": "orb shadow spiked",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"shadow",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 15 (east frame)"
+},
+{
+"path": "assets/fx/web-net.png",
+"name": "web net",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"web",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 16 (east frame)"
+},
+{
+"path": "assets/fx/orb-shadow.png",
+"name": "orb shadow",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"shadow",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 17 (east frame)"
+},
+{
+"path": "assets/fx/orb-spark.png",
+"name": "orb spark",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"lightning",
+"missile"
+],
+"face": true,
+"src": "SpellFXMissiles.PNG row 18 (east frame)"
+},
+{
+"path": "assets/fx/burst-red.png",
+"name": "burst red",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"fire"
+],
+"src": "dg_effects32.gif row 4 col 0"
+},
+{
+"path": "assets/fx/burst-green.png",
+"name": "burst green",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"poison"
+],
+"src": "dg_effects32.gif row 4 col 1"
+},
+{
+"path": "assets/fx/burst-blue.png",
+"name": "burst blue",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"ice"
+],
+"src": "dg_effects32.gif row 4 col 2"
+},
+{
+"path": "assets/fx/burst-cyan.png",
+"name": "burst cyan",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"ice"
+],
+"src": "dg_effects32.gif row 4 col 3"
+},
+{
+"path": "assets/fx/burst-orange.png",
+"name": "burst orange",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"fire"
+],
+"src": "dg_effects32.gif row 4 col 4"
+},
+{
+"path": "assets/fx/burst-grey.png",
+"name": "burst grey",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"smoke"
+],
+"src": "dg_effects32.gif row 4 col 5"
+},
+{
+"path": "assets/fx/burst-yellow.png",
+"name": "burst yellow",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"lightning",
+"holy"
+],
+"src": "dg_effects32.gif row 4 col 6"
+},
+{
+"path": "assets/fx/burst-orange-2.png",
+"name": "burst orange 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"fire"
+],
+"src": "dg_effects32.gif row 4 col 7"
+},
+{
+"path": "assets/fx/burst-grey-2.png",
+"name": "burst grey 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"smoke"
+],
+"src": "dg_effects32.gif row 4 col 8"
+},
+{
+"path": "assets/fx/burst-grey-3.png",
+"name": "burst grey 3",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"smoke"
+],
+"src": "dg_effects32.gif row 4 col 9"
+},
+{
+"path": "assets/fx/burst-grey-4.png",
+"name": "burst grey 4",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"smoke"
+],
+"src": "dg_effects32.gif row 4 col 10"
+},
+{
+"path": "assets/fx/burst-yellow-2.png",
+"name": "burst yellow 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"explosion",
+"lightning",
+"holy"
+],
+"src": "dg_effects32.gif row 4 col 11"
+},
+{
+"path": "assets/fx/cloud-red.png",
+"name": "cloud red",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"fire"
+],
+"src": "dg_effects32.gif row 5 col 0",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-green.png",
+"name": "cloud green",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"poison"
+],
+"src": "dg_effects32.gif row 5 col 1",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-blue.png",
+"name": "cloud blue",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"ice"
+],
+"src": "dg_effects32.gif row 5 col 2",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-cyan.png",
+"name": "cloud cyan",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"ice"
+],
+"src": "dg_effects32.gif row 5 col 3",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-orange.png",
+"name": "cloud orange",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"fire"
+],
+"src": "dg_effects32.gif row 5 col 4",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-grey.png",
+"name": "cloud grey",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"smoke"
+],
+"src": "dg_effects32.gif row 5 col 5",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-yellow.png",
+"name": "cloud yellow",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"lightning",
+"holy"
+],
+"src": "dg_effects32.gif row 5 col 6",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-grey-2.png",
+"name": "cloud grey 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"smoke"
+],
+"src": "dg_effects32.gif row 5 col 7",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-orange-2.png",
+"name": "cloud orange 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"fire"
+],
+"src": "dg_effects32.gif row 5 col 8",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-blue-2.png",
+"name": "cloud blue 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"ice"
+],
+"src": "dg_effects32.gif row 5 col 9",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-grey-3.png",
+"name": "cloud grey 3",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"smoke"
+],
+"src": "dg_effects32.gif row 5 col 10",
+"fit": "tile"
+},
+{
+"path": "assets/fx/cloud-grey-4.png",
+"name": "cloud grey 4",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"smoke",
+"cloud",
+"smoke"
+],
+"src": "dg_effects32.gif row 5 col 11",
+"fit": "tile"
+},
+{
+"path": "assets/fx/ball-red.png",
+"name": "ball red",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"fire"
+],
+"src": "dg_effects32.gif row 8 col 0"
+},
+{
+"path": "assets/fx/ball-green.png",
+"name": "ball green",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"poison"
+],
+"src": "dg_effects32.gif row 8 col 1"
+},
+{
+"path": "assets/fx/ball-blue.png",
+"name": "ball blue",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"ice"
+],
+"src": "dg_effects32.gif row 8 col 2"
+},
+{
+"path": "assets/fx/ball-yellow.png",
+"name": "ball yellow",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"lightning",
+"holy"
+],
+"src": "dg_effects32.gif row 8 col 3"
+},
+{
+"path": "assets/fx/ball-purple.png",
+"name": "ball purple",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"arcane",
+"shadow"
+],
+"src": "dg_effects32.gif row 8 col 4"
+},
+{
+"path": "assets/fx/ball-cyan.png",
+"name": "ball cyan",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"ice"
+],
+"src": "dg_effects32.gif row 8 col 5"
+},
+{
+"path": "assets/fx/ball-red-2.png",
+"name": "ball red 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"fire"
+],
+"src": "dg_effects32.gif row 8 col 6"
+},
+{
+"path": "assets/fx/ball-green-2.png",
+"name": "ball green 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"poison"
+],
+"src": "dg_effects32.gif row 8 col 7"
+},
+{
+"path": "assets/fx/ball-blue-2.png",
+"name": "ball blue 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"ice"
+],
+"src": "dg_effects32.gif row 8 col 8"
+},
+{
+"path": "assets/fx/ball-yellow-2.png",
+"name": "ball yellow 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"lightning",
+"holy"
+],
+"src": "dg_effects32.gif row 8 col 9"
+},
+{
+"path": "assets/fx/ball-purple-2.png",
+"name": "ball purple 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"arcane",
+"shadow"
+],
+"src": "dg_effects32.gif row 8 col 10"
+},
+{
+"path": "assets/fx/ball-cyan-2.png",
+"name": "ball cyan 2",
+"frames": 1,
+"fw": 32,
+"fh": 32,
+"cats": [
+"missile",
+"ice"
+],
+"src": "dg_effects32.gif row 8 col 11"
+},
+{
+"path": "assets/auras/Smoke.png",
+"name": "smoke puff",
+"cats": [
+"smoke"
+],
+"src": "existing client art",
+"frames": 4,
+"fw": 32,
+"fh": 32,
+"fps": 8
+},
+{
+"path": "assets/auras/full/Poison.png",
+"name": "poison aura",
+"cats": [
+"poison"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/auras/full/Whirlwind.png",
+"name": "whirlwind aura",
+"cats": [
+"swirl"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/auras/HP.png",
+"name": "aura hp",
+"cats": [
+"icon",
+"holy"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/auras/ATK.png",
+"name": "aura atk",
+"cats": [
+"icon"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/auras/INT.png",
+"name": "aura int",
+"cats": [
+"icon",
+"arcane"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/auras/LUCK.png",
+"name": "aura luck",
+"cats": [
+"icon"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/auras/STA.png",
+"name": "aura sta",
+"cats": [
+"icon"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/monsters/effects/Pool.png",
+"name": "fire pool",
+"cats": [
+"fire"
+],
+"src": "existing client art",
+"fit": "radius"
+},
+{
+"path": "assets/monsters/effects/Trap.png",
+"name": "trap",
+"cats": [
+"earth"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/monsters/effects/Portal.png",
+"name": "portal (effects)",
+"cats": [
+"arcane"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/monsters/effects/skull.png",
+"name": "skull",
+"cats": [
+"shadow"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Web.png",
+"name": "web",
+"cats": [
+"web"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Cloud.png",
+"name": "cloud web",
+"cats": [
+"web",
+"cloud"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Ice Crystal.png",
+"name": "ice crystal",
+"cats": [
+"ice"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Ice Torch.png",
+"name": "ice torch",
+"cats": [
+"ice"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Portal.png",
+"name": "portal",
+"cats": [
+"arcane"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Campfire.png",
+"name": "campfire",
+"cats": [
+"fire"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Hole.png",
+"name": "hole",
+"cats": [
+"earth",
+"shadow"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Target.png",
+"name": "target",
+"cats": [
+"telegraph"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Blood.png",
+"name": "blood",
+"cats": [
+"blood"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Blood2.png",
+"name": "blood 2",
+"cats": [
+"blood"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Skulls.png",
+"name": "skulls",
+"cats": [
+"shadow"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Rubble.png",
+"name": "rubble",
+"cats": [
+"earth"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/debris.png",
+"name": "debris",
+"cats": [
+"earth"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/world/objects/Crystal.png",
+"name": "crystal",
+"cats": [
+"ice",
+"arcane"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/ui/enchantment/0.png",
+"name": "enchant arm",
+"cats": [
+"icon"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/ui/enchantment/1.png",
+"name": "enchant brain",
+"cats": [
+"icon",
+"arcane"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/ui/enchantment/2.png",
+"name": "enchant shield",
+"cats": [
+"icon"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/gore/default/Blood.png",
+"name": "gore blood",
+"cats": [
+"blood"
+],
+"src": "existing client art"
+},
+{
+"path": "assets/gore/default/Blood2.png",
+"name": "gore blood 2",
+"cats": [
+"blood"
+],
+"src": "existing client art"
+}
+]
+}

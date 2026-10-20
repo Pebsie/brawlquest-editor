@@ -1,0 +1,6 @@
+Effect sprites in this folder are cut by tools/build_fx_sprites.py from the
+"Tome" tileset by David E. Gervais (CC BY 3.0, http://pousse.rapiere.free.fr/tome/),
+already credited on the login screen: SpellFXAnim1-5, SpellFXMissiles and
+DamageFX (DO_SysPics) and dg_effects32 (AngbandTk). Frames are 32x32, laid
+out left to right; index.json lists every sprite with its frame count, fps
+and categories. No generated art.

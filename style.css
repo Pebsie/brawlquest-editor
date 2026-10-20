@@ -133,3 +133,14 @@ img.missing{opacity:.25}
 .phead{grid-column:1/-1;border-top:1px solid #2e3440;padding-top:6px;margin-top:4px}
 .prim .top select{font-weight:600}
 .pill{font-size:11px;padding:1px 6px;border:1px solid #9cc6e8;border-radius:8px;background:#e8f3fc;color:#2b5d84}.pill.locked{border-color:#aaa;background:#eee;color:#555}
+
+/* effect sprites: strip thumbnails show frame 1 and play on hover */
+.pcell img.anim{object-fit:cover;object-position:0 0}
+.pcell:hover img.anim{animation:fxstrip .8s steps(var(--n),jump-none) infinite}
+@keyframes fxstrip{from{object-position:0 0}to{object-position:100% 0}}
+.fxedit{display:flex;flex-direction:column;gap:4px}
+.fxedit canvas.fxprev{border:1px solid #c5cad1;image-rendering:pixelated;background:#e9ecef}
+.fxname{font-size:13px;min-width:120px}
+.fxset{margin:2px 0}
+.fxrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0;font-size:13px}
+.fxrow .num{width:62px}

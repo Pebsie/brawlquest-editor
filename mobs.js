@@ -79,7 +79,13 @@ const PRIM_FIELDS = [
   ["spin", "Spin (deg/s)", "num", "orbit speed (default 90; negative = anticlockwise)", a => isZone(a) && a.move === "orbit"],
   ["path", "Path", "pts", "waypoints dx,dy; dx,dy ... from the zone's spawn point", a => isZone(a) && a.move === "path"],
   ["loop", "Loop", "chk", "walk back to the start and repeat", a => isZone(a) && a.move === "path"],
+  ["-", "Look", "head", "art for this primitive; blank = the default red telegraph / bolt. The danger outline is always drawn on top"],
+  ["sprite", "Sprite", "sprite", ""],
+  ["hitSprite", "Hit sprite", "sprite", "splat where the shot hits or stops (blank = the Visual / default)", isProj],
 ];
+const SPRITE_HINT = { zone: "drawn in the zone (fit radius = stretched to it, tile = repeated). Half strength during windup", soak: "drawn in the soak circle under the timer",
+  projectile: "the flying shot (fit scale = native size; Face turns it along its path)", spawn: "telegraph on each spawn spot during the cast",
+  suicide: "burst when the mob dies (sized to Radius)", effect: "splat on the target when the effect lands" };
 const fmtPts = p => (p || []).map(v => v.join(",")).join("; ");
 const parsePts = s => String(s || "").split(";").map(t => t.trim()).filter(Boolean).map(t => t.split(",").map(Number)).filter(p => p.length === 2 && p.every(Number.isFinite));
 
@@ -201,6 +207,12 @@ function patternEditor(form, e, initial, imgOf, collect) {
         el.value = a[k] || ""; el.addEventListener("change", () => set(el.value ? +el.value : ""));
         if (a[k] && !(S.c.enemies || []).some(x => x.id === +a[k])) el.append(h("option", { value: a[k] }, `missing enemy ${a[k]}`)), el.value = a[k];
       }
+      else if (type === "sprite") {
+        el = spriteEditor(() => a[k], v => set(v || ""), { face: isProj(a) && k === "sprite", over: zoneOrSoak(a) && k === "sprite", title: `${k === "hitSprite" ? "Hit sprite" : "Sprite"} for primitive #${i + 1} (${a.do})` });
+        el.dataset.key = k;
+        g.append(h("label", {}, lbl), h("div", {}, el, h("div", { class: "hint" }, hint || SPRITE_HINT[a.do] || "")));
+        continue;
+      }
       else if (type === "vis") { el = h("input", { type: "text", list: "shotVisuals", value: a[k] || "" }); el.style.width = "120px"; el.addEventListener("input", () => set(el.value.trim())); }
       else if (type === "pts") { el = txt(fmtPts(a[k]), "e.g. 0,-2; 2,0; 0,2"); el.addEventListener("input", () => { const p = parsePts(el.value); set(p.length ? p : ""); }); }
       else { el = h("select", {}, type.slice(4).split("|").map(o => h("option", { value: o }, o || "(none)"))); el.value = a[k] || ""; el.addEventListener("change", () => { set(el.value); draw(); }); }
@@ -298,7 +310,8 @@ function mobPreview(e, imgOf) {
     // spawn telegraph, then adds rising out of the ground over 0.4 s
     for (const c of st.casts) for (const [sx, sy] of c.spots || []) {
       const [x, y] = toScr(sx, sy), k = 1 - c.left / Math.max(1, c.total);
-      g.fillStyle = `rgba(120,140,190,${.15 + .25 * k})`; g.beginPath(); g.ellipse(x, y + sc * .3, sc * (.2 + .3 * k), sc * (.1 + .15 * k), 0, 0, Math.PI * 2); g.fill();
+      if (c.a.sprite) BQFX.draw(g, c.a.sprite, x, y + sc * .05, sc * .5, (c.total - c.left) / BQSim.TPS, { alpha: .5 + .5 * k, zoom: sc / 32 });
+      else { g.fillStyle = `rgba(120,140,190,${.15 + .25 * k})`; g.beginPath(); g.ellipse(x, y + sc * .3, sc * (.2 + .3 * k), sc * (.1 + .15 * k), 0, 0, Math.PI * 2); g.fill(); }
       g.strokeStyle = "#7d8fb8"; g.lineWidth = 1; g.beginPath(); g.ellipse(x, y + sc * .3, sc * .5, sc * .25, 0, 0, Math.PI * 2); g.stroke();
     }
     for (const a of st.adds) {
@@ -320,13 +333,21 @@ function mobPreview(e, imgOf) {
     for (const z of st.zones) {
       if (z.delay > 0) { g.setLineDash([3, 3]); g.lineWidth = 1; shape(z, null, "rgba(200,40,20,.35)"); g.setLineDash([]); continue; }
       g.lineWidth = 2;
-      if (z.windup > 0) { shape(z, "rgba(255,64,26,.18)", "rgba(255,110,50,.9)"); const k = Math.min(1, (z.windup0 - z.windup + (st.tick % BQSim.TPS) / BQSim.TPS) / Math.max(1, z.windup0)); shape(z, null, "rgba(255,110,50,.9)", .15 + .85 * k); }
-      else shape(z, "rgba(255,30,20,.45)", "rgba(220,40,20,1)");
+      // sprite (fx.js) instead of the red fill unless "over"; the outline stays
+      const fx = z.spr ? BQFX.norm(z.spr) : null, plain = !fx || fx.over, age = (st.tick - (z.born || 0) + acc) / BQSim.TPS;
+      const spr = al => { const [x, y] = toScr(z.x, z.y); BQFX.draw(g, fx, x, y, z.r * sc, age, { alpha: al, zoom: sc / 32 }); };
+      if (z.windup > 0) {
+        const k = Math.min(1, (z.windup0 - z.windup + (st.tick % BQSim.TPS) / BQSim.TPS) / Math.max(1, z.windup0));
+        if (plain) shape(z, "rgba(255,64,26,.18)", null);
+        if (fx) spr(.35 + .25 * k);
+        shape(z, null, "rgba(255,110,50,.9)"); shape(z, null, "rgba(255,110,50,.9)", .15 + .85 * k);
+      } else { if (plain) shape(z, "rgba(255,30,20,.45)", null); if (fx) spr(1); shape(z, null, "rgba(220,40,20,1)"); }
     }
     for (const s of st.soaks) {
       const [x, y] = toScr(s.x, s.y), k = 1 - s.left / s.duration;
       g.lineWidth = 1; g.setLineDash([4, 4]); g.strokeStyle = "rgba(160,120,0,.5)"; g.beginPath(); g.arc(x, y, s.fail * sc, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
-      g.fillStyle = "rgba(240,190,20,.35)"; g.beginPath(); g.moveTo(x, y); g.arc(x, y, s.r * sc, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); g.closePath(); g.fill();
+      if (s.spr) BQFX.draw(g, s.spr, x, y, s.r * sc, (st.tick - (s.born || 0) + acc) / BQSim.TPS, { zoom: sc / 32 });
+      g.fillStyle = s.spr && !BQFX.norm(s.spr).over ? "rgba(240,190,20,.2)" : "rgba(240,190,20,.35)"; g.beginPath(); g.moveTo(x, y); g.arc(x, y, s.r * sc, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); g.closePath(); g.fill();
       g.lineWidth = 2; g.strokeStyle = "#b8860b"; g.beginPath(); g.arc(x, y, s.r * sc, 0, Math.PI * 2); g.stroke();
     }
     for (const f of st.flashes) {
@@ -344,14 +365,16 @@ function mobPreview(e, imgOf) {
     for (const s of st.shots) {
       if (s.wait > 0) continue;
       const [x, y] = toScr(s.x - .5, s.y - .5);
-      if (s.visual === "web") webStar(g, x, y, Math.max(5, s.r * sc * 1.4), st.tick * .3);
+      if (s.spr) BQFX.draw(g, s.spr, x, y, Math.max(5, s.r * sc), (st.tick + acc) / BQSim.TPS, { fit: "scale", angle: Math.atan2(s.dy, s.dx), zoom: sc / 32 });
+      else if (s.visual === "web") webStar(g, x, y, Math.max(5, s.r * sc * 1.4), st.tick * .3);
       else { g.fillStyle = "#7a3d8c"; g.beginPath(); g.arc(x, y, Math.max(3, s.r * sc), 0, Math.PI * 2); g.fill(); }
     }
     for (const f of st.flashes) {
       if (!f.splat) continue;
       const k = (st.tick - f.t) / 12, [x, y] = toScr(f.splat.x - .5, f.splat.y - .5);
       g.globalAlpha = 1 - k;
-      if (f.splat.visual === "web" && webImg.complete && webImg.naturalWidth) { const w = sc * (.6 + .8 * Math.min(1, k * 3)); g.drawImage(webImg, x - w / 2, y - w / 2, w, w); }
+      if (f.splat.spr) { g.globalAlpha = 1; const r = f.splat.visual === "burst" ? (f.splat.r || 1.5) * sc : 24 * sc / 32; BQFX.draw(g, f.splat.spr, x, y, r, (st.tick - f.t + acc) / BQSim.TPS, { fit: f.splat.visual === "burst" ? "radius" : "scale", alpha: 1 - k * k, zoom: sc / 32 }); }
+      else if (f.splat.visual === "web" && webImg.complete && webImg.naturalWidth) { const w = sc * (.6 + .8 * Math.min(1, k * 3)); g.drawImage(webImg, x - w / 2, y - w / 2, w, w); }
       else if (f.splat.visual === "burst") { g.fillStyle = "rgba(255,140,60,.5)"; g.beginPath(); g.arc(x, y, (f.splat.r || 1.5) * sc * Math.min(1, .3 + k * 2), 0, Math.PI * 2); g.fill(); }
       else if (f.splat.visual === "poison") { g.fillStyle = "rgba(110,200,80,.7)"; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.beginPath(); g.arc(x + Math.cos(a) * 8 * k, y + Math.sin(a) * 5 * k - 10 * k, 3, 0, Math.PI * 2); g.fill(); } }
       else { g.strokeStyle = "#7a3d8c"; g.beginPath(); g.arc(x, y, 4 + 10 * k, 0, Math.PI * 2); g.stroke(); }
@@ -365,6 +388,7 @@ function mobPreview(e, imgOf) {
     g.fillStyle = mult < 1 ? "#6d8fcf" : "#2a62c9"; g.beginPath(); g.arc(px, py, sc * .35, 0, Math.PI * 2); g.fill();
     const defs = st.effectDefs;
     if (st.effects.some(e => (defs[e.id] || {}).Visual === "web") && webImg.complete && webImg.naturalWidth) g.drawImage(webImg, px - sc * .5, py - sc * .5, sc, sc);
+    for (const e of st.effects) { const v = (defs[e.id] || {}).Visual; if (v && BQFX.parse(v)) BQFX.draw(g, v, px, py, sc * .5, (st.tick + acc) / BQSim.TPS, { fit: "scale", zoom: sc / 32 }); }
     g.fillStyle = "#222"; g.font = "12px system-ui"; g.fillText("player (drag)", px + sc * .45, py + 4);
     st.effects.forEach((e, i) => { const d = defs[e.id] || {}; g.fillText(`${d.Name || "effect " + e.id} ${e.left.toFixed(1)}s${e.stacks > 1 ? " x" + e.stacks : ""}`, px + sc * .45, py + 18 + i * 14); });
     info.textContent = `t = ${(st.tick / BQSim.TPS).toFixed(1)}s · zones ${st.zones.length} · soaks ${st.soaks.length} · shots ${st.shots.length}` + (st.adds.length ? ` · adds ${st.adds.length}` : "") +
@@ -396,4 +420,51 @@ function mobPreview(e, imgOf) {
     setImage(v) { bossImg = new Image(); bossImg.src = assetURL(v); },
     get state() { return st; },
   };
+}
+
+// Effect sprite field (primitive forms and the Effects tab): live preview,
+// Pick… opens the sprite picker on the effect art, plus animation settings.
+// get() returns the stored definition; set(def or null).
+const fxPickerGroups = () => [...BQFX.groups(), { id: "objects", label: "World objects", entries: folderEntries("assets/world/objects/") },
+  { id: "items", label: "Items", entries: folderEntries("assets/items/") }, { id: "monsters", label: "Monsters", entries: folderEntries("assets/monsters/") },
+  { id: "all", label: "Everything", entries: assetPaths().map(v => ({ value: v })) }];
+const FX_LOOK_KEYS = ["scale", "tint", "alpha", "rot", "spin", "blend", "over", "face"];
+function spriteEditor(get, set, o = {}) {
+  const box = h("div", { class: "fxedit" });
+  const draw = () => {
+    const s = BQFX.parse(get());
+    const name = h("span", { class: "fxname" }, s ? (s.style ? "procedural: " + s.style : spriteLabel(s.img)) : "default (no sprite)");
+    const pick = () => openPicker({ title: o.title || "Effect sprite", groups: fxPickerGroups, group: "fx", recentKey: "fx", value: s ? (s.style ? "style:" + s.style : s.img) : "",
+      onPick: v => {
+        if (!v) return;
+        const cur = BQFX.parse(get()), keep = {}; if (cur) for (const k of FX_LOOK_KEYS) if (cur[k] !== undefined) keep[k] = cur[k];
+        const def = v.startsWith("style:") ? { style: v.slice(6) } : BQFX.fromManifest(v);
+        set(BQFX.clean({ ...def, ...keep, ...(def.face && keep.face === undefined ? { face: true } : {}) })); draw();
+      } });
+    const head = h("div", { class: "bar", style: "margin:0;align-items:center" }, BQFX.previewCanvas(get, 56), name,
+      h("button", { class: "fxpick", onclick: pick }, s ? "Change…" : "Pick sprite…"), s ? h("button", { onclick: () => { set(null); draw(); } }, "Clear") : null);
+    box.replaceChildren(head);
+    if (!s) return;
+    const upd = (k, v) => { const c = { ...BQFX.parse(get()) }; if (v === "" || v === undefined || v === false) delete c[k]; else c[k] = v; set(BQFX.clean(c)); };
+    const numIn = (k, step, ph) => { const el = h("input", { type: "number", class: "num", step, placeholder: ph || "", value: s[k] ?? "", "data-fx": k }); el.addEventListener("input", () => upd(k, el.value === "" ? "" : +el.value)); return el; };
+    const chk = (k, on) => { const el = h("input", { type: "checkbox", "data-fx": k }); el.checked = on === undefined ? !!s[k] : on; return el; };
+    const fit = h("select", { "data-fx": "fit" }, ["", "radius", "tile", "scale"].map(v => h("option", { value: v }, v || "(default)"))); fit.value = s.fit || "";
+    fit.addEventListener("change", () => upd("fit", fit.value));
+    const tintOn = chk("tint", !!s.tint), tint = h("input", { type: "color", value: s.tint || "#ffffff", "data-fx": "tintColor" });
+    tintOn.addEventListener("change", () => upd("tint", tintOn.checked ? tint.value : "")); tint.addEventListener("input", () => { tintOn.checked = true; upd("tint", tint.value); });
+    const loop = chk("loop", s.loop !== false); loop.addEventListener("change", () => upd("loop", loop.checked ? "" : false));
+    const add = chk("blend", s.blend === "add"); add.addEventListener("change", () => upd("blend", add.checked ? "add" : ""));
+    const row = (...k) => h("div", { class: "fxrow" }, ...k);
+    const parts = [];
+    if (!s.style) parts.push(row("frames", numIn("frames", "1", "1"), "frame w", numIn("fw", "1", "auto"), "h", numIn("fh", "1", "auto"), "cols", numIn("cols", "1", "all"), "fps", numIn("fps", "1", "10"), h("label", {}, loop, " loop")));
+    parts.push(row("fit", fit, "scale", numIn("scale", "0.1", "1"), "alpha", numIn("alpha", "0.05", "1"), "rotate°", numIn("rot", "1", "0"), "spin°/s", numIn("spin", "1", "0")));
+    const extra = [h("label", {}, tintOn, " tint "), tint, h("label", {}, add, " additive")];
+    if (o.face) { const f = chk("face", s.face !== false && !!s.face); f.addEventListener("change", () => upd("face", f.checked)); extra.push(h("label", {}, f, " face travel")); }
+    if (o.over) { const ov = chk("over"); ov.addEventListener("change", () => upd("over", ov.checked)); extra.push(h("label", {}, ov, " keep red fill under it")); }
+    parts.push(row(...extra));
+    box.append(h("details", { class: "fxset" }, h("summary", { class: "hint" }, "Animation and look"), ...parts,
+      h("div", { class: "hint" }, "Frames are cut left to right (cols per row for a grid sheet). fit: radius stretches one frame over the circle, tile repeats it at native size clipped to the circle, scale draws it at native size × scale.")));
+  };
+  draw();
+  return box;
 }

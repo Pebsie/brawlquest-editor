@@ -12,6 +12,7 @@ const BQSim = (() => {
   const MOVES = ["", "dir", "out", "follow", "orbit", "path"];
   const KINDS = ["zone", "soak", "projectile", "spawn", "suicide", "effect"];
   const MAX_CAST = 10;
+  const FX = typeof BQFX !== "undefined" ? BQFX : (typeof require !== "undefined" ? require("./fx.js") : null);
   const SCRIPT_KEYS = ["count", "formation", "spacing", "offsets", "anchor", "angle", "aim", "delay", "stagger", "move", "speed", "spin", "path", "loop"];
 
   function scripted(a) {
@@ -52,7 +53,7 @@ const BQSim = (() => {
     const duration = a.duration >= 1 ? a.duration : 4, damage = a.damage >= 1 ? a.damage : 10;
     let zx = p.x, zy = p.y;
     if (a.tile) { zx = Math.floor(p.x + .5); zy = Math.floor(p.y + .5); }
-    const base = { r: radius, damage, left: duration, duration, windup: Math.max(0, a.windup || 0), windup0: Math.max(0, a.windup || 0), once: !!a.once, tile: !!a.tile, delay: 0 };
+    const base = { r: radius, damage, left: duration, duration, windup: Math.max(0, a.windup || 0), windup0: Math.max(0, a.windup || 0), once: !!a.once, tile: !!a.tile, delay: 0, spr: a.sprite || null, born: st.tick };
     if (!scripted(a)) { st.zones.push({ ...base, id: ++st.seq, x: zx, y: zy }); return; }
     const [bx, by] = centre(st.boss), fromBoss = a.anchor === "boss";
     const ax = fromBoss ? bx : p.x, ay = fromBoss ? by : p.y;
@@ -79,7 +80,7 @@ const BQSim = (() => {
     let radius = a.radius > 0 ? a.radius : 1.5; if (radius > 3) radius = 3;
     const duration = a.duration >= 1 ? a.duration : 4, damage = a.damage >= 1 ? a.damage : 40;
     let fail = a.failRadius; if (!(fail >= radius)) fail = 8;
-    st.soaks.push({ id: ++st.seq, x: st.player.x, y: st.player.y, r: radius, damage, left: duration, duration, fail });
+    st.soaks.push({ id: ++st.seq, x: st.player.x, y: st.player.y, r: radius, damage, left: duration, duration, fail, spr: a.sprite || null, born: st.tick });
   }
   function toward(z, x, y, step) { const dx = x - z.x, dy = y - z.y, d = Math.hypot(dx, dy); if (d <= step || d < 1e-9) { z.x = x; z.y = y; } else { z.x += dx / d * step; z.y += dy / d * step; } }
   function motion(st, dt) {
@@ -184,11 +185,11 @@ const BQSim = (() => {
       if (a.damage > 0) {
         const r = a.radius > 0 ? a.radius : 1.5;
         if (Math.hypot(st.player.x - cx, st.player.y - cy) <= r) hit(st, a.damage, "suicide");
-        st.flashes.push({ t: st.tick, splat: { x: cx + .5, y: cy + .5, visual: "burst", r } });
       }
+      if (a.damage > 0 || a.sprite) st.flashes.push({ t: st.tick, splat: { x: cx + .5, y: cy + .5, visual: "burst", r: a.radius > 0 ? a.radius : 1.5, spr: a.sprite || null } });
       st.bossDead = true; st.casts = [];
     } else if (a.do === "effect") {
-      if (inEffectRange(st, a) && applyEffect(st, a.effect) && a.visual) st.flashes.push({ t: st.tick, splat: { x: st.player.x + .5, y: st.player.y + .5, visual: a.visual, hit: true } });
+      if (inEffectRange(st, a) && applyEffect(st, a.effect) && (a.visual || a.sprite)) st.flashes.push({ t: st.tick, splat: { x: st.player.x + .5, y: st.player.y + .5, visual: a.visual || "", hit: true, spr: a.sprite || null } });
     }
   }
   // interrupt: cancels an interruptible cast (the server's interruptCast).
@@ -207,7 +208,7 @@ const BQSim = (() => {
     for (let i = 0; i < n; i++) {
       const ang = a.formation === "ring" ? base + 2 * Math.PI * i / n : base + (i - (n - 1) / 2) * spread * Math.PI / 180;
       st.shots.push({ id: ++st.seq, x: ox, y: oy, dx: Math.cos(ang), dy: Math.sin(ang), speed: d.speed, r: d.r, rng: d.rng, traveled: 0,
-        damage: Math.max(0, a.damage || 0), effect: a.effect || 0, visual: a.visual || "", wait: i * stagger });
+        damage: Math.max(0, a.damage || 0), effect: a.effect || 0, visual: a.visual || "", wait: i * stagger, spr: a.sprite || null, hitSpr: a.hitSprite || null });
     }
   }
   function shotHitsPlayer(st, x, y, r) {
@@ -250,7 +251,7 @@ const BQSim = (() => {
         else if (s.traveled >= s.rng - 1e-9) done = true;
       }
       if (!done) { live.push(s); continue; }
-      const sp = { t: st.tick, splat: { x: hit ? st.player.x + .5 : s.x, y: hit ? st.player.y + .5 : s.y, visual: s.visual, hit } };
+      const sp = { t: st.tick, splat: { x: hit ? st.player.x + .5 : s.x, y: hit ? st.player.y + .5 : s.y, visual: s.visual, hit, spr: s.hitSpr } };
       if (hit) { if (s.damage > 0) hit_(st, s.damage, "projectile"); if (s.effect) applyEffect(st, s.effect); }
       st.flashes.push(sp);
     }
@@ -300,6 +301,11 @@ const BQSim = (() => {
     if (a.interruptible) out.interruptible = true;
     if (a.name) out.name = String(a.name);
     if (+a.first > 0) out.first = Math.trunc(+a.first);
+    // sprite: art for the zone / soak / shot / spawn telegraph / burst / splat
+    // (fx.js); hitSprite: a projectile's splat. Unset = the default look.
+    const spr = FX && FX.clean(a.sprite);
+    if (spr) out.sprite = spr;
+    if (kind === "projectile") { const hs = FX && FX.clean(a.hitSprite); if (hs) out.hitSprite = hs; }
     if (kind === "spawn") {
       if (+a.enemy > 0) out.enemy = Math.trunc(+a.enemy);
       if ((+a.count || 0) > 1) out.count = Math.trunc(+a.count);
@@ -354,6 +360,7 @@ const BQSim = (() => {
     if (!KINDS.includes(a.do)) throw new Error(w + `only ${KINDS.map(k => '"' + k + '"').join(", ")} exist (got "${a.do}")`);
     if (!(a.every >= 1)) throw new Error(w + "every must be at least 1 second");
     if (a.castTime !== undefined && !(a.castTime >= 0 && a.castTime <= MAX_CAST)) throw new Error(w + "castTime must be 0 to 10 seconds");
+    if (FX) { FX.validate(a.sprite, w + "sprite"); FX.validate(a.hitSprite, w + "hit sprite"); }
     if (a.do === "spawn" && !(a.enemy > 0)) throw new Error(w + "spawn needs an enemy");
     if (a.do === "effect" && !(a.effect > 0)) throw new Error(w + "effect needs an effect");
     if (a.formation && !FORMATIONS.includes(a.formation)) throw new Error(w + "unknown formation " + a.formation);

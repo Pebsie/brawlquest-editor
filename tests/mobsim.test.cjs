@@ -68,4 +68,17 @@ for (let i = 0; i < 30; i++) S.step(st);
 ok(st.effects.length === 1, "effect lands after a 0.5 s cast within the mob's Range");
 let bad = ""; try { S.validate(S.clean({ do: "spawn", every: 3 }), 0); } catch (e) { bad = e.message; }
 ok(/needs an enemy/.test(bad), "validate: spawn needs an enemy");
+// effect sprites (fx.js): cleaned for storage, carried to zones / shots / splats
+const ring = { img: "assets/fx/ring-burst-fire.png", frames: 8, fps: 12, junk: 1, scale: 1, tint: "FF8800" };
+ok(JSON.stringify(S.clean({ every: 6, do: "zone", radius: .75, count: 8, formation: "ring", anchor: "boss", sprite: ring }).sprite) === '{"img":"assets/fx/ring-burst-fire.png","frames":8,"fps":12,"tint":"#ff8800"}', "sprite cleaned: unknown keys and defaults dropped");
+ok(S.clean({ every: 6, do: "zone", hitSprite: ring }).hitSprite === undefined && S.clean({ every: 6, do: "projectile", hitSprite: ring }).hitSprite.frames === 8, "hitSprite only on projectiles");
+ok(S.clean({ every: 6, do: "spawn", enemy: 2, sprite: { style: "runes" } }).sprite.style === "runes" && S.clean({ every: 6, do: "zone", sprite: { style: "nope" } }).sprite === undefined, "procedural styles kept, unknown dropped");
+st = run([S.clean({ every: 6, do: "zone", radius: .75, count: 8, formation: "ring", anchor: "boss", spacing: 2, sprite: ring })], 1);
+ok(st.zones.length === 8 && st.zones.every(z => z.spr && z.spr.img === ring.img), "all 8 ring zones carry the sprite");
+st = run([S.clean({ every: 6, do: "projectile", castTime: .5, speed: 10, range: 8, sprite: { img: "assets/fx/fireball.png", face: true }, hitSprite: { img: "assets/fx/explode-fire.png", frames: 3 } })], 2.2);
+ok(st.flashes.some(f => f.splat && f.splat.spr && f.splat.spr.frames === 3), "projectile splat uses the hit sprite");
+st = run([S.clean({ every: 2, do: "suicide", radius: 2, sprite: { style: "shockwave" } })], 1.1);
+ok(st.bossDead && st.flashes.some(f => f.splat && f.splat.visual === "burst" && f.splat.r === 2 && f.splat.spr.style === "shockwave"), "suicide with a sprite and no damage still bursts (sized to Radius)");
+st = run([S.clean({ every: 6, do: "zone", radius: 1 })], 1);
+ok(st.zones[0].spr === null, "no sprite: default look");
 process.exit(fails ? 1 : 0);
