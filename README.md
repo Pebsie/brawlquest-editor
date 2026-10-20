@@ -219,6 +219,17 @@ client) by the client's `tools/build_fx_sprites.py`; existing client art
   sprite on all". `content/migrations/2026-10-20-node-portraits.sql` (API repo)
   clears the copies older editors saved.
 
+## Reach steps and the sleep visual
+
+- A quest step of type `reach` (walk within Radius tiles of X,Y) shows a small
+  map of the world around its target with the completion radius drawn as the
+  blue ring players see in game. Click a tile on it to move the target there;
+  typing X, Y or Radius redraws it. "open on map" jumps to the full map. Press
+  Save on the quest to store it.
+- Effects tab, Visual: `sleep` makes the affected player lie down with Zs over
+  their head and stand back up when it ends. Effects with a `stun` modifier
+  do this by default when Visual is blank; set Visual to `none` to turn it off.
+
 ## Navigation
 
 NPCs, quests and dialogue are linked both ways: an NPC lists the quests it

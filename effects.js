@@ -67,7 +67,7 @@ function effectForm(form, e) {
     Duration: +f.Duration.value, Stacking: stacking.value, MaxStacks: +f.MaxStacks.value, Modifiers: JSON.stringify(mods) });
   const users = e.id ? BQ.effectUsers(e.id) : [];
   form.append(h("h2", {}, e.id ? `${e.Name} (effect ${e.id})` : "New effect"),
-    h("datalist", { id: "effectVisuals" }, h("option", { value: "web" })),
+    h("datalist", { id: "effectVisuals" }, ...["web", "poison", "sleep", "none"].map(v => h("option", { value: v }))),
     h("div", { class: "grid" },
       ...field("Name", f.Name),
       ...field("Description", h("div", {}, f.Description, h("span", { class: "hint" }, "shown in the in-game tooltip"))),
@@ -75,7 +75,7 @@ function effectForm(form, e) {
       ...field("Duration (s)", f.Duration),
       ...field("Stacking", h("div", {}, stacking, stackHint)),
       ...field("Max stacks", h("div", {}, f.MaxStacks, h("span", { class: "hint" }, " for stack / extend"))),
-      ...field("Visual", h("div", {}, f.Visual, h("span", { class: "hint" }, " tag the client draws on the affected body: web, poison (blank = none), or pick a sprite:"), visSprite,
+      ...field("Visual", h("div", {}, f.Visual, h("span", { class: "hint" }, " tag the client draws on the affected body: web, poison, sleep (lies down with Zs over the head). Blank = none, except a stun effect lies down (sleep) unless set to none. Or pick a sprite:"), visSprite,
         h("div", { class: "hint" }, "A sprite is drawn over the body at native size × scale (fit is ignored); it replaces the tag."))),
       h("label", {}, "Modifiers"), h("div", {}, modBox,
         h("button", { onclick: () => { mods.push({ type: "move_speed", mult: 0.5 }); drawMods(); } }, "+ Modifier"))),

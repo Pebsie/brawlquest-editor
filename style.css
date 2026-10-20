@@ -151,3 +151,5 @@ img.missing{opacity:.25}
 .node .portrait{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0}
 .node .portrait img.sprite{width:32px;height:32px}
 .node .povr code{font-size:12px}
+.reachbox { margin: 4px 0; }
+.reachbox canvas.reachmap { display: block; border: 1px solid #555; cursor: crosshair; image-rendering: pixelated; }
