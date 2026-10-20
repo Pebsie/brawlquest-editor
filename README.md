@@ -139,7 +139,7 @@ API and this editor also create it when missing).
   Duration (s), Stacking (`refresh`: timer restarts; `stack`: +1 stack up to Max
   stacks, modifiers per stack; `extend`: add Duration up to Duration x Max
   stacks; `ignore`: no change while active), Max stacks, Visual (client
-  overlay on the affected body: `web`) and Modifiers:
+  overlay on the affected body: `web`, `poison` or an effect sprite) and Modifiers:
   * `move_speed` `mult` (0.5 = half speed, up to 3). The server caps player
     movement by the combined multiplier and the client walks at it.
   * `stun`: no movement.
@@ -157,6 +157,47 @@ API and this editor also create it when missing).
   the dragged player (name, seconds left, move multiplier).
 
 URL: `#effect/ID`.
+
+## Effect sprites
+
+Every primitive form has a **Look** section with a **Sprite** field (projectiles
+also a **Hit sprite**): Pick sprite… opens the sprite picker on the effect art
+(`assets/fx/index.json`: All effects, a chip per category such as fire, ice,
+poison, lightning, web, explosion, ring, rune, smoke, missile, plus
+`procedural`), with search, recent picks and hover-animated thumbnails. The
+small canvas next to it plays the sprite with the red danger outline, and the
+Mobs preview draws it in place. Blank = the default look.
+
+Stored in the primitive JSON as `sprite` / `hitSprite`, e.g.
+`"sprite":{"img":"assets/fx/ring-burst-fire.png","frames":8,"fps":12}`. Keys:
+
+* `img` (a client image) or `style` (procedural, drawn in code by the client
+  and here: `ringpulse`, `runes`, `shockwave`, `swirl`, `embers`).
+* `frames` (cut left to right), `fw`/`fh` frame size (default: the image
+  split evenly), `cols` (frames per row for a grid sheet), `fps` (10), `loop`
+  (default true; false plays once and holds the last frame).
+* `fit`: `radius` (one frame stretched over the circle; default for zones,
+  soaks, spawn spots, bursts), `tile` (repeated at native size, clipped to the
+  circle), `scale` (native size x `scale`; default for shots, splats and effect
+  overlays).
+* `scale`, `tint` (`#rrggbb`), `alpha`, `rot` (degrees), `spin` (degrees/s),
+  `blend: "add"`, `face` (projectile turns along its path), `over` (zone/soak:
+  keep the red/blue fill under the sprite).
+
+Where it shows: zone (half strength during windup, full when it lands),
+soak (under the timer pie), projectile shot, hit splat (`hitSprite`), spawn
+telegraph on each spot, suicide burst (sized to Radius), effect primitive
+splat on the target. The telegraph outline is always drawn on top. The API
+passes the definition through (max 600 characters) and sends each distinct
+sprite once per snapshot.
+
+The Effects tab Visual takes a tag (`web`, `poison`) or a sprite (stored as
+JSON or a .png path in the same column) drawn over the affected body; the
+Icon picker lists the still effect icons.
+
+`assets/fx/` is cut from the Gervais tome tiles (CC BY 3.0, credited in the
+client) by the client's `tools/build_fx_sprites.py`; existing client art
+(auras, smoke, webs, portals, blood, enchantment glows) is listed in place.
 
 ## Navigation
 

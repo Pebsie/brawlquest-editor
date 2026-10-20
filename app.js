@@ -428,7 +428,7 @@ function spritePicker(o) {
   const cell = (e, small) => {
     const c = h("button", { type: "button", class: "pcell" + (e.value === box.value ? " sel" : "") + (small ? " small" : ""), title: e.value || o.noneLabel || "none",
       onclick: () => pick(e.value) },
-      e.img === null ? h("span", { class: "pnone" }, "×") : h("img", { src: assetURL(e.img || e.value), loading: "lazy", alt: "", onerror: ev => { ev.target.classList.add("missing"); } }),
+      e.img === null ? h("span", { class: "pnone" }, "×") : h("img", { src: e.raw ? e.img : assetURL(e.img || e.value), loading: "lazy", alt: "", class: e.anim ? "anim" : "", style: e.anim ? `--n:${e.anim}` : "", onerror: ev => { ev.target.classList.add("missing"); } }),
       h("span", { class: "plabel" }, e.label || spriteLabel(e.value)), e.note ? h("span", { class: "pnote" }, e.note) : null);
     c.dataset.value = e.value;
     return c;

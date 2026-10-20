@@ -30,7 +30,14 @@ function effectForm(form, e) {
   }
   if (e.id) syncHash("#effect/" + e.id);
   const f = { Name: txt(e.Name), Description: area(e.Description), Duration: h("input", { type: "number", class: "num", step: "0.1", value: e.Duration ?? 3 }),
-    MaxStacks: num(e.MaxStacks || 1), Visual: h("input", { type: "text", list: "effectVisuals", value: e.Visual || "" }) };
+    MaxStacks: num(e.MaxStacks || 1), Visual: h("input", { type: "text", list: "effectVisuals", placeholder: "tag, e.g. web", value: BQFX.parse(e.Visual) ? "" : e.Visual || "" }) };
+  // Visual: a tag the client codes (web, poison) or an effect sprite, stored
+  // in the same column as JSON (or a bare .png path).
+  let visual = e.Visual || "";
+  const visSprite = spriteEditor(() => (BQFX.parse(visual) ? visual : null), v => { visual = v ? (Object.keys(v).length === 1 && v.img ? v.img : JSON.stringify(v)) : ""; if (v) f.Visual.value = ""; },
+    { title: `Overlay sprite for ${e.Name || "this effect"}` });
+  visSprite.dataset.key = "VisualSprite";
+  f.Visual.addEventListener("input", () => { visual = f.Visual.value.trim(); });
   const stacking = h("select", {}, Object.keys(STACK_HELP).map(k => h("option", { value: k }, k)));
   stacking.value = e.Stacking || "refresh";
   const stackHint = h("span", { class: "hint" }, " " + STACK_HELP[stacking.value]);
@@ -56,7 +63,7 @@ function effectForm(form, e) {
       h("button", { class: "danger", onclick: () => { mods.splice(i, 1); drawMods(); } }, "×"));
   }));
   drawMods();
-  const collect = () => ({ id: e.id || 0, Name: f.Name.value, Description: f.Description.value, Icon: icon, Visual: f.Visual.value.trim(),
+  const collect = () => ({ id: e.id || 0, Name: f.Name.value, Description: f.Description.value, Icon: icon, Visual: visual.trim(),
     Duration: +f.Duration.value, Stacking: stacking.value, MaxStacks: +f.MaxStacks.value, Modifiers: JSON.stringify(mods) });
   const users = e.id ? BQ.effectUsers(e.id) : [];
   form.append(h("h2", {}, e.id ? `${e.Name} (effect ${e.id})` : "New effect"),
@@ -68,7 +75,8 @@ function effectForm(form, e) {
       ...field("Duration (s)", f.Duration),
       ...field("Stacking", h("div", {}, stacking, stackHint)),
       ...field("Max stacks", h("div", {}, f.MaxStacks, h("span", { class: "hint" }, " for stack / extend"))),
-      ...field("Visual", h("div", {}, f.Visual, h("span", { class: "hint" }, " overlay the client draws on the affected body: web (blank = none)"))),
+      ...field("Visual", h("div", {}, f.Visual, h("span", { class: "hint" }, " tag the client draws on the affected body: web, poison (blank = none), or pick a sprite:"), visSprite,
+        h("div", { class: "hint" }, "A sprite is drawn over the body at native size × scale (fit is ignored); it replaces the tag."))),
       h("label", {}, "Modifiers"), h("div", {}, modBox,
         h("button", { onclick: () => { mods.push({ type: "move_speed", mult: 0.5 }); drawMods(); } }, "+ Modifier"))),
     h("div", { class: "bar" },
@@ -81,5 +89,5 @@ function effectForm(form, e) {
     h("p", { class: "hint" }, "Modifier types are coded in the API (effects.go): move_speed, stun, dot. The server caps player movement by the combined move speed, and the client walks at the same speed."));
 }
 
-const effectIconGroups = () => [{ id: "objects", label: "World objects", entries: folderEntries("assets/world/objects/") },
+const effectIconGroups = () => [{ id: "fx", label: "Effect icons", entries: BQFX.manifest.sprites.filter(s => s.frames <= 1).map(s => ({ value: s.path, label: s.name, note: s.cats.join(", ") })) }, { id: "objects", label: "World objects", entries: folderEntries("assets/world/objects/") },
   { id: "items", label: "Items", entries: folderEntries("assets/items/") }, { id: "monsters", label: "Monsters", entries: folderEntries("assets/monsters/") }];
