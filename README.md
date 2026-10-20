@@ -28,6 +28,9 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
      and the quest lines each NPC speaks.
    * **Items**: name, type, Val, image (with preview), description, worth,
      attributes (stat bonuses), subtype, cooldown. Shows what drops it.
+   * **Mobs**: list/search, create, edit, duplicate and delete enemies (every
+     `enemies` column; sprite from the thumbnail picker) and their boss pattern
+     primitives, with a live preview. See [Mobs and boss patterns](#mobs-and-boss-patterns).
    * **Loot**: each enemy's drops (item, chance %, amount ± variance).
 3. **Save .db** downloads the edited database. Back up the server's copy, replace
    `bq-content.db` with it and restart the API.
@@ -53,6 +56,42 @@ Plots are leased building land outside Foundation Forest (table `plot`,
 * Opening an older database adds the `Agent` column in the editor's copy; Export
   SQL then includes the same idempotent schema step.
 
+## Mobs and boss patterns
+
+Mobs and bosses use only the `boss_patterns` primitives the API runs
+(`enemies.go`, `zone_script.go`): **zone** and **soak**.
+
+* **Mob fields**: Name, ATK, sprite, HP, Range, CanMove, XP, Width, Height,
+  Attributes, AttackSpeed (if the database has it). Renaming moves the mob's map
+  spawns (`world.Enemy`) along. Delete is refused while it is placed on the map;
+  otherwise its loot, legacy spells and patterns go with it. Legacy
+  `enemySpells` are listed read-only.
+* **Primitives**: + Zone, + Soak or a preset; each has a form, Duplicate,
+  Remove and up/down. **Save patterns** writes them as one JSON array in one
+  `boss_patterns` row for that enemy (its lowest existing row id is kept; new
+  rows start at 2000). Fields at their default are left out, so old rows
+  round-trip unchanged.
+* **Zone**: every, damage, duration, radius, maxRadius, windup, once, tile.
+* **Zone scripting** (all optional; a zone with none is the original single zone):
+  * `count`, `formation` (ring, line, spread, list), `spacing`, `offsets`
+    (`[[dx,dy],...]` for list), `anchor` (target or boss), `angle` (degrees,
+    0 east, 90 south), `aim` (add the boss-to-target bearing)
+  * `delay` (seconds before the first appears), `stagger` (seconds between
+    each zone of the cast)
+  * `move`: dir (along angle), out (away from the anchor; negative speed pulls
+    in), follow (homes on the target), orbit (round the boss, `spin` deg/s),
+    path (`path` waypoints from the spawn point, `loop`); `speed` tiles/s
+    (default 2, max 12). Max 24 zones per cast.
+* **Soak**: every, damage, duration, radius, failRadius.
+* **Preview**: the boss in the middle and a player you can drag; zones, soaks,
+  telegraphs and movement run on the server's timing (casts and damage once a
+  second, movement 20 times a second). Dashed outlines are zones still waiting
+  on delay/stagger (the game does not show them yet). Wheel zooms.
+* Moving zones need the API and client from `new-ui` with zone scripting
+  (2026-10-20). Older servers ignore the new keys and cast one still zone.
+
+URL: `#mob/ID`.
+
 ## Navigation
 
 NPCs, quests and dialogue are linked both ways: an NPC lists the quests it
@@ -63,7 +102,7 @@ dialogue in order. Dialogue nodes link back to the NPCs that reach them.
 
 Every view has a URL, so Back/Forward work and links can be shared (after the
 same .db is opened): `#npc/ID`, `#quest/ID`, `#quest/ID/line/Offer`,
-`#quest/ID/step/N`, `#dialog/IDENTIFIER`, `#item/ID`, `#loot/ENEMYID`, `#map/X,Y`.
+`#quest/ID/step/N`, `#dialog/IDENTIFIER`, `#item/ID`, `#mob/ID`, `#loot/ENEMYID`, `#map/X,Y`.
 
 ## Sprites
 
@@ -87,3 +126,6 @@ The client repo is private, so GitHub raw / jsDelivr links don't work.
 * The previous editor is kept in [`legacy/`](legacy/).
 
 Local preview: `python3 -m http.server 8080`, then open http://localhost:8080/.
+
+Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
+`tests/headless-mobs.mjs` and `tests/headless-map-plots.mjs` (Playwright, see their headers).

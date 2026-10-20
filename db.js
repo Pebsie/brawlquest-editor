@@ -5,7 +5,10 @@
 const BQ = (() => {
   let SQL = null, db = null;
   const st = { name: "", changes: [], dirty: false, warnings: [] };
-  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot"];
+  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies"];
+  // Same table the API creates at startup (enemies.go); one JSON array of
+  // primitives per row, all rows of an enemy run together.
+  const PATTERN_TABLE = "CREATE TABLE IF NOT EXISTS boss_patterns (id INTEGER PRIMARY KEY, EnemyID INTEGER NOT NULL, Pattern TEXT NOT NULL);";
   const PLOT_MAX = 12;
   const PLOT_COLS = "id INTEGER PRIMARY KEY, Name TEXT NOT NULL DEFAULT '', X INTEGER NOT NULL, Y INTEGER NOT NULL, W INTEGER NOT NULL DEFAULT 8, H INTEGER NOT NULL DEFAULT 8, Rent INTEGER NOT NULL DEFAULT 50, MinLevel INTEGER NOT NULL DEFAULT 1, Agent INTEGER NOT NULL DEFAULT 0";
   const PLOT_TABLE = `CREATE TABLE IF NOT EXISTS plot (${PLOT_COLS});`;
@@ -99,6 +102,16 @@ const BQ = (() => {
       if (forest) throw new Error(`${forest} tile(s) are in Foundation Forest, where building is free: plots go outside it`);
       const onMap = q("SELECT COUNT(DISTINCT X || ',' || Y) AS n FROM world WHERE X BETWEEN ? AND ? AND Y BETWEEN ? AND ?", area)[0].n;
       if (onMap < row.W * row.H) throw new Error(`${row.W * row.H - onMap} tile(s) are off the map`);
+    } else if (table === "enemies") {
+      need("Name", "name is required");
+      row.Name = String(row.Name).trim();
+      if (q("SELECT 1 FROM enemies WHERE Name = ? AND id <> ?", [row.Name, row.id]).length) throw new Error("another enemy is already called " + row.Name);
+      for (const k of ["ATK", "HP", "Range", "XP", "Width", "Height", "AttackSpeed"]) if (k in row) row[k] = Math.trunc(+row[k] || 0);
+      row.CanMove = row.CanMove ? 1 : 0;
+      if (row.HP < 1) throw new Error("HP must be at least 1");
+      if (row.Width < 1 || row.Height < 1 || row.Width > 8 || row.Height > 8) throw new Error("width and height are 1 to 8 tiles");
+      if ("AttackSpeed" in row && row.AttackSpeed < 1) row.AttackSpeed = 1;
+      if (!String(row.Attributes ?? "").trim()) row.Attributes = "None";
     } else if (table === "loot") {
       if (!q("SELECT id FROM enemies WHERE id=?", [row.EnemyID]).length) throw new Error("unknown enemy");
       if (!q("SELECT id FROM items WHERE id=?", [row.ItemID]).length) throw new Error("unknown item");
@@ -113,7 +126,10 @@ const BQ = (() => {
         plots: has("plot") ? q("SELECT * FROM plot ORDER BY Name") : [],
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
-        enemies: q("SELECT id, Name, Image, HP, ATK, XP, Width, Height FROM enemies ORDER BY Name"),
+        enemies: q("SELECT * FROM enemies ORDER BY Name"),
+        enemyCols: cols("enemies"),
+        patterns: has("boss_patterns") ? q("SELECT * FROM boss_patterns ORDER BY EnemyID, id") : [],
+        spells: has("enemySpells") ? q("SELECT * FROM enemySpells ORDER BY EnemyID, id") : [],
         items: q("SELECT * FROM items ORDER BY Name"),
         loot: q("SELECT * FROM loot ORDER BY EnemyID, id"),
         itemTypes: q("SELECT DISTINCT Type FROM items WHERE Type <> '' ORDER BY Type").map(r => r.Type),
@@ -149,7 +165,13 @@ const BQ = (() => {
       }
       validate(table, row);
       const names = allowed.filter(c => c in row);
-      apply([`INSERT OR REPLACE INTO ${table} (${names.join(", ")}) VALUES (${names.map(c => lit(row[c])).join(", ")});`], `save ${table} ${id}`);
+      const stmts = [`INSERT OR REPLACE INTO ${table} (${names.join(", ")}) VALUES (${names.map(c => lit(row[c])).join(", ")});`];
+      if (table === "enemies") {
+        // Map spawns name the enemy (world.Enemy): a rename moves them along.
+        const old = q("SELECT Name FROM enemies WHERE id = ?", [id])[0];
+        if (old && old.Name && old.Name !== row.Name) stmts.push(`UPDATE world SET Enemy = ${lit(row.Name)} WHERE Enemy = ${lit(old.Name)};`);
+      }
+      apply(stmts, `save ${table} ${id}`);
       return { id };
     },
     delete({ table, id }) {
@@ -157,8 +179,31 @@ const BQ = (() => {
       const s = [`DELETE FROM ${table} WHERE id = ${+id};`];
       if (table === "npc") s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE NPC = ${+id});`, `DELETE FROM routine WHERE NPC = ${+id};`);
       if (table === "items") s.push(`DELETE FROM loot WHERE ItemID = ${+id};`);
+      if (table === "enemies") {
+        const e = q("SELECT Name FROM enemies WHERE id = ?", [+id])[0];
+        const placed = e ? q("SELECT COUNT(*) AS n FROM world WHERE Enemy = ?", [e.Name])[0].n : 0;
+        if (placed) throw new Error(`${e.Name} is placed on ${placed} map tile(s): clear those spawns first (Map > Select)`);
+        s.push(`DELETE FROM loot WHERE EnemyID = ${+id};`, `DELETE FROM enemySpells WHERE EnemyID = ${+id};`, PATTERN_TABLE, `DELETE FROM boss_patterns WHERE EnemyID = ${+id};`);
+      }
       apply(s, `delete ${table} ${id}`);
       return { ok: true };
+    },
+    // Replace an enemy's boss_patterns with one row holding these primitives
+    // (zone / soak only). Keeps the enemy's lowest existing row id.
+    patterns({ enemyId, actions }) {
+      enemyId = Math.trunc(+enemyId);
+      if (!(enemyId > 0) || !q("SELECT 1 FROM enemies WHERE id = ?", [enemyId]).length) throw new Error("save the enemy first");
+      const clean = actions.map(BQSim.clean);
+      clean.forEach(BQSim.validate);
+      const s = [PATTERN_TABLE];
+      const rows = has("boss_patterns") ? q("SELECT id FROM boss_patterns WHERE EnemyID = ? ORDER BY id", [enemyId]) : [];
+      let id = rows.length ? rows[0].id : 0;
+      if (!id) id = has("boss_patterns") ? Math.max(2000, q("SELECT IFNULL(MAX(id),0)+1 AS n FROM boss_patterns")[0].n) : 2000;
+      s.push(`DELETE FROM boss_patterns WHERE EnemyID = ${enemyId} AND id <> ${id};`);
+      if (clean.length) s.push(`INSERT OR REPLACE INTO boss_patterns (id, EnemyID, Pattern) VALUES (${id}, ${enemyId}, ${lit(JSON.stringify(clean))});`);
+      else s.push(`DELETE FROM boss_patterns WHERE id = ${id};`);
+      apply(s, `boss patterns for enemy ${enemyId}`);
+      return { id, actions: clean };
     },
     tiles(patches) {
       if (patches.length > 5000) throw new Error("too many tiles in one save");

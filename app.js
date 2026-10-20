@@ -22,7 +22,7 @@ function status(msg, err) { const s = $("#status"); s.textContent = msg; s.class
 async function api(path, body) {
   if (!BQ.has()) throw new Error("Open a bq-content.db first");
   const fn = { content: () => BQ.api.content(), world: () => BQ.api.world(), save: () => BQ.api.save(body),
-    delete: () => BQ.api.delete(body), tiles: () => BQ.api.tiles(body),
+    delete: () => BQ.api.delete(body), tiles: () => BQ.api.tiles(body), patterns: () => BQ.api.patterns(body),
     export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()) }[path];
   const out = fn();
   syncFile();
@@ -1270,7 +1270,7 @@ function nodeOwners(ident) {
   }
   return S.ownerCache[ident] || [];
 }
-const TABS = ["map", "quests", "npcs", "items", "loot", "export", "sprites"];
+const TABS = ["map", "quests", "npcs", "items", "mobs", "loot", "export", "sprites"];
 async function applyRoute() {
   if (!BQ.has() || !S.c) return;
   const [kind, a, b, c] = location.hash.slice(1).split("/").map(decodeURIComponent);
@@ -1284,6 +1284,7 @@ async function applyRoute() {
   }
   else if (kind === "item") { S.tab = "items"; S.item = { id: +a }; }
   else if (kind === "loot") { S.tab = "loot"; S.lootEnemy = { id: +a }; }
+  else if (kind === "mob") { S.tab = "mobs"; S.mob = { id: +a }; }
   else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p, Agent: +p.Agent || 0 }; M.plotOrig = JSON.stringify(plotRow(M.plotSel)); S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
   else if (kind === "map") { S.tab = "map"; if (a) { const [x, y] = a.split(",").map(Number); S.focus = { x, y }; M.sel = { x, y }; } }
   else if (TABS.includes(kind)) S.tab = kind;
@@ -1369,7 +1370,7 @@ function switchTab(t) { go("#" + t); }
 
 async function renderTab() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
-  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|dialog|map|plot)\//.test(location.hash)) syncHash("#" + S.tab);
+  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|mob|dialog|map|plot)\//.test(location.hash)) syncHash("#" + S.tab);
   const m = $("#main"); m.textContent = ""; window.onmousemove = window.onmouseup = null; M.cv = null;
   try {
     if (S.tab === "map") { if (!S.world) { status("Loading world…"); await loadWorld(); status(""); } renderMap(m); }
@@ -1377,6 +1378,7 @@ async function renderTab() {
     else if (S.tab === "npcs") renderNPCs(m);
     else if (S.tab === "items") renderItems(m);
     else if (S.tab === "loot") renderLoot(m);
+    else if (S.tab === "mobs") renderMobs(m);
     else if (S.tab === "sprites") renderSprites(m);
     else if (S.tab === "dialog") renderOrphan(m);
     else await renderExport(m);
