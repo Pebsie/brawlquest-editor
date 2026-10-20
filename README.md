@@ -31,6 +31,8 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
    * **Mobs**: list/search, create, edit, duplicate and delete enemies (every
      `enemies` column; sprite from the thumbnail picker) and their boss pattern
      primitives, with a live preview. See [Mobs and boss patterns](#mobs-and-boss-patterns).
+   * **Effects**: status effects (buffs/debuffs) that projectiles apply. See
+     [Effects and projectiles](#effects-and-projectiles).
    * **Loot**: each enemy's drops (item, chance %, amount ± variance).
 3. **Save .db** downloads the edited database. Back up the server's copy, replace
    `bq-content.db` with it and restart the API.
@@ -92,6 +94,35 @@ Mobs and bosses use only the `boss_patterns` primitives the API runs
 
 URL: `#mob/ID`.
 
+## Effects and projectiles
+
+The API's effects engine (`effects.go`) codes what each modifier type does;
+which effects exist and their numbers are content in the `effects` table
+(`content/migrations/2026-10-20-webbed-up.sql` adds it with **Webbed Up**; the
+API and this editor also create it when missing).
+
+* **Effects tab**: Name, Description (in-game tooltip), Icon (sprite picker),
+  Duration (s), Stacking (`refresh`: timer restarts; `stack`: +1 stack up to Max
+  stacks, modifiers per stack; `extend`: add Duration up to Duration x Max
+  stacks; `ignore`: no change while active), Max stacks, Visual (client
+  overlay on the affected body: `web`) and Modifiers:
+  * `move_speed` `mult` (0.5 = half speed, up to 3). The server caps player
+    movement by the combined multiplier and the client walks at it.
+  * `stun`: no movement.
+  * `dot` `damage` every `every` seconds.
+  "Applied by" lists the mobs whose patterns use it; an effect in use can't be deleted.
+* **projectile primitive** (Mobs tab, + Projectile or the Spider web presets):
+  `every`, `cast` (telegraph seconds, aim locked at its start), `speed`
+  (tiles/s, default 6), `range` (default 6; not cast beyond it), `radius` (hit
+  size, default 0.3), `damage` (0 = effect only), `effect` (an Effects id),
+  `visual` (`web`), `count` + `spread` (fan, degrees) or `formation: ring`,
+  `angle`, `stagger` (ticks between shots). Walls stop shots; the first
+  player touched is hit.
+* The preview shows the cast line, the shots, the splat, and the effect on
+  the dragged player (name, seconds left, move multiplier).
+
+URL: `#effect/ID`.
+
 ## Navigation
 
 NPCs, quests and dialogue are linked both ways: an NPC lists the quests it
@@ -102,7 +133,7 @@ dialogue in order. Dialogue nodes link back to the NPCs that reach them.
 
 Every view has a URL, so Back/Forward work and links can be shared (after the
 same .db is opened): `#npc/ID`, `#quest/ID`, `#quest/ID/line/Offer`,
-`#quest/ID/step/N`, `#dialog/IDENTIFIER`, `#item/ID`, `#mob/ID`, `#loot/ENEMYID`, `#map/X,Y`.
+`#quest/ID/step/N`, `#dialog/IDENTIFIER`, `#item/ID`, `#mob/ID`, `#effect/ID`, `#loot/ENEMYID`, `#map/X,Y`.
 
 ## Sprites
 
@@ -128,4 +159,4 @@ The client repo is private, so GitHub raw / jsDelivr links don't work.
 Local preview: `python3 -m http.server 8080`, then open http://localhost:8080/.
 
 Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
-`tests/headless-mobs.mjs` and `tests/headless-map-plots.mjs` (Playwright, see their headers).
+`tests/headless-mobs.mjs`, `tests/headless-effects.mjs` and `tests/headless-map-plots.mjs` (Playwright, see their headers).

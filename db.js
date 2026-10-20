@@ -5,7 +5,11 @@
 const BQ = (() => {
   let SQL = null, db = null;
   const st = { name: "", changes: [], dirty: false, warnings: [] };
-  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies"];
+  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects"];
+  // Status effects (the API's effects.go creates the same table at startup).
+  const EFFECT_TABLE = "CREATE TABLE IF NOT EXISTS effects (id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Description TEXT NOT NULL DEFAULT '', Icon TEXT NOT NULL DEFAULT '', Visual TEXT NOT NULL DEFAULT '', Duration REAL NOT NULL DEFAULT 3, Stacking TEXT NOT NULL DEFAULT 'refresh', MaxStacks INTEGER NOT NULL DEFAULT 1, Modifiers TEXT NOT NULL DEFAULT '[]');";
+  const STACKING = ["refresh", "stack", "extend", "ignore"];
+  const MOD_TYPES = ["move_speed", "stun", "dot"];
   // Same table the API creates at startup (enemies.go); one JSON array of
   // primitives per row, all rows of an enemy run together.
   const PATTERN_TABLE = "CREATE TABLE IF NOT EXISTS boss_patterns (id INTEGER PRIMARY KEY, EnemyID INTEGER NOT NULL, Pattern TEXT NOT NULL);";
@@ -43,6 +47,7 @@ const BQ = (() => {
     const w = [];
     if (!has("quest_def")) w.push("No quest_def table: this database has not had the questline migration (content/migrations/2026-10-13-questline.sql). Quests are read-only empty until you apply it with sqlite3. Items, NPCs, dialogue, loot and the map still work.");
     if (!has("plot")) w.push("No plot table yet (content/migrations/2026-10-14-plots.sql). It is created for you when you save your first plot.");
+    if (!has("effects")) w.push("No effects table yet (content/migrations/2026-10-20-webbed-up.sql adds it with Webbed Up). It is created for you when you save your first effect.");
     if (has("quest")) w.push("Old 'quest' table found: the questline migration drops it.");
     return w;
   }
@@ -112,10 +117,40 @@ const BQ = (() => {
       if (row.Width < 1 || row.Height < 1 || row.Width > 8 || row.Height > 8) throw new Error("width and height are 1 to 8 tiles");
       if ("AttackSpeed" in row && row.AttackSpeed < 1) row.AttackSpeed = 1;
       if (!String(row.Attributes ?? "").trim()) row.Attributes = "None";
+    } else if (table === "effects") {
+      need("Name", "name is required");
+      row.Name = String(row.Name).trim();
+      if (q("SELECT 1 FROM effects WHERE Name = ? AND id <> ?", [row.Name, row.id]).length) throw new Error("another effect is already called " + row.Name);
+      row.Duration = +row.Duration;
+      if (!(row.Duration > 0 && row.Duration <= 600)) throw new Error("duration is 0.1 to 600 seconds");
+      if (!STACKING.includes(row.Stacking)) throw new Error("stacking must be one of " + STACKING.join(", "));
+      row.MaxStacks = Math.trunc(+row.MaxStacks || 1);
+      if (row.MaxStacks < 1 || row.MaxStacks > 20) throw new Error("max stacks is 1 to 20");
+      let mods;
+      try { mods = JSON.parse(row.Modifiers || "[]"); } catch (e) { throw new Error("modifiers are not valid JSON: " + e.message); }
+      if (!Array.isArray(mods)) throw new Error("modifiers must be a JSON array");
+      mods.forEach((m, i) => {
+        if (!MOD_TYPES.includes(m.type)) throw new Error(`modifier ${i + 1}: type must be one of ${MOD_TYPES.join(", ")}`);
+        if (m.type === "move_speed" && !(m.mult >= 0 && m.mult <= 3)) throw new Error(`modifier ${i + 1}: move_speed mult is 0 to 3 (0.5 = half speed)`);
+        if (m.type === "dot" && !(m.damage > 0)) throw new Error(`modifier ${i + 1}: dot needs damage`);
+      });
+      row.Modifiers = JSON.stringify(mods);
+      for (const k of ["Description", "Icon", "Visual"]) row[k] = String(row[k] ?? "");
     } else if (table === "loot") {
       if (!q("SELECT id FROM enemies WHERE id=?", [row.EnemyID]).length) throw new Error("unknown enemy");
       if (!q("SELECT id FROM items WHERE id=?", [row.ItemID]).length) throw new Error("unknown item");
     }
+  }
+
+  // Enemy names whose boss_patterns apply this effect.
+  function effectUsers(id) {
+    if (!has("boss_patterns")) return [];
+    const out = [];
+    for (const r of q("SELECT p.Pattern, e.Name FROM boss_patterns p LEFT JOIN enemies e ON e.id = p.EnemyID")) {
+      let a; try { a = JSON.parse(r.Pattern); } catch { continue; }
+      if (Array.isArray(a) && a.some(x => +x.effect === id)) out.push(r.Name || "?");
+    }
+    return out;
   }
 
   const api = {
@@ -128,6 +163,7 @@ const BQ = (() => {
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
         enemies: q("SELECT * FROM enemies ORDER BY Name"),
         enemyCols: cols("enemies"),
+        effects: has("effects") ? q("SELECT * FROM effects ORDER BY Name") : [],
         patterns: has("boss_patterns") ? q("SELECT * FROM boss_patterns ORDER BY EnemyID, id") : [],
         spells: has("enemySpells") ? q("SELECT * FROM enemySpells ORDER BY EnemyID, id") : [],
         items: q("SELECT * FROM items ORDER BY Name"),
@@ -153,6 +189,7 @@ const BQ = (() => {
       if (!EDITABLE.includes(table)) throw new Error("table not editable: " + table);
       if (table === "quest_def" && !has("quest_def")) throw new Error("This database has no quest_def table. Apply the questline migration first.");
       if (table === "plot" && !has("plot")) apply([PLOT_TABLE], "create plot table");
+      if (table === "effects" && !has("effects")) apply([EFFECT_TABLE], "create effects table");
       if (table === "plot") row.Agent = +row.Agent || 0;
       const allowed = cols(table);
       for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
@@ -179,6 +216,10 @@ const BQ = (() => {
       const s = [`DELETE FROM ${table} WHERE id = ${+id};`];
       if (table === "npc") s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE NPC = ${+id});`, `DELETE FROM routine WHERE NPC = ${+id};`);
       if (table === "items") s.push(`DELETE FROM loot WHERE ItemID = ${+id};`);
+      if (table === "effects") {
+        const users = effectUsers(+id);
+        if (users.length) throw new Error(`used by ${users.join(", ")}: remove it from their patterns first`);
+      }
       if (table === "enemies") {
         const e = q("SELECT Name FROM enemies WHERE id = ?", [+id])[0];
         const placed = e ? q("SELECT COUNT(*) AS n FROM world WHERE Enemy = ?", [e.Name])[0].n : 0;
@@ -195,6 +236,7 @@ const BQ = (() => {
       if (!(enemyId > 0) || !q("SELECT 1 FROM enemies WHERE id = ?", [enemyId]).length) throw new Error("save the enemy first");
       const clean = actions.map(BQSim.clean);
       clean.forEach(BQSim.validate);
+      clean.forEach((a, i) => { if (a.effect && !(has("effects") && q("SELECT 1 FROM effects WHERE id = ?", [a.effect]).length)) throw new Error(`primitive ${i + 1}: no effect ${a.effect} (make it in the Effects tab)`); });
       const s = [PATTERN_TABLE];
       const rows = has("boss_patterns") ? q("SELECT id FROM boss_patterns WHERE EnemyID = ? ORDER BY id", [enemyId]) : [];
       let id = rows.length ? rows[0].id : 0;
@@ -235,7 +277,7 @@ const BQ = (() => {
   };
 
   return {
-    init, open, api, st, has: () => !!db,
+    init, open, api, st, has: () => !!db, effectUsers: id => effectUsers(id),
     bytes: () => db.export(),
   };
 })();
