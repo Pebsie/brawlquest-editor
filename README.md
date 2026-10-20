@@ -199,6 +199,26 @@ Icon picker lists the still effect icons.
 client) by the client's `tools/build_fx_sprites.py`; existing client art
 (auras, smoke, webs, portals, blood, enchantment glows) is listed in place.
 
+## Quest dialogue and portraits
+
+* **Quest dialogue, in order** (Quests tab): every line is editable in place.
+  Click the text or "edit": a growing text box opens; Enter or Save writes it,
+  Shift+Enter adds a line break, Esc or Cancel drops it. The lines are all
+  `quest_def` text: offer = `Offer`, "On accepting" = `Accept`, in progress =
+  `Progress`, complete = `Complete`, "(step N)" = that talk step's `Line` inside
+  `Steps`. Saving writes only that field to the stored quest (marked unsaved
+  for Save .db / Export SQL) and to the form above; other unsaved form edits
+  are left for the quest's own Save. Tokens such as `{SHIELD}` stay as typed.
+  The talk step's Line box below is kept in step both ways.
+* **Portraits**: the game's conversation panel shows the node's `ImgPath` if it
+  is set, otherwise the speaking NPC's sprite. Each node shows "Portrait: NPC
+  sprite (...)" or "override ..." with Override… / Use NPC sprite. Save node no
+  longer copies the NPC sprite into the node, new nodes start blank, and
+  changing an NPC's sprite clears nodes in its tree that still hold the old
+  one. The NPC page lists nodes that override the portrait, with "Use the NPC
+  sprite on all". `content/migrations/2026-10-20-node-portraits.sql` (API repo)
+  clears the copies older editors saved.
+
 ## Navigation
 
 NPCs, quests and dialogue are linked both ways: an NPC lists the quests it

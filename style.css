@@ -144,3 +144,10 @@ img.missing{opacity:.25}
 .fxset{margin:2px 0}
 .fxrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0;font-size:13px}
 .fxrow .num{width:62px}
+/* quest dialogue: inline line editing */
+.bubble .btext{cursor:text;white-space:pre-wrap}
+.bubble .btext:hover{background:#252c38}
+.bubble textarea.bedit{display:block;width:100%;min-height:44px;margin-top:4px;resize:vertical;overflow:hidden;font:inherit;box-sizing:border-box}
+.node .portrait{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0}
+.node .portrait img.sprite{width:32px;height:32px}
+.node .povr code{font-size:12px}
