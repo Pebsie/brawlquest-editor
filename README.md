@@ -65,7 +65,10 @@ Mobs and bosses use only the `boss_patterns` primitives the API runs
 **soak**, **projectile**, **spawn**, **suicide** and **effect**.
 
 * **Mob fields**: Name, ATK, sprite, HP, Range, CanMove, XP, Width, Height,
-  Attributes, AttackSpeed (if the database has it). Renaming moves the mob's map
+  Attributes, AttackSpeed (if the database has it), KnockbackResist (0 = full
+  knockback from player hits, 1 = immune; bosses are 1 after the 2026-10-20
+  boss-knockback migration, which the editor also applies to an older copy
+  it opens and includes in Export SQL). Renaming moves the mob's map
   spawns (`world.Enemy`) along. Delete is refused while it is placed on the map;
   otherwise its loot, legacy spells and patterns go with it. It is also
   refused while another mob's spawn primitive summons it. Legacy

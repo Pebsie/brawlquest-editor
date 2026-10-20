@@ -21,6 +21,14 @@ const BQ = (() => {
   const PLOT_UPGRADE = [PLOT_TABLE, "DROP TABLE IF EXISTS plot_upgrade;", `CREATE TABLE plot_upgrade (${PLOT_COLS});`,
     "INSERT INTO plot_upgrade (id, Name, X, Y, W, H, Rent, MinLevel, Agent) SELECT p.id, p.Name, p.X, p.Y, p.W, p.H, p.Rent, p.MinLevel, IFNULL((SELECT Agent FROM plot q WHERE q.id = p.id), 0) FROM plot p, (SELECT 0 AS Agent) d;",
     "DROP TABLE plot;", "ALTER TABLE plot_upgrade RENAME TO plot;"];
+  // Same as the API's content/migrations/2026-10-20-boss-knockback.sql: adds
+  // enemies.KnockbackResist (0 = full knockback, 1 = immune), bosses (Old
+  // World Crystal loot, the Rift Colossus) immune, and is safe to run twice.
+  const ENEMY_COLS = "id INTEGER PRIMARY KEY, Name TEXT, ATK INTEGER, Image TEXT, HP INTEGER, Range INTEGER, CanMove BOOL, XP INTEGER, Width INTEGER DEFAULT 1, Height INTEGER DEFAULT 1, Attributes TEXT DEFAULT 'None', AttackSpeed INTEGER NOT NULL DEFAULT 1, KnockbackResist REAL NOT NULL DEFAULT 0";
+  const ENEMY_KB_UPGRADE = ["DROP TABLE IF EXISTS enemies_upgrade;", `CREATE TABLE enemies_upgrade (${ENEMY_COLS});`,
+    "INSERT INTO enemies_upgrade (id, Name, ATK, Image, HP, Range, CanMove, XP, Width, Height, Attributes, AttackSpeed, KnockbackResist) SELECT e.id, e.Name, e.ATK, e.Image, e.HP, e.Range, e.CanMove, e.XP, e.Width, e.Height, e.Attributes, IFNULL((SELECT AttackSpeed FROM enemies q WHERE q.id = e.id), 1), IFNULL((SELECT KnockbackResist FROM enemies q WHERE q.id = e.id), 0) FROM enemies e, (SELECT 1 AS AttackSpeed, 0 AS KnockbackResist) d;",
+    "DROP TABLE enemies;", "ALTER TABLE enemies_upgrade RENAME TO enemies;",
+    "UPDATE enemies SET KnockbackResist = 1 WHERE KnockbackResist = 0 AND (id IN (SELECT EnemyID FROM loot WHERE ItemID = 53) OR Name = 'Rift Colossus');"];
   const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
   const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
 
@@ -31,8 +39,13 @@ const BQ = (() => {
     await init();
     if (db) db.close();
     db = new SQL.Database(new Uint8Array(buf));
-    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false;
+    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false;
     st.warnings = checkSchema();
+    if (!cols("enemies").includes("KnockbackResist")) {
+      db.exec("BEGIN;" + ENEMY_KB_UPGRADE.join("\n") + "COMMIT;");
+      st.enemiesUpgraded = true;
+      st.warnings.push("Added the enemies.KnockbackResist column (0 = full knockback, 1 = immune; bosses set to 1) to this copy. The server needs content/migrations/2026-10-20-boss-knockback.sql; Export SQL includes the same step.");
+    }
     if (has("plot") && !cols("plot").includes("Agent")) {
       db.exec("BEGIN;" + PLOT_UPGRADE.join("\n") + "COMMIT;");
       st.plotUpgraded = true;
@@ -116,6 +129,11 @@ const BQ = (() => {
       if (row.HP < 1) throw new Error("HP must be at least 1");
       if (row.Width < 1 || row.Height < 1 || row.Width > 8 || row.Height > 8) throw new Error("width and height are 1 to 8 tiles");
       if ("AttackSpeed" in row && row.AttackSpeed < 1) row.AttackSpeed = 1;
+      if ("KnockbackResist" in row) {
+        const kb = +row.KnockbackResist;
+        if (!(kb >= 0 && kb <= 1)) throw new Error("knockback resist is 0 (full knockback) to 1 (immune)");
+        row.KnockbackResist = kb;
+      }
       if (!String(row.Attributes ?? "").trim()) row.Attributes = "None";
     } else if (table === "effects") {
       need("Name", "name is required");
@@ -276,7 +294,9 @@ const BQ = (() => {
         "-- Apply: cp bq-content.db bq-content.db.bak && sqlite3 bq-content.db < this-file.sql\n" +
         "-- Statements are INSERT OR REPLACE / UPDATE by key, so applying twice is safe.\n.bail on\nBEGIN;\n";
       const plots = st.plotUpgraded || st.changes.some(c => /\bplot\b/.test(c));
-      const schema = plots ? "-- plot table with the Agent column (as content/migrations/2026-10-19-plot-agents.sql)\n" + PLOT_UPGRADE.join("\n") + "\n" : "";
+      let schema = plots ? "-- plot table with the Agent column (as content/migrations/2026-10-19-plot-agents.sql)\n" + PLOT_UPGRADE.join("\n") + "\n" : "";
+      if (st.enemiesUpgraded || st.changes.some(c => /INTO enemies\b/.test(c)))
+        schema += "-- enemies.KnockbackResist (as content/migrations/2026-10-20-boss-knockback.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
       return { sql: head + schema + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
     },
     clearExport() { st.changes = []; return { ok: true }; },

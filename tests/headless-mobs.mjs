@@ -46,6 +46,19 @@ await p.click(".form .bar button.primary");
 await p.waitForTimeout(300);
 ok(await p.evaluate(n => S.c.enemies.find(e => e.Name === n).Image, "Test Bullet Lord") === val, "sprite picked and saved: " + val);
 
+// Knockback resist (enemies.KnockbackResist): bosses immune, tunable 0..1
+ok(await p.evaluate(() => S.c.enemyCols.includes("KnockbackResist")), "enemies have the KnockbackResist column");
+ok(await p.evaluate(() => S.c.enemies.filter(e => e.KnockbackResist === 1).some(e => e.Name === "Skeleton King")), "bosses are knockback immune (Skeleton King = 1)");
+ok(await p.evaluate(() => S.c.enemies.find(e => e.Name === "Spider").KnockbackResist === 0), "normal mobs keep full knockback (Spider = 0)");
+const kbIn = ".form .grid input[type=number][max='1']";
+ok(await p.$eval(kbIn, e => e.value) === "0", "new mob defaults to full knockback");
+await p.fill(kbIn, "2");
+await p.click(".form .bar button.primary"); await p.waitForTimeout(300);
+ok(/knockback resist is 0/.test(await p.textContent("#status")), "out-of-range knockback refused");
+await p.fill(kbIn, "0.75");
+await p.click(".form .bar button.primary"); await p.waitForTimeout(300);
+ok(await p.evaluate(n => S.c.enemies.find(e => e.Name === n).KnockbackResist, "Test Bullet Lord") === 0.75, "knockback resist 0.75 saved");
+
 // Primitives: preset ring, add zone, edit, scripted move, reorder
 await p.selectOption(".mobprims select:not([data-key])", "Ring burst");
 await p.click(".mobprims button:has-text('+ Zone')");
@@ -96,6 +109,7 @@ await p.click("#tabs button[data-tab=export]");
 await p.waitForSelector("h2:has-text('Export changes')");
 const sql = await p.textContent(".form > pre.sql");
 ok(/CREATE TABLE IF NOT EXISTS boss_patterns/.test(sql) && /INSERT OR REPLACE INTO enemies/.test(sql) && /DELETE FROM boss_patterns WHERE EnemyID/.test(sql), "Export SQL has the enemy and pattern statements");
+ok(/KnockbackResist REAL NOT NULL DEFAULT 0/.test(sql) && sql.indexOf("enemies_upgrade") < sql.indexOf("INSERT OR REPLACE INTO enemies"), "Export SQL adds KnockbackResist before the enemy rows");
 fs.writeFileSync(OUT + "/mobs-export.sql", sql);
 ok(errs.length === 0, "no page errors " + errs.join(" | "));
 await b.close();
