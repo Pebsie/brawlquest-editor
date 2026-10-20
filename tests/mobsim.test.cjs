@@ -35,6 +35,37 @@ const s2 = S.create({ boss: { x: 0, y: 0 }, player: { x: 4, y: 0 }, patterns: []
 S.applyEffect(s2, 2); S.applyEffect(s2, 2);
 for (let i = 0; i < 20; i++) S.step(s2);
 ok(s2.damage === 8 && s2.effects[0].stacks === 2, "dot x2 stacks after 1s");
-ok(JSON.stringify(S.clean({ every: 5, do: "projectile", target: "target", cast: 0.6, speed: 7, range: 5, radius: 0.3, effect: 1, visual: "web", duration: 4, maxRadius: 2 })) ===
-  '{"every":5,"do":"projectile","target":"target","cast":0.6,"speed":7,"range":5,"radius":0.3,"effect":1,"visual":"web"}', "clean projectile = migration JSON (zone keys dropped)");
+ok(JSON.stringify(S.clean({ every: 5, do: "projectile", target: "target", cast: 0.6, interruptible: true, name: "Web", speed: 7, range: 5, radius: 0.3, effect: 1, visual: "web", duration: 4, maxRadius: 2 })) ===
+  '{"every":5,"do":"projectile","target":"target","castTime":0.6,"interruptible":true,"name":"Web","speed":7,"range":5,"radius":0.3,"effect":1,"visual":"web"}', "clean projectile = migration JSON (old cast -> castTime, zone keys dropped)");
+
+// ---- generic casts (mob_casts.go)
+st = run([{ every: 5, do: "zone", castTime: 1.5, radius: 1, maxRadius: 1, damage: 7, name: "Ground Slam" }, { every: 1, do: "soak" }], 1);
+ok(st.casts.length === 1 && st.casts[0].name === "Ground Slam" && st.casts[0].locked && st.casts[0].total === 30 && !st.zones.length && !st.soaks.length, "castTime: zone waits for a locked 1.5 s cast; soak waits too");
+for (let i = 0; i < 30; i++) S.step(st);
+ok(st.zones.length === 1 && st.zones[0].damage === 7 && !st.casts.length, "zone lands when the cast ends");
+ok(JSON.stringify(S.clean({ every: 3, do: "zone", target: "aggro", castTime: 1, interruptible: true, name: "Slam", first: 4, radius: .75 })) === '{"every":3,"do":"zone","target":"aggro","castTime":1,"interruptible":true,"name":"Slam","first":4,"radius":0.75}', "clean keeps cast keys on any primitive");
+st = run([{ every: 9, do: "zone", castTime: 2, interruptible: true }], 1);
+ok(S.interrupt(st) && !st.casts.length && st.breaks.length === 1, "interruptible cast breaks");
+st = run([{ every: 9, do: "zone", castTime: 2 }], 1);
+ok(!S.interrupt(st) && st.casts.length === 1, "locked cast does not");
+st = run([{ every: 2, do: "suicide", first: 3 }], 2);
+ok(!st.bossDead, "first: nothing before 3 s");
+st = run([{ every: 2, do: "suicide", first: 3, damage: 30, radius: 6 }], 3);
+ok(st.bossDead && st.damage === 30, "suicide at 3 s with a 30 burst");
+for (let i = 0; i < 100; i++) S.step(st);
+ok(st.damage === 30, "a dead boss casts nothing more");
+st = run([{ every: 3, do: "spawn", enemy: 21, count: 3, formation: "list", offsets: [[0, -1], [1, 0], [-1, 0]], castTime: 1, max: 4 }], 1);
+ok(st.casts[0].spots.join(";") === "5,9;6,10;4,10" && !st.adds.length, "spawn: telegraphed spots while casting");
+for (let i = 0; i < 20; i++) S.step(st);
+ok(st.adds.length === 3 && st.adds[0].enemy === 21, "3 adds after the cast");
+for (let i = 0; i < 100; i++) S.step(st);
+ok(st.adds.length === 4, "max 4 adds (" + st.adds.length + ")");
+const poison = { 2: { Duration: 10, Modifiers: [{ type: "dot", damage: 80, every: 1 }] } };
+st = run([{ every: 8, do: "effect", effect: 2, range: 2 }], 2, { effects: poison });
+ok(!st.effects.length, "effect: target out of range, nothing");
+st = S.create({ boss: { x: 5, y: 10 }, player: { x: 6, y: 10 }, patterns: [{ every: 8, do: "effect", effect: 2, castTime: 0.5 }], effects: poison, bossRange: 1 });
+for (let i = 0; i < 30; i++) S.step(st);
+ok(st.effects.length === 1, "effect lands after a 0.5 s cast within the mob's Range");
+let bad = ""; try { S.validate(S.clean({ do: "spawn", every: 3 }), 0); } catch (e) { bad = e.message; }
+ok(/needs an enemy/.test(bad), "validate: spawn needs an enemy");
 process.exit(fails ? 1 : 0);

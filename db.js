@@ -142,16 +142,19 @@ const BQ = (() => {
     }
   }
 
-  // Enemy names whose boss_patterns apply this effect.
-  function effectUsers(id) {
+  // Enemy names whose boss_patterns apply this effect / spawn this enemy.
+  function patternUsers(test, skipEnemy) {
     if (!has("boss_patterns")) return [];
     const out = [];
-    for (const r of q("SELECT p.Pattern, e.Name FROM boss_patterns p LEFT JOIN enemies e ON e.id = p.EnemyID")) {
+    for (const r of q("SELECT p.Pattern, p.EnemyID, e.Name FROM boss_patterns p LEFT JOIN enemies e ON e.id = p.EnemyID")) {
+      if (r.EnemyID === skipEnemy) continue;
       let a; try { a = JSON.parse(r.Pattern); } catch { continue; }
-      if (Array.isArray(a) && a.some(x => +x.effect === id)) out.push(r.Name || "?");
+      if (Array.isArray(a) && a.some(test)) out.push(r.Name || "?");
     }
     return out;
   }
+  const effectUsers = id => patternUsers(x => +x.effect === id);
+  const spawnUsers = id => patternUsers(x => x.do === "spawn" && +x.enemy === id, id);
 
   const api = {
     content() {
@@ -224,18 +227,21 @@ const BQ = (() => {
         const e = q("SELECT Name FROM enemies WHERE id = ?", [+id])[0];
         const placed = e ? q("SELECT COUNT(*) AS n FROM world WHERE Enemy = ?", [e.Name])[0].n : 0;
         if (placed) throw new Error(`${e.Name} is placed on ${placed} map tile(s): clear those spawns first (Map > Select)`);
+        const spawners = spawnUsers(+id);
+        if (spawners.length) throw new Error(`${e.Name} is spawned by ${spawners.join(", ")}: remove those spawn primitives first`);
         s.push(`DELETE FROM loot WHERE EnemyID = ${+id};`, `DELETE FROM enemySpells WHERE EnemyID = ${+id};`, PATTERN_TABLE, `DELETE FROM boss_patterns WHERE EnemyID = ${+id};`);
       }
       apply(s, `delete ${table} ${id}`);
       return { ok: true };
     },
     // Replace an enemy's boss_patterns with one row holding these primitives
-    // (zone / soak only). Keeps the enemy's lowest existing row id.
+    // (any BQSim.KINDS primitive). Keeps the enemy's lowest existing row id.
     patterns({ enemyId, actions }) {
       enemyId = Math.trunc(+enemyId);
       if (!(enemyId > 0) || !q("SELECT 1 FROM enemies WHERE id = ?", [enemyId]).length) throw new Error("save the enemy first");
       const clean = actions.map(BQSim.clean);
       clean.forEach(BQSim.validate);
+      clean.forEach((a, i) => { if (a.do === "spawn" && !q("SELECT 1 FROM enemies WHERE id = ?", [a.enemy]).length) throw new Error(`primitive ${i + 1}: no enemy ${a.enemy} to spawn`); });
       clean.forEach((a, i) => { if (a.effect && !(has("effects") && q("SELECT 1 FROM effects WHERE id = ?", [a.effect]).length)) throw new Error(`primitive ${i + 1}: no effect ${a.effect} (make it in the Effects tab)`); });
       const s = [PATTERN_TABLE];
       const rows = has("boss_patterns") ? q("SELECT id FROM boss_patterns WHERE EnemyID = ? ORDER BY id", [enemyId]) : [];

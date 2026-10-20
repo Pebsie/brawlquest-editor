@@ -6,7 +6,10 @@ const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider
 const PRIM_NEW = {
   zone: { every: 3, do: "zone", target: "target", radius: 1, maxRadius: 1, windup: 2, once: true, damage: 20, duration: 2 },
   soak: { every: 10, do: "soak", target: "target", radius: 1.5, damage: 60, duration: 4, failRadius: 8 },
-  projectile: { every: 5, do: "projectile", target: "target", cast: 0.6, speed: 7, range: 5, radius: 0.3, visual: "web" },
+  projectile: { every: 5, do: "projectile", target: "target", castTime: 0.6, interruptible: true, speed: 7, range: 5, radius: 0.3, visual: "web" },
+  spawn: { every: 10, do: "spawn", target: "target", castTime: 1, interruptible: true, name: "Summon", count: 2, formation: "spread", spacing: 1.5, max: 4 },
+  suicide: { every: 10, do: "suicide", target: "target", damage: 30, radius: 1.5 },
+  effect: { every: 8, do: "effect", target: "target", castTime: 0.5, interruptible: true, name: "Curse" },
 };
 const PRIM_PRESETS = {
   "Ring burst": { every: 6, do: "zone", target: "target", radius: 0.75, maxRadius: 0.75, windup: 2, once: true, damage: 30, duration: 1, count: 8, formation: "ring", anchor: "boss", spacing: 2.5 },
@@ -15,22 +18,31 @@ const PRIM_PRESETS = {
   "Rolling wave": { every: 7, do: "zone", target: "target", radius: 1, maxRadius: 1, damage: 20, duration: 5, count: 5, formation: "line", anchor: "boss", aim: true, angle: 90, spacing: 1.5, move: "dir", speed: 2 },
   "Orbiting blades": { every: 12, do: "zone", target: "target", radius: 0.75, damage: 15, duration: 10, count: 3, formation: "ring", anchor: "boss", spacing: 2.5, move: "orbit", spin: 90 },
   "Homing orb": { every: 9, do: "zone", target: "target", radius: 1, maxRadius: 1, windup: 1, damage: 20, duration: 6, formation: "list", offsets: [[0, -4]], move: "follow", speed: 1.5 },
-  "Spider web (projectile)": { every: 5, do: "projectile", target: "target", cast: 0.6, speed: 7, range: 5, radius: 0.3, effect: 1, visual: "web" },
-  "Web fan x3 (projectile)": { every: 7, do: "projectile", target: "target", cast: 0.8, speed: 6, range: 6, radius: 0.3, effect: 1, visual: "web", count: 3, spread: 20 },
+  "Spider web (projectile)": { every: 5, do: "projectile", target: "target", castTime: 0.6, interruptible: true, name: "Web", speed: 7, range: 5, radius: 0.3, effect: 1, visual: "web" },
+  "Web fan x3 (projectile)": { every: 7, do: "projectile", target: "target", castTime: 0.8, interruptible: true, name: "Web", speed: 6, range: 6, radius: 0.3, effect: 1, visual: "web", count: 3, spread: 20 },
+  "Locked slam (1.5 s cast)": { every: 8, do: "zone", target: "target", castTime: 1.5, name: "Ground Slam", radius: 2, maxRadius: 2, windup: 1, once: true, damage: 40, duration: 1, anchor: "boss", formation: "list", offsets: [[0, 0]] },
+  "Summon ring of 4 (spawn)": { every: 20, do: "spawn", target: "target", castTime: 1.5, interruptible: true, name: "Summon", count: 4, formation: "ring", spacing: 2, max: 4 },
+  "Self-destruct (suicide)": { every: 6, first: 6, do: "suicide", target: "target", castTime: 1, name: "Self-destruct", damage: 40, radius: 1.5 },
   "Stepping tiles": { every: 6, do: "zone", target: "target", tile: true, radius: 0.5, maxRadius: 0.5, windup: 2, once: true, damage: 40, duration: 1, formation: "list", offsets: [[-1, 0], [0, 0], [1, 0]], stagger: 1 },
 };
 // [key, label, kind, help, show(a)]
 const isZone = a => a.do === "zone", isScr = a => isZone(a), isProj = a => a.do === "projectile", notProj = a => !isProj(a);
+const isSpawn = a => a.do === "spawn", isEff = a => a.do === "effect", isBoom = a => a.do === "suicide";
+const zoneOrSoak = a => a.do === "zone" || a.do === "soak";
 const PRIM_FIELDS = [
   ["every", "Every (s)", "num", "seconds between casts while aggro'd"],
-  ["damage", "Damage", "num", "per hit (zone: every second it is active; soak: split between players inside; projectile: on hit, 0 = effect only)"],
-  ["duration", "Duration (s)", "num", "seconds active (zone) or until it resolves (soak)", notProj],
-  ["radius", "Radius", "num", "tiles; zone is capped at Max radius (0.75 unless raised), soak at 3, projectile hit size (default 0.3, max 1.5)"],
-  ["effect", "Applies effect", "effect", "status effect put on the player it hits (Effects tab)", isProj],
-  ["visual", "Visual", "vis", "how the client draws the cast, shot and splat: web (others draw a plain bolt)", isProj],
-  ["cast", "Cast (s)", "num", "telegraph before it fires (default 0.5, max 5); aim is locked when the cast starts, so it can be dodged", isProj],
+  ["first", "First (s)", "num", "seconds after aggro before the first cast (blank = 1 s)"],
+  ["-", "Cast", "head", "the mob stands still and does not attack while it casts; a cast bar shows the name and time left"],
+  ["castTime", "Cast time (s)", "num", "0 / blank = instant (projectile: default 0.5). Fractions allowed, max 10. A zone's Windup is its own telegraph after the cast"],
+  ["interruptible", "Interruptible", "chk", "off = locked: nothing can interrupt it (grey bar with a lock); on = blue bar, an interrupt cancels it"],
+  ["name", "Spell name", "text", "cast bar label (default: Zone, Soak, Web/Shot, Summon, Self-destruct, Curse)"],
+  ["damage", "Damage", "num", "per hit (zone: every second it is active; soak: split between players inside; projectile: on hit, 0 = effect only; suicide: burst on players within Radius)", a => !isSpawn(a) && !isEff(a)],
+  ["duration", "Duration (s)", "num", "seconds active (zone) or until it resolves (soak)", zoneOrSoak],
+  ["radius", "Radius", "num", "tiles; zone is capped at Max radius (0.75 unless raised), soak at 3, projectile hit size (default 0.3, max 1.5), suicide burst (default 1.5)", a => !isSpawn(a) && !isEff(a)],
+  ["effect", "Applies effect", "effect", "status effect put on the player (Effects tab): projectile on hit, effect primitive straight on the target", a => isProj(a) || isEff(a)],
+  ["visual", "Visual", "vis", "client art: web (projectile), poison (effect splat); others draw a plain bolt / puff", a => isProj(a) || isEff(a)],
   ["speed", "Speed", "num", "tiles/second (default 6, max 20)", isProj],
-  ["range", "Range", "num", "tiles (default 6, max 15); not cast while the target is farther", isProj],
+  ["range", "Range", "num", "tiles; not cast while the target is farther (projectile default 6, max 15; effect default the mob's Range)", a => isProj(a) || isEff(a)],
   ["count", "Count", "num", "shots per cast (max 24)", isProj],
   ["spread", "Spread (deg)", "num", "angle between shots of a fan (default 15)", isProj],
   ["formation", "Formation", "sel:|ring", "ring = count shots evenly all round", isProj],
@@ -42,6 +54,16 @@ const PRIM_FIELDS = [
   ["tile", "Tile", "chk", "snap to the tile and hit whoever stands on it", isZone],
   ["failRadius", "Fail radius", "num", "soak only: if nobody is inside, everyone within this takes full damage", a => a.do === "soak"],
   ["target", "Target", "text", "target / aggro (both mean the mob's current target)"],
+  ["-", "Spawn", "head", "adds rise out of the ground in sparks, aggro'd on the caster's target; they never respawn", isSpawn],
+  ["enemy", "Enemy", "enemy", "which mob to spawn (Mobs list)", isSpawn],
+  ["count", "Count", "num", "adds per cast (max 24)", isSpawn],
+  ["max", "Max alive", "num", "most live adds from this caster (0 / blank = no cap)", isSpawn],
+  ["anchor", "Anchor", "sel:boss|target", "spawn round the boss (default) or the target", isSpawn],
+  ["formation", "Formation", "sel:" + BQSim.FORMATIONS.join("|"), "blank round the boss = spread; ring; line; list (Offsets). Walls are skipped", isSpawn],
+  ["spacing", "Spacing", "num", "ring radius / line gap / spread radius (tiles, default 1.5)", isSpawn],
+  ["offsets", "Offsets", "pts", "list formation: dx,dy; dx,dy ... in tiles from the anchor", a => isSpawn(a) && a.formation === "list"],
+  ["angle", "Angle (deg)", "num", "rotates the formation", isSpawn],
+  ["aim", "Aim at target", "chk", "add the boss-to-target bearing to Angle", isSpawn],
   ["-", "Scripting (zone)", "head", "multiple zones per cast, stagger and movement. Leave empty for a plain zone.", isScr],
   ["count", "Count", "num", "zones per cast (max 24)", isScr],
   ["formation", "Formation", "sel:" + BQSim.FORMATIONS.join("|"), "blank = all on the anchor; ring; line; spread (random in Spacing); list (Offsets)", isScr],
@@ -135,7 +157,8 @@ async function savePatterns(id, actions) {
 }
 
 function patternEditor(form, e, initial, imgOf, collect) {
-  let acts = initial.map(a => ({ ...a }));
+  // Older projectile rows say "cast"; the form edits castTime (same meaning).
+  let acts = initial.map(a => { const b = { ...a }; if (b.do === "projectile" && b.cast && !b.castTime) { b.castTime = b.cast; } delete b.cast; return b; });
   let dirty = false;
   const list = h("div", { class: "steps" });
   const json = h("pre", { class: "sql", style: "max-height:160px" });
@@ -157,11 +180,14 @@ function patternEditor(form, e, initial, imgOf, collect) {
     const kind = h("select", { onchange: () => { const keep = { every: a.every, target: a.target }; acts[i] = { ...PRIM_NEW[kind.value], ...keep }; draw(); changed(); } },
       BQSim.KINDS.map(k => h("option", { value: k }, k)));
     kind.value = BQSim.KINDS.includes(a.do) ? a.do : "zone";
+    const pill = h("span", {});
+    const refreshPill = () => { const t = +a.castTime || (isProj(a) ? 0.5 : 0); pill.className = t > 0 ? "pill" + (a.interruptible ? "" : " locked") : ""; pill.textContent = t > 0 ? `${t}s ${a.interruptible ? "interruptible" : "locked"} cast` : "instant"; };
+    refreshPill();
     for (const [k, lbl, type, hint, show] of PRIM_FIELDS) {
       if (show && !show(a)) continue;
       if (type === "head") { g.append(h("div", { class: "phead" }, h("b", {}, lbl), " ", h("span", { class: "hint" }, hint))); continue; }
       let el;
-      const set = v => { if (v === "" || v === false || v === undefined) delete a[k]; else a[k] = v; changed(); };
+      const set = v => { if (v === "" || v === false || v === undefined) delete a[k]; else a[k] = v; refreshPill(); changed(); };
       if (type === "num") { el = h("input", { type: "number", class: "num", step: "any", value: a[k] ?? "" }); el.addEventListener("input", () => set(el.value === "" ? "" : +el.value)); }
       else if (type === "chk") { el = h("input", { type: "checkbox" }); el.checked = !!a[k]; el.addEventListener("change", () => set(el.checked)); }
       else if (type === "text") { el = txt(a[k] || ""); el.addEventListener("input", () => set(el.value)); }
@@ -169,6 +195,11 @@ function patternEditor(form, e, initial, imgOf, collect) {
         el = h("select", {}, h("option", { value: "" }, "(none)"), (S.c.effects || []).map(x => h("option", { value: x.id }, `${x.Name} (${x.id})`)));
         el.value = a[k] || ""; el.addEventListener("change", () => set(el.value ? +el.value : ""));
         if (a[k] && !(S.c.effects || []).some(x => x.id === +a[k])) el.append(h("option", { value: a[k] }, `missing effect ${a[k]}`)), el.value = a[k];
+      }
+      else if (type === "enemy") {
+        el = h("select", {}, h("option", { value: "" }, "(pick a mob)"), (S.c.enemies || []).map(x => h("option", { value: x.id }, `${x.Name} (${x.id})`)));
+        el.value = a[k] || ""; el.addEventListener("change", () => set(el.value ? +el.value : ""));
+        if (a[k] && !(S.c.enemies || []).some(x => x.id === +a[k])) el.append(h("option", { value: a[k] }, `missing enemy ${a[k]}`)), el.value = a[k];
       }
       else if (type === "vis") { el = h("input", { type: "text", list: "shotVisuals", value: a[k] || "" }); el.style.width = "120px"; el.addEventListener("input", () => set(el.value.trim())); }
       else if (type === "pts") { el = txt(fmtPts(a[k]), "e.g. 0,-2; 2,0; 0,2"); el.addEventListener("input", () => { const p = parsePts(el.value); set(p.length ? p : ""); }); }
@@ -178,7 +209,9 @@ function patternEditor(form, e, initial, imgOf, collect) {
     }
     return h("div", { class: "step prim", "data-i": i },
       h("div", { class: "top" }, h("b", {}, `#${i + 1}`), kind,
-        h("span", { class: "hint" }, a.do === "soak" ? "shared circle on the target; resolves when its timer runs out" : isProj(a) ? "cast, then shots fly at the target; walls stop them" : BQSim.scripted(a) ? "scripted zone" : "plain zone on the target"),
+        h("span", { class: "hint" }, ({ soak: "shared circle on the target; resolves when its timer runs out", projectile: "cast, then shots fly at the target; walls stop them",
+          spawn: "summons adds", suicide: "the mob dies (optional burst)", effect: "puts a status effect on the target in range" })[a.do] || (BQSim.scripted(a) ? "scripted zone" : "plain zone on the target")),
+        pill,
         h("span", { style: "flex:1" }),
         h("button", { title: "Move up", onclick: () => move(i, -1) }, "↑"), h("button", { title: "Move down", onclick: () => move(i, 1) }, "↓"),
         h("button", { onclick: () => { acts.splice(i + 1, 0, JSON.parse(JSON.stringify(a))); draw(); changed(); } }, "Duplicate"),
@@ -189,14 +222,17 @@ function patternEditor(form, e, initial, imgOf, collect) {
   const preview = mobPreview(e, imgOf);
   S.mobPreview = preview;
   form.append(h("h3", {}, "Boss pattern primitives ", flag),
-    h("p", { class: "hint" }, "Mobs and bosses use only these primitives (boss_patterns). Each one runs on its own timer while the mob is aggro'd; the first cast is one second after aggro. Projectiles apply effects from the ", link("#effects", "Effects tab"), "."),
-    h("datalist", { id: "shotVisuals" }, h("option", { value: "web" })),
+    h("p", { class: "hint" }, "Mobs and bosses use only these primitives (boss_patterns). Each one runs on its own timer while the mob is aggro'd; the first cast is one second after aggro unless First is set. One cast at a time: a primitive that comes due mid-cast waits a second. Projectiles and the effect primitive apply effects from the ", link("#effects", "Effects tab"), "."),
+    h("datalist", { id: "shotVisuals" }, h("option", { value: "web" }), h("option", { value: "poison" })),
     h("div", { class: "mobsplit" },
       h("div", { class: "mobprims" }, list,
         h("div", { class: "bar" },
           h("button", { onclick: () => { acts.push({ ...PRIM_NEW.zone }); draw(); changed(); } }, "+ Zone"),
           h("button", { onclick: () => { acts.push({ ...PRIM_NEW.soak }); draw(); changed(); } }, "+ Soak"),
-          h("button", { onclick: () => { const p = { ...PRIM_NEW.projectile }; if ((S.c.effects || [])[0]) p.effect = S.c.effects[0].id; acts.push(p); draw(); changed(); } }, "+ Projectile"), preset,
+          h("button", { onclick: () => { const p = { ...PRIM_NEW.projectile }; if ((S.c.effects || [])[0]) p.effect = S.c.effects[0].id; acts.push(p); draw(); changed(); } }, "+ Projectile"),
+          h("button", { onclick: () => { const p = { ...PRIM_NEW.spawn }; const o = (S.c.enemies || []).find(x => x.id !== e.id) || (S.c.enemies || [])[0]; if (o) p.enemy = o.id; acts.push(p); draw(); changed(); } }, "+ Spawn"),
+          h("button", { onclick: () => { acts.push({ ...PRIM_NEW.suicide }); draw(); changed(); } }, "+ Suicide"),
+          h("button", { onclick: () => { const p = { ...PRIM_NEW.effect }; if ((S.c.effects || [])[0]) p.effect = S.c.effects[0].id; acts.push(p); draw(); changed(); } }, "+ Effect"), preset,
           h("button", { class: "primary", id: "save-patterns", onclick: async () => {
             if (!e.id) { status("Create the mob first: its patterns are saved with it.", true); return; }
             try { acts.forEach((a, i) => BQSim.validate(BQSim.clean(a), i)); } catch (err) { status(err.message, true); return; }
@@ -219,7 +255,29 @@ function mobPreview(e, imgOf) {
   const boss = { x: 0, y: 0, w: Math.max(1, +e.Width || 1), h: Math.max(1, +e.Height || 1) };
   let bossImg = new Image(); bossImg.src = assetURL(imgOf());
   const effDefs = () => Object.fromEntries((S.c.effects || []).map(x => [x.id, x]));
-  const reset = () => { st = BQSim.create({ boss, player: { ...player }, patterns: pats, effects: effDefs() }); acc = 0; };
+  const enemyDefs = () => Object.fromEntries((S.c.enemies || []).map(x => [x.id, x]));
+  const reset = () => { st = BQSim.create({ boss, player: { ...player }, patterns: pats, effects: effDefs(), enemies: enemyDefs(), bossRange: +e.Range || 1 }); acc = 0; sparks = []; seenAdds = new Set(); };
+  let sparks = [], seenAdds = new Set();
+  const addImgs = {};
+  const addImg = id => { const d = (S.c.enemies || []).find(x => x.id === +id); if (!d) return null; if (!addImgs[id]) { addImgs[id] = new Image(); addImgs[id].src = assetURL(d.Image || ""); } return addImgs[id]; };
+  // Anvil-style sparks (client mob-casts.lua): up and out, gravity, fade orange.
+  const burst = (x, y) => { for (let i = 0; i < 18; i++) { const a = -Math.PI / 2 + (Math.random() * 2 - 1) * 1.3, v = 1.6 + Math.random() * 3.7, life = .3 + Math.random() * .45; sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, size: 2 + Math.random() * 2 }); } };
+  // Cast bar over the boss: grey panel, blue fill when interruptible, grey with a lock when locked.
+  const castBar = (g, cx, top, c) => {
+    const w = 64, hgt = 8, x = Math.round(cx - w / 2), y = Math.round(top - 14), k = 1 - c.left / Math.max(1, c.total);
+    g.fillStyle = "rgba(41,41,41,.9)"; g.fillRect(x, y, w, hgt);
+    g.fillStyle = c.locked ? "#9e9e9e" : "#6bb8f2"; g.fillRect(x + 1, y + 1, (w - 2) * k, hgt - 2);
+    g.strokeStyle = "#8c8c8c"; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w - 1, hgt - 1);
+    if (c.locked) { g.strokeStyle = "#555"; g.beginPath(); g.arc(x - 7, y + 3, 2.5, Math.PI, 0); g.stroke(); g.fillStyle = "#555"; g.fillRect(x - 10.5, y + 3, 7, 5); }
+    g.fillStyle = "#222"; g.font = "11px system-ui"; g.fillText(c.name, x, y - 3);
+    const left = (c.left / BQSim.TPS).toFixed(1) + "s"; g.fillText(left, x + w - g.measureText(left).width, y + hgt + 11);
+  };
+  const castBreak = (g, cx, top, b) => {
+    const t = (st.tick - b.t) / 15, w = 64, hgt = 8, x = Math.round(cx - w / 2), y = Math.round(top - 14) + 20 * t * t, split = (w - 2) * b.k;
+    g.globalAlpha = 1 - t; g.fillStyle = "#cc4d40"; g.save(); g.translate(x + split / 2, y); g.rotate(-.5 * t); g.fillRect(-split / 2, 0, Math.max(2, split), hgt); g.restore();
+    g.fillStyle = "rgba(41,41,41,.9)"; g.save(); g.translate(x + split + (w - split) / 2 + 4 * t, y); g.rotate(.4 * t); g.fillRect(-(w - split) / 2, 0, w - split, hgt); g.restore();
+    g.fillStyle = "#c0392b"; g.font = "11px system-ui"; g.fillText("Interrupted", x, Math.round(top - 17) - 6 * t); g.globalAlpha = 1;
+  };
   const webImg = new Image(); webImg.src = assetURL("assets/world/objects/Web.png");
   const webStar = (g, x, y, rad, rot) => {
     g.save(); g.translate(x, y); g.rotate(rot); g.strokeStyle = "#555"; g.lineWidth = 1.5; g.beginPath();
@@ -234,8 +292,25 @@ function mobPreview(e, imgOf) {
     g.strokeStyle = "#d0d4d9"; g.lineWidth = 1;
     for (let i = -20; i <= 20; i++) { const [x] = toScr(i - .5, 0), [, y] = toScr(0, i - .5); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
     const [bx, by] = toScr(boss.x - .5, boss.y - .5);
-    if (bossImg.complete && bossImg.naturalWidth) { g.imageSmoothingEnabled = false; g.drawImage(bossImg, bx, by, boss.w * sc, boss.h * sc); }
+    if (st.bossDead) { g.strokeStyle = "#999"; g.setLineDash([3, 3]); g.strokeRect(bx, by, boss.w * sc, boss.h * sc); g.setLineDash([]); g.fillStyle = "#777"; g.font = "11px system-ui"; g.fillText("dead (suicide)", bx, by - 4); }
+    else if (bossImg.complete && bossImg.naturalWidth) { g.imageSmoothingEnabled = false; g.drawImage(bossImg, bx, by, boss.w * sc, boss.h * sc); }
     else { g.fillStyle = "#666"; g.fillRect(bx, by, boss.w * sc, boss.h * sc); }
+    // spawn telegraph, then adds rising out of the ground over 0.4 s
+    for (const c of st.casts) for (const [sx, sy] of c.spots || []) {
+      const [x, y] = toScr(sx, sy), k = 1 - c.left / Math.max(1, c.total);
+      g.fillStyle = `rgba(120,140,190,${.15 + .25 * k})`; g.beginPath(); g.ellipse(x, y + sc * .3, sc * (.2 + .3 * k), sc * (.1 + .15 * k), 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "#7d8fb8"; g.lineWidth = 1; g.beginPath(); g.ellipse(x, y + sc * .3, sc * .5, sc * .25, 0, 0, Math.PI * 2); g.stroke();
+    }
+    for (const a of st.adds) {
+      const [x, y] = toScr(a.x - .5, a.y - .5);
+      if (!seenAdds.has(a.id)) { seenAdds.add(a.id); burst(x + sc / 2, y + sc); }
+      const k = Math.min(1, (st.tick - a.born + acc) / (.4 * BQSim.TPS)), e2 = 1 - (1 - k) * (1 - k), im = addImg(a.enemy);
+      g.save(); g.translate(x + sc / 2, y + sc); g.scale(e2, e2); g.globalAlpha = e2;
+      if (im && im.complete && im.naturalWidth) { g.imageSmoothingEnabled = false; g.drawImage(im, -sc / 2, -sc, sc, sc); } else { g.fillStyle = "#888"; g.fillRect(-sc / 2, -sc, sc, sc); }
+      g.restore(); g.globalAlpha = 1;
+    }
+    const sdt = 1 / 60;
+    sparks = sparks.filter(p => { p.life -= sdt; if (p.life <= 0) return false; p.vy += .17; p.vx *= .97; p.x += p.vx; p.y += p.vy; const t = 1 - p.life / p.max; g.fillStyle = `rgba(255,${Math.round(255 * (1 - t * .75))},${Math.round(255 * Math.max(0, .6 - t * 1.6))},${1 - t * t})`; g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); return true; });
     const shape = (z, fill, stroke, k = 1) => {
       const [x, y] = toScr(z.x, z.y);
       g.beginPath();
@@ -261,6 +336,7 @@ function mobPreview(e, imgOf) {
     // projectile casts (aim line, locked at cast start), shots and splats
     const [bcx, bcy] = toScr(boss.x - .5 + boss.w / 2, boss.y - .5 + boss.h / 2);
     for (const c of st.casts) {
+      if (c.a.do !== "projectile") continue;
       const [ax, ay] = toScr(c.tx - .5, c.ty - .5), k = 1 - c.left / Math.max(1, c.total);
       g.setLineDash([5, 4]); g.strokeStyle = `rgba(90,90,90,${.3 + .5 * k})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(bcx, bcy); g.lineTo(ax, ay); g.stroke(); g.setLineDash([]);
       g.fillStyle = "#fff"; g.strokeStyle = "#555"; g.beginPath(); g.arc(bcx, bcy, 2 + 4 * k, 0, Math.PI * 2); g.fill(); g.stroke();
@@ -276,9 +352,14 @@ function mobPreview(e, imgOf) {
       const k = (st.tick - f.t) / 12, [x, y] = toScr(f.splat.x - .5, f.splat.y - .5);
       g.globalAlpha = 1 - k;
       if (f.splat.visual === "web" && webImg.complete && webImg.naturalWidth) { const w = sc * (.6 + .8 * Math.min(1, k * 3)); g.drawImage(webImg, x - w / 2, y - w / 2, w, w); }
+      else if (f.splat.visual === "burst") { g.fillStyle = "rgba(255,140,60,.5)"; g.beginPath(); g.arc(x, y, (f.splat.r || 1.5) * sc * Math.min(1, .3 + k * 2), 0, Math.PI * 2); g.fill(); }
+      else if (f.splat.visual === "poison") { g.fillStyle = "rgba(110,200,80,.7)"; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.beginPath(); g.arc(x + Math.cos(a) * 8 * k, y + Math.sin(a) * 5 * k - 10 * k, 3, 0, Math.PI * 2); g.fill(); } }
       else { g.strokeStyle = "#7a3d8c"; g.beginPath(); g.arc(x, y, 4 + 10 * k, 0, Math.PI * 2); g.stroke(); }
       g.globalAlpha = 1;
     }
+    const bossTop = toScr(0, boss.y - .5)[1];
+    if (st.casts[0] && !st.bossDead) castBar(g, bcx, bossTop, st.casts[0]);
+    else if (st.breaks.length) castBreak(g, bcx, bossTop, st.breaks[st.breaks.length - 1]);
     const [px, py] = toScr(st.player.x, st.player.y);
     const mult = BQSim.moveMult(st);
     g.fillStyle = mult < 1 ? "#6d8fcf" : "#2a62c9"; g.beginPath(); g.arc(px, py, sc * .35, 0, Math.PI * 2); g.fill();
@@ -286,7 +367,8 @@ function mobPreview(e, imgOf) {
     if (st.effects.some(e => (defs[e.id] || {}).Visual === "web") && webImg.complete && webImg.naturalWidth) g.drawImage(webImg, px - sc * .5, py - sc * .5, sc, sc);
     g.fillStyle = "#222"; g.font = "12px system-ui"; g.fillText("player (drag)", px + sc * .45, py + 4);
     st.effects.forEach((e, i) => { const d = defs[e.id] || {}; g.fillText(`${d.Name || "effect " + e.id} ${e.left.toFixed(1)}s${e.stacks > 1 ? " x" + e.stacks : ""}`, px + sc * .45, py + 18 + i * 14); });
-    info.textContent = `t = ${(st.tick / BQSim.TPS).toFixed(1)}s · zones ${st.zones.length} · soaks ${st.soaks.length} · shots ${st.shots.length} · player hit ${st.hits}× for ${st.damage}` +
+    info.textContent = `t = ${(st.tick / BQSim.TPS).toFixed(1)}s · zones ${st.zones.length} · soaks ${st.soaks.length} · shots ${st.shots.length}` + (st.adds.length ? ` · adds ${st.adds.length}` : "") +
+      (st.casts[0] ? ` · casting ${st.casts[0].name}${st.casts[0].locked ? " (locked)" : ""}` : "") + ` · player hit ${st.hits}× for ${st.damage}` +
       (mult !== 1 ? ` · move x${mult.toFixed(2)}` : "") + ` · ${speed}x${playing ? "" : " (paused)"}`;
   }
   function loop(now) {
@@ -303,10 +385,11 @@ function mobPreview(e, imgOf) {
   cv.addEventListener("wheel", ev => { ev.preventDefault(); sc = Math.max(8, Math.min(48, sc * (ev.deltaY < 0 ? 1.15 : 1 / 1.15))); }, { passive: false });
   const playBtn = h("button", { onclick: () => { playing = !playing; playBtn.textContent = playing ? "Pause" : "Play"; } }, "Pause");
   const el = h("div", { class: "mobprev" }, h("b", {}, "Preview"),
-    h("div", { class: "hint" }, "Same timing as the server: casts and damage once a second, movement 20 times a second. Drag the player; wheel zooms. Dashed = waiting (delay/stagger, not yet visible in game)."),
+    h("div", { class: "hint" }, "Same timing as the server: casts and damage once a second, movement 20 times a second. Drag the player; wheel zooms. Dashed = waiting (delay/stagger, not yet visible in game). Spawned adds stand still here (their own patterns are not run)."),
     cv, h("div", { class: "bar" }, playBtn, h("button", { onclick: reset }, "Restart"),
       h("select", { class: "speed", onchange: ev => { speed = +ev.target.value; } }, [1, 2, 4].map(v => h("option", { value: v }, v + "x"))),
-      h("button", { onclick: () => { playing = false; playBtn.textContent = "Play"; BQSim.step(st); } }, "Step 1/20s")), info);
+      h("button", { onclick: () => { playing = false; playBtn.textContent = "Play"; BQSim.step(st); } }, "Step 1/20s"),
+      h("button", { title: "Test an interrupt (no player ability triggers one in game yet)", onclick: () => { const c = st.casts[0]; status(!c ? "Nothing is casting." : BQSim.interrupt(st) ? `Interrupted ${c.name}.` : `${c.name} is locked: it cannot be interrupted.`, !!c && c.locked); } }, "Interrupt")), info);
   return {
     el, stop,
     load(p) { pats = p; reset(); if (!raf) raf = requestAnimationFrame(loop); },
