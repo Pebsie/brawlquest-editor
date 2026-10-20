@@ -61,18 +61,38 @@ Plots are leased building land outside Foundation Forest (table `plot`,
 ## Mobs and boss patterns
 
 Mobs and bosses use only the `boss_patterns` primitives the API runs
-(`enemies.go`, `zone_script.go`): **zone** and **soak**.
+(`enemies.go`, `zone_script.go`, `mob_shots.go`, `mob_casts.go`): **zone**,
+**soak**, **projectile**, **spawn**, **suicide** and **effect**.
 
 * **Mob fields**: Name, ATK, sprite, HP, Range, CanMove, XP, Width, Height,
   Attributes, AttackSpeed (if the database has it). Renaming moves the mob's map
   spawns (`world.Enemy`) along. Delete is refused while it is placed on the map;
-  otherwise its loot, legacy spells and patterns go with it. Legacy
-  `enemySpells` are listed read-only.
-* **Primitives**: + Zone, + Soak or a preset; each has a form, Duplicate,
+  otherwise its loot, legacy spells and patterns go with it. It is also
+  refused while another mob's spawn primitive summons it. Legacy
+  `enemySpells` are listed read-only (the 2026-10-20 spells-to-patterns
+  migration converts them all except Cube's unimplemented "Spawn on Death").
+* **Primitives**: + Zone, + Soak, + Projectile, + Spawn, + Suicide, + Effect or a preset; each has a form, Duplicate,
   Remove and up/down. **Save patterns** writes them as one JSON array in one
   `boss_patterns` row for that enemy (its lowest existing row id is kept; new
   rows start at 2000). Fields at their default are left out, so old rows
   round-trip unchanged.
+* **Every primitive** (the generic cast system):
+  * `every` (seconds between casts), `first` (seconds after aggro before the
+    first cast; blank = 1 s, as before)
+  * `castTime` seconds the mob casts first (0 / blank = instant; fractions
+    allowed; max 10). While casting the mob does not move or attack (server
+    side), and only one cast runs at a time: a primitive due mid-cast waits a
+    second. A zone's `windup` is still its telegraph after the cast lands.
+    Projectiles: castTime replaces the older `cast` key (still read); with
+    neither they cast for 0.5 s.
+  * `interruptible` (off = locked: nothing can interrupt it). The API's
+    `interruptCast(instanceID)` cancels an interruptible cast and the client
+    shows the bar breaking; no player ability calls it yet.
+  * `name`: cast bar label (defaults: Zone, Soak, Web/Shot, Summon,
+    Self-destruct, Curse).
+  * In game a cast bar shows over the mob: name, seconds left, blue when it can
+    be interrupted, grey with a lock when locked. The card header shows the
+    same as a pill.
 * **Zone**: every, damage, duration, radius, maxRadius, windup, once, tile.
 * **Zone scripting** (all optional; a zone with none is the original single zone):
   * `count`, `formation` (ring, line, spread, list), `spacing`, `offsets`
@@ -85,10 +105,24 @@ Mobs and bosses use only the `boss_patterns` primitives the API runs
     path (`path` waypoints from the spawn point, `loop`); `speed` tiles/s
     (default 2, max 12). Max 24 zones per cast.
 * **Soak**: every, damage, duration, radius, failRadius.
+* **Spawn**: `enemy` (an enemies id), `count`, `max` (live adds from this caster;
+  blank = no cap), `anchor` (boss, default, or target), `formation` (blank
+  round the boss = spread), `spacing`, `offsets`, `angle`, `aim`. Spots are
+  chosen when the cast starts and telegraphed on the ground; walls and
+  blocked tiles are skipped. Adds rise out of the ground in a spark burst over
+  0.4 s, aggro'd on the caster's target, and never respawn.
+* **Suicide**: the mob dies; with `damage`, players within `radius` (default
+  1.5) take it as a burst.
+* **Effect**: puts `effect` (Effects tab) straight on the target if it is
+  within `range` (default the mob's Range); optional `visual` (`poison`).
 * **Preview**: the boss in the middle and a player you can drag; zones, soaks,
   telegraphs and movement run on the server's timing (casts and damage once a
   second, movement 20 times a second). Dashed outlines are zones still waiting
-  on delay/stagger (the game does not show them yet). Wheel zooms.
+  on delay/stagger (the game does not show them yet). Wheel zooms. The cast
+  bar shows over the boss (grey + lock = locked, blue = interruptible);
+  **Interrupt** tests an interrupt (a locked cast refuses). Spawn casts show
+  their ground marks, then the adds rise in sparks (they stand still in the
+  preview); a suicide leaves a dashed outline until Restart.
 * Moving zones need the API and client from `new-ui` with zone scripting
   (2026-10-20). Older servers ignore the new keys and cast one still zone.
 
@@ -112,7 +146,8 @@ API and this editor also create it when missing).
   * `dot` `damage` every `every` seconds.
   "Applied by" lists the mobs whose patterns use it; an effect in use can't be deleted.
 * **projectile primitive** (Mobs tab, + Projectile or the Spider web presets):
-  `every`, `cast` (telegraph seconds, aim locked at its start), `speed`
+  `every`, `castTime` (cast seconds, aim locked at its start; older rows
+  say `cast`), `speed`
   (tiles/s, default 6), `range` (default 6; not cast beyond it), `radius` (hit
   size, default 0.3), `damage` (0 = effect only), `effect` (an Effects id),
   `visual` (`web`), `count` + `spread` (fan, degrees) or `formation: ring`,

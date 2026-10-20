@@ -1,15 +1,17 @@
 "use strict";
 // Boss-pattern simulator for the Mobs tab preview. A port of the API's
 // enemies.go (runBossPatterns, spawnZone, tickZones, spawnSoak, tickSoaks),
-// zone_script.go (formations, stagger, movement), mob_shots.go (projectile)
-// and effects.go (status effects on the player): 20 ticks a second, patterns
+// zone_script.go (formations, stagger, movement), mob_shots.go (projectile),
+// mob_casts.go (cast times, interrupts, spawn / suicide / effect) and
+// effects.go (status effects on the player): 20 ticks a second, patterns
 // and damage once a second, zone movement every tick. Positions are tiles.
 const BQSim = (() => {
   const TPS = 20, MAX_ZONES = 24;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const FORMATIONS = ["", "ring", "line", "spread", "list"];
   const MOVES = ["", "dir", "out", "follow", "orbit", "path"];
-  const KINDS = ["zone", "soak", "projectile"];
+  const KINDS = ["zone", "soak", "projectile", "spawn", "suicide", "effect"];
+  const MAX_CAST = 10;
   const SCRIPT_KEYS = ["count", "formation", "spacing", "offsets", "anchor", "angle", "aim", "delay", "stagger", "move", "speed", "spin", "path", "loop"];
 
   function scripted(a) {
@@ -37,7 +39,8 @@ const BQSim = (() => {
 
   function create(o) {
     return { tick: 0, zones: [], soaks: [], timers: [], seq: 0, hits: 0, damage: 0, flashes: [],
-      casts: [], shots: [], effects: [], effectDefs: o.effects || {},
+      casts: [], shots: [], effects: [], effectDefs: o.effects || {}, enemyDefs: o.enemies || {}, adds: [], breaks: [], bossDead: false,
+      bossRange: o.bossRange === undefined ? 1 : o.bossRange,
       boss: o.boss || { x: 0, y: 0, w: 1, h: 1 }, player: o.player || { x: 4, y: 0 }, patterns: o.patterns || [], rnd: o.rnd || Math.random };
   }
 
@@ -125,17 +128,76 @@ const BQSim = (() => {
   // ---- projectile (mob_shots.go) and status effects (effects.go)
   const SHOT_SUB = 0.2, SPLAT_TICKS = 12, INSET = 0.2;
   function shotDefaults(a) {
-    let cast = a.cast > 0 ? a.cast : (a.windup > 0 ? a.windup : 0.5); cast = clamp(cast, 0, 5);
+    let cast = a.castTime > 0 ? a.castTime : a.cast > 0 ? a.cast : (a.windup > 0 ? a.windup : 0.5); cast = clamp(cast, 0, MAX_CAST);
     const speed = Math.min(a.speed > 0 ? a.speed : 6, 20), rng = Math.min(a.range > 0 ? a.range : 6, 15), r = Math.min(a.radius > 0 ? a.radius : 0.3, 1.5);
     return { cast, speed, rng, r };
   }
-  function startCast(st, a) {
-    const p = st.player, [cx, cy] = centre(st.boss), d = shotDefaults(a);
-    const tx = p.x + .5, ty = p.y + .5;
-    if (Math.hypot(tx - (cx + .5), ty - (cy + .5)) > d.rng + .5) return;
-    if (st.casts.length) return; // one cast at a time per mob
-    const ticks = Math.round(d.cast * TPS);
-    st.casts.push({ left: ticks, total: ticks, tx, ty, a });
+  // ---- generic casts (mob_casts.go)
+  function castTicks(a) {
+    const secs = a.do === "projectile" ? shotDefaults(a).cast : clamp(+a.castTime || 0, 0, MAX_CAST);
+    return Math.round(secs * TPS);
+  }
+  function castName(a) {
+    if (a.name) return a.name;
+    return { projectile: a.visual === "web" ? "Web" : "Shot", spawn: "Summon", suicide: "Self-destruct", effect: "Curse", soak: "Soak" }[a.do] || "Zone";
+  }
+  const inEffectRange = (st, a) => { const [cx, cy] = centre(st.boss), r = a.range > 0 ? a.range : Math.max(1, st.bossRange); return Math.hypot(st.player.x - cx, st.player.y - cy) <= r + .5; };
+  const addsAlive = st => st.adds.length;
+  function spawnSpots(st, a) {
+    const [bx, by] = centre(st.boss), p = st.player, fromBoss = a.anchor !== "target";
+    const s = { ...a, count: Math.max(1, Math.trunc(a.count) || 1) };
+    if (!s.formation && fromBoss) s.formation = "spread";
+    let rot = (a.angle || 0) * Math.PI / 180; if (a.aim) rot += Math.atan2(p.y - by, p.x - bx);
+    let n = s.count; if (a.max > 0) n = Math.min(n, a.max - addsAlive(st));
+    if (n <= 0) return [];
+    const ax = fromBoss ? bx : p.x, ay = fromBoss ? by : p.y, used = new Set(), out = [];
+    for (const o of offsets(s, rot, fromBoss, st.rnd)) {
+      if (out.length >= n) break;
+      const x = Math.floor(ax + o[0] + .5), y = Math.floor(ay + o[1] + .5), k = x + "," + y;
+      if (!used.has(k)) { used.add(k); out.push([x, y]); }
+    }
+    return out;
+  }
+  // begin: false when it cannot go now (already casting, out of range,
+  // nothing to spawn); the timer then retries next second.
+  function begin(st, a) {
+    if (st.casts.length || st.bossDead) return false;
+    const p = st.player, c = { a, tx: p.x + .5, ty: p.y + .5, spots: null, name: castName(a), locked: !a.interruptible };
+    if (a.do === "projectile") { const [cx, cy] = centre(st.boss); if (Math.hypot(c.tx - (cx + .5), c.ty - (cy + .5)) > shotDefaults(a).rng + .5) return false; }
+    else if (a.do === "effect") { if (!st.effectDefs[a.effect] || !inEffectRange(st, a)) return false; }
+    else if (a.do === "spawn") { c.spots = spawnSpots(st, a); if (!c.spots.length) return false; }
+    else if (!KINDS.includes(a.do)) return false;
+    c.total = c.left = castTicks(a);
+    if (!c.total) { execute(st, c); return true; }
+    st.casts.push(c);
+    return true;
+  }
+  function execute(st, c) {
+    const a = c.a;
+    if (a.do === "zone") spawnZone(st, a);
+    else if (a.do === "soak") spawnSoak(st, a);
+    else if (a.do === "projectile") fire(st, c);
+    else if (a.do === "spawn") {
+      for (const [x, y] of c.spots) { if (a.max > 0 && addsAlive(st) >= a.max) break; st.adds.push({ id: ++st.seq, enemy: a.enemy, x, y, born: st.tick }); }
+    } else if (a.do === "suicide") {
+      const [cx, cy] = centre(st.boss);
+      if (a.damage > 0) {
+        const r = a.radius > 0 ? a.radius : 1.5;
+        if (Math.hypot(st.player.x - cx, st.player.y - cy) <= r) hit(st, a.damage, "suicide");
+        st.flashes.push({ t: st.tick, splat: { x: cx + .5, y: cy + .5, visual: "burst", r } });
+      }
+      st.bossDead = true; st.casts = [];
+    } else if (a.do === "effect") {
+      if (inEffectRange(st, a) && applyEffect(st, a.effect) && a.visual) st.flashes.push({ t: st.tick, splat: { x: st.player.x + .5, y: st.player.y + .5, visual: a.visual, hit: true } });
+    }
+  }
+  // interrupt: cancels an interruptible cast (the server's interruptCast).
+  function interrupt(st) {
+    const c = st.casts[0];
+    if (!c || c.locked) return false;
+    st.casts = [];
+    st.breaks.push({ t: st.tick, name: c.name, k: 1 - c.left / Math.max(1, c.total) });
+    return true;
   }
   function fire(st, c) {
     const a = c.a, d = shotDefaults(a), b = st.boss;
@@ -172,7 +234,10 @@ const BQSim = (() => {
   }
   function parseMods(d) { if (!d) return []; if (Array.isArray(d.Modifiers)) return d.Modifiers; try { return JSON.parse(d.Modifiers || "[]") || []; } catch { return []; } }
   function tickShots(st) {
-    st.casts = st.casts.filter(c => { c.left--; if (c.left > 0) return true; fire(st, c); return false; });
+    const done = [];
+    st.casts = st.casts.filter(c => { c.left--; if (c.left > 0) return true; done.push(c); return false; });
+    done.forEach(c => execute(st, c));
+    st.breaks = st.breaks.filter(b => st.tick - b.t < 15);
     const live = [];
     for (const s of st.shots) {
       if (s.wait > 0) { s.wait--; live.push(s); continue; }
@@ -208,13 +273,13 @@ const BQSim = (() => {
   function step(st) {
     st.tick++;
     const second = st.tick % TPS === 0;
-    if (second) {
+    if (second && !st.bossDead) {
       st.patterns.forEach((a, i) => {
-        if (st.timers[i] === undefined) st.timers[i] = 0;
+        if (st.timers[i] === undefined) st.timers[i] = Math.max(0, Math.trunc(a.first) || 0);
         st.timers[i]--;
         if (st.timers[i] > 0) return;
         st.timers[i] = Math.max(1, Math.trunc(a.every) || 1);
-        if (a.do === "zone") spawnZone(st, a); else if (a.do === "soak") spawnSoak(st, a); else if (a.do === "projectile") startCast(st, a);
+        if (!begin(st, a)) st.timers[i] = 1;
       });
     }
     motion(st, 1 / TPS);
@@ -229,8 +294,33 @@ const BQSim = (() => {
   function clean(a) {
     const kind = KINDS.includes(a.do) ? a.do : "zone";
     const out = { every: Math.max(1, Math.trunc(+a.every || 1)), do: kind, target: a.target || "target" };
+    // generic cast keys, every primitive. A projectile's old "cast" becomes castTime.
+    const ct = +a.castTime || (kind === "projectile" ? +a.cast || 0 : 0);
+    if (ct > 0) out.castTime = clamp(ct, 0, MAX_CAST);
+    if (a.interruptible) out.interruptible = true;
+    if (a.name) out.name = String(a.name);
+    if (+a.first > 0) out.first = Math.trunc(+a.first);
+    if (kind === "spawn") {
+      if (+a.enemy > 0) out.enemy = Math.trunc(+a.enemy);
+      if ((+a.count || 0) > 1) out.count = Math.trunc(+a.count);
+      if (a.anchor === "target") out.anchor = "target";
+      if (FORMATIONS.includes(a.formation) && a.formation) out.formation = a.formation;
+      if (+a.spacing) out.spacing = +a.spacing;
+      if (a.formation === "list" && (a.offsets || []).length) out.offsets = a.offsets.map(p => [+p[0] || 0, +p[1] || 0]);
+      if (+a.angle) out.angle = +a.angle;
+      if (a.aim) out.aim = true;
+      if (+a.max > 0) out.max = Math.trunc(+a.max);
+      return out;
+    }
+    if (kind === "suicide") { for (const k of ["damage", "radius"]) if (+a[k]) out[k] = +a[k]; return out; }
+    if (kind === "effect") {
+      if (+a.effect > 0) out.effect = Math.trunc(+a.effect);
+      if (+a.range) out.range = +a.range;
+      if (a.visual) out.visual = String(a.visual);
+      return out;
+    }
     if (kind === "projectile") {
-      for (const k of ["cast", "speed", "range", "radius", "damage", "spread", "angle"]) if (+a[k]) out[k] = +a[k];
+      for (const k of ["speed", "range", "radius", "damage", "spread", "angle"]) if (+a[k]) out[k] = +a[k];
       if (+a.effect > 0) out.effect = Math.trunc(+a.effect);
       if (a.visual) out.visual = String(a.visual);
       if ((+a.count || 0) > 1) out.count = Math.trunc(+a.count);
@@ -263,12 +353,15 @@ const BQSim = (() => {
     const w = `primitive ${i + 1}: `;
     if (!KINDS.includes(a.do)) throw new Error(w + `only ${KINDS.map(k => '"' + k + '"').join(", ")} exist (got "${a.do}")`);
     if (!(a.every >= 1)) throw new Error(w + "every must be at least 1 second");
+    if (a.castTime !== undefined && !(a.castTime >= 0 && a.castTime <= MAX_CAST)) throw new Error(w + "castTime must be 0 to 10 seconds");
+    if (a.do === "spawn" && !(a.enemy > 0)) throw new Error(w + "spawn needs an enemy");
+    if (a.do === "effect" && !(a.effect > 0)) throw new Error(w + "effect needs an effect");
     if (a.formation && !FORMATIONS.includes(a.formation)) throw new Error(w + "unknown formation " + a.formation);
     if (a.move && !MOVES.includes(a.move)) throw new Error(w + "unknown move " + a.move);
     if (a.formation === "list" && !(a.offsets || []).length) throw new Error(w + "a list formation needs offsets");
     if (a.move === "path" && !(a.path || []).length) throw new Error(w + "a path move needs waypoints");
     for (const k of ["offsets", "path"]) if (a[k] && !(Array.isArray(a[k]) && a[k].every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))) throw new Error(w + k + " must be [[dx,dy],...]");
   }
-  return { TPS, create, step, clean, validate, scripted, FORMATIONS, MOVES, SCRIPT_KEYS, KINDS, centre, moveMult, applyEffect, shotDefaults };
+  return { TPS, create, step, clean, validate, scripted, FORMATIONS, MOVES, SCRIPT_KEYS, KINDS, centre, moveMult, applyEffect, shotDefaults, interrupt, castName, castTicks };
 })();
 if (typeof module !== "undefined") module.exports = BQSim;

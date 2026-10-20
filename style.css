@@ -132,3 +132,4 @@ img.missing{opacity:.25}
 .pgrid{grid-template-columns:110px 1fr;margin-top:6px}
 .phead{grid-column:1/-1;border-top:1px solid #2e3440;padding-top:6px;margin-top:4px}
 .prim .top select{font-weight:600}
+.pill{font-size:11px;padding:1px 6px;border:1px solid #9cc6e8;border-radius:8px;background:#e8f3fc;color:#2b5d84}.pill.locked{border-color:#aaa;background:#eee;color:#555}

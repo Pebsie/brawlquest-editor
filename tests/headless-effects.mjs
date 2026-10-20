@@ -50,7 +50,7 @@ await p.fill(".list input[type=search]", "cave spider");
 await p.click(".list .row"); await wait(300);
 ok(await p.$eval(".prim select", s => s.value) === "projectile", "Cave Spider primitive is a projectile");
 ok(await p.$eval(".prim [data-key=effect]", s => s.selectedOptions[0].textContent) === "Webbed Up (1)", "effect select shows Webbed Up");
-ok(await p.$(".prim [data-key=duration]") === null && await p.$(".prim [data-key=cast]") !== null, "projectile form: cast shown, zone duration hidden");
+ok(await p.$(".prim [data-key=duration]") === null && await p.$eval(".prim [data-key=castTime]", e => e.value) === "0.5", "projectile form: cast time shown (0.5), zone duration hidden");
 // preview: cast, web flies, player webbed
 await wait(300);
 await p.click(".mobprev button:has-text('Pause')");
