@@ -2,7 +2,8 @@
 
 Static, browser-only editor for BrawlQuest's `bq-content.db`. It uses
 [sql.js](https://sql.js.org/) (SQLite in WebAssembly): the database is opened,
-edited and saved in your browser tab. Nothing is uploaded.
+edited and saved in your browser tab. Nothing is uploaded unless you commit
+it to GitHub (see [Saving, history and GitHub](#saving-history-and-github)).
 
 Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-editor/)
 
@@ -34,10 +35,92 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
    * **Effects**: status effects (buffs/debuffs) that projectiles apply. See
      [Effects and projectiles](#effects-and-projectiles).
    * **Loot**: each enemy's drops (item, chance %, amount ± variance).
-3. **Save .db** downloads the edited database. Back up the server's copy, replace
+3. Your work is autosaved in the browser (**History**), and **GitHub** commits
+   it to BrawlQuest/brawlquest-content. **Save .db** downloads the edited database. Back up the server's copy, replace
    `bq-content.db` with it and restart the API.
 4. **Export SQL** gives the same edits as a migration (keyed, safe to apply twice)
    for `content/migrations/`.
+
+## Saving, history and GitHub
+
+**Autosave and History** (no setup, works offline). While a db is open the
+editor keeps snapshots of it in this browser (IndexedDB): about 45 seconds
+after an edit (at most 2 minutes into a run of edits), straight away when you
+switch tab or close it, and when you open, Save .db or commit. Each is
+gzipped (8.3 MB is about 1.4 MB). **History** lists them, newest first, with
+the time, what changed since the one before ("Quests: edited 2; Dialogue:
+edited 5") and whether it was unsaved; **Restore** opens one (what is open is
+snapshotted first, so nothing is lost) and **Download** gives the .db. The
+newest 50 are kept, fewer if the browser's storage for the site runs short;
+ones older than 30 days go once there are more than 10. If the editor opens
+with unsaved work in History, or you open a file that is older than an
+unsaved autosave of it, a bar offers to restore it.
+
+**GitHub** opens and commits `bq-content.db` in `BrawlQuest/brawlquest-content`.
+Connect once with a fine-grained personal access token:
+
+1. https://github.com/settings/personal-access-tokens/new
+2. Name it (BrawlQuest editor), pick an expiry.
+3. Resource owner **BrawlQuest**; Repository access **Only select
+   repositories** > **brawlquest-content**.
+4. Repository permissions: **Contents: Read and write** (Metadata read-only is
+   added for you). Nothing else.
+5. Generate, copy, and paste it into GitHub > Connect in the editor.
+
+The token stays in this browser's `localStorage` on your machine, is only sent
+to `api.github.com`, and is never logged. **Disconnect** removes it.
+
+* **Open latest from GitHub**: the head of the branch (main by default).
+* **Commit to GitHub**: commits the open db, plus a text dump,
+  `content/<table>.sql` (each table's CREATE and one INSERT per row in
+  primary key order, written by SQLite's `quote()`), so the diff on GitHub
+  shows what changed. Only files that changed are uploaded. A blank message
+  uses the summary of changes since the version you opened, e.g.
+  `Quests: edited 3, added 1; Dialogue: edited 5`. It uses the Git Data API
+  (blobs, trees, commits, refs) and only ever fast-forwards the branch.
+* **If the branch moved on** since you opened it: if only other files changed
+  (say the README), the commit goes on top. If someone committed a different
+  `bq-content.db`, nothing is written: you can commit to a new branch
+  (`editor/<date-time>`, made from the version you opened, to merge on
+  GitHub) or open the latest instead (your db goes to History first). Never
+  forced. A db opened from a file (not GitHub) asks before it replaces the
+  branch's db; the old one stays in the git history.
+* **Auto-commit** every 5, 10, 15 or 30 minutes while editing, to the same
+  branch; off by default. It skips when the checks find anything and turns
+  itself off if the branch moved on.
+* **Version history**: recent commits that changed `bq-content.db` on the
+  branch; **Open** loads any of them.
+
+**Checks** before Save .db and every commit (`validate.js`), from what the API's
+loaders read on startup (new-ui: `initItems`, `initEnemies`, `initEffects`,
+`initNPC`, `loadQuestDefs`, `initCraftItems`, `initForging`, `initWorld`):
+
+* SQLite `integrity_check`.
+* Every table and column the loaders read is there; tables read with
+  `SELECT *` (items, craft, forge, world) have exactly the columns the API
+  scans; no NULL or wrong-typed values where Go's `Scan` would fail (a bad
+  quest_def row stops all quests after it loading).
+* JSON the API decodes, with Go's rules (a whole number field refuses 2.5
+  or "3"): quest Steps, Rewards, Prereqs; boss_patterns (one bad value drops
+  every primitive in the row); effects Modifiers; craft Items (the API panics
+  on bad JSON there); dialogue ItemsGiven.
+* References: quest givers, turn-ins, talk NPCs, kill and collect targets,
+  rewards; dialogue answers leading to missing nodes; loot, craft and forge
+  items; pattern spawns and effects; map spawns naming an enemy that doesn't
+  exist (exact name).
+
+Errors block, listed with links to the quest, NPC or mob. Warnings (things
+that load but look wrong, such as loot for an enemy that's gone) can be
+overridden; warnings that were already in the db when you opened it are shown
+folded and don't ask.
+
+Limits: History lives in this browser profile on this machine only, so
+clearing site data removes it, another browser or a private window has its
+own (private windows may keep none). Safari may delete a site's storage after
+7 days without a visit; the editor asks for persistent storage, which Chrome
+and Firefox usually grant, Safari may not. The quota is per browser: Chrome and Firefox allow a share of free disk,
+Safari less, and older Safari asks before a site passes about 1 GB. GitHub
+sync needs to be online; autosave doesn't.
 
 ## Plots
 
@@ -269,4 +352,7 @@ The client repo is private, so GitHub raw / jsDelivr links don't work.
 Local preview: `python3 -m http.server 8080`, then open http://localhost:8080/.
 
 Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
-`tests/headless-mobs.mjs`, `tests/headless-effects.mjs` and `tests/headless-map-plots.mjs` (Playwright, see their headers).
+`tests/headless-*.mjs` (Playwright, see their headers), including
+`headless-history.mjs` (autosave), `headless-validate.mjs` (checks) and
+`headless-github.mjs` (GitHub sync against a mocked api.github.com,
+`tests/github-mock.mjs`; it never talks to GitHub).
