@@ -59,6 +59,18 @@ await p.fill(kbIn, "0.75");
 await p.click(".form .bar button.primary"); await p.waitForTimeout(300);
 ok(await p.evaluate(n => S.c.enemies.find(e => e.Name === n).KnockbackResist, "Test Bullet Lord") === 0.75, "knockback resist 0.75 saved");
 
+// Hit effect (enemies.HitEffect): a dropdown, trees chip wood, beasts bleed
+ok(await p.evaluate(() => S.c.enemyCols.includes("HitEffect")), "enemies have the HitEffect column");
+ok(await p.evaluate(() => S.c.enemies.find(e => e.Name === "Tree").HitEffect === "wood"), "trees chip wood");
+ok(await p.evaluate(() => S.c.enemies.find(e => e.Name === "Skeleton").HitEffect === "bone"), "skeletons shed bone");
+ok(await p.evaluate(() => S.c.enemies.find(e => e.Name === "Wolf").HitEffect === "blood"), "wolves still bleed");
+const hfx = ".form .grid select[name=HitEffect]";
+ok(await p.$eval(hfx, e => e.value) === "blood", "hit effect dropdown shows blood");
+ok((await p.$$eval(hfx + " option", o => o.map(x => x.value))).includes("ectoplasm"), "dropdown lists the materials");
+await p.selectOption(hfx, "stone");
+await p.click(".form .bar button.primary"); await p.waitForTimeout(300);
+ok(await p.evaluate(n => S.c.enemies.find(e => e.Name === n).HitEffect, "Test Bullet Lord") === "stone", "hit effect stone saved");
+
 // Primitives: preset ring, add zone, edit, scripted move, reorder
 await p.selectOption(".mobprims select:not([data-key])", "Ring burst");
 await p.click(".mobprims button:has-text('+ Zone')");
@@ -110,6 +122,7 @@ await p.waitForSelector("h2:has-text('Export changes')");
 const sql = await p.textContent(".form > pre.sql");
 ok(/CREATE TABLE IF NOT EXISTS boss_patterns/.test(sql) && /INSERT OR REPLACE INTO enemies/.test(sql) && /DELETE FROM boss_patterns WHERE EnemyID/.test(sql), "Export SQL has the enemy and pattern statements");
 ok(/KnockbackResist REAL NOT NULL DEFAULT 0/.test(sql) && sql.indexOf("enemies_upgrade") < sql.indexOf("INSERT OR REPLACE INTO enemies"), "Export SQL adds KnockbackResist before the enemy rows");
+ok(/HitEffect TEXT NOT NULL DEFAULT 'blood'/.test(sql), "Export SQL carries the HitEffect column");
 fs.writeFileSync(OUT + "/mobs-export.sql", sql);
 ok(errs.length === 0, "no page errors " + errs.join(" | "));
 await b.close();

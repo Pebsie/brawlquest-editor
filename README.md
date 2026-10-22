@@ -151,7 +151,12 @@ Mobs and bosses use only the `boss_patterns` primitives the API runs
   Attributes, AttackSpeed (if the database has it), KnockbackResist (0 = full
   knockback from player hits, 1 = immune; bosses are 1 after the 2026-10-20
   boss-knockback migration, which the editor also applies to an older copy
-  it opens and includes in Export SQL). Renaming moves the mob's map
+  it opens and includes in Export SQL), HitEffect (a dropdown: what comes off
+  the mob when hit or killed - blood, wood, stone, crystal, ice, bone, slime,
+  ichor, ectoplasm, water, metal, embers, leaf, pulp or none; the client falls
+  back to blood for anything else. The 2026-10-22 hit-effects migration sets
+  every mob by what it is made of; the editor applies it to an older copy too
+  and includes it in Export SQL). Renaming moves the mob's map
   spawns (`world.Enemy`) along. Delete is refused while it is placed on the map;
   otherwise its loot, legacy spells and patterns go with it. It is also
   refused while another mob's spawn primitive summons it. Legacy

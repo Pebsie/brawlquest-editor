@@ -2,7 +2,7 @@
 // Mobs tab: enemies (all columns) and their boss_patterns primitives, with a
 // top-down preview driven by mobsim.js (the same rules as the API).
 
-const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider.png", HP: 20, Range: 1, CanMove: 1, XP: 10, Width: 1, Height: 1, Attributes: "None", AttackSpeed: 1, KnockbackResist: 0 };
+const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider.png", HP: 20, Range: 1, CanMove: 1, XP: 10, Width: 1, Height: 1, Attributes: "None", AttackSpeed: 1, KnockbackResist: 0, HitEffect: "blood" };
 const PRIM_NEW = {
   zone: { every: 3, do: "zone", target: "target", radius: 1, maxRadius: 1, windup: 2, once: true, damage: 20, duration: 2 },
   soak: { every: 10, do: "soak", target: "target", radius: 1.5, damage: 60, duration: 4, failRadius: 8 },
@@ -118,13 +118,20 @@ function mobForm(form, e) {
   img.addEventListener("click", pickImg); img.style.cursor = "pointer"; img.title = "Pick a sprite";
   const help = { ATK: "melee damage per hit", HP: "hit points", Range: "attack/aggro reach in tiles (0 = never attacks)", CanMove: "walks and chases; off = static (spawned adds despawn)",
     XP: "XP per kill", Width: "tiles wide", Height: "tiles tall", Attributes: "free text, None by default", AttackSpeed: "melee hits per second (1 = once a second)",
-    KnockbackResist: "0 = full knockback from hits, 0.5 = half, 1 = immune (bosses hold their ground and walk home after a fight)" };
+    KnockbackResist: "0 = full knockback from hits, 0.5 = half, 1 = immune (bosses hold their ground and walk home after a fight)",
+    HitEffect: "what comes off it when hit or killed: blood for flesh, wood chips for trees and chests, stone/crystal/ice shards, bone for skeletons, ectoplasm for ghosts, slime, ichor (spiders), water (fishing spots), metal sparks, embers, leaf, pulp, or none" };
   for (const c of cols) {
     if (c === "id") continue;
     if (c === "Image") { grid.append(h("label", {}, "Sprite"), h("div", {}, h("div", { class: "bar", style: "margin:0;align-items:center" }, img, h("button", { onclick: pickImg }, "Pick sprite…")), imgIn)); continue; }
     if (c === "CanMove") f[c] = h("input", { type: "checkbox" }), f[c].checked = !!+e[c];
     else if (c === "Name" || c === "Attributes") f[c] = txt(e[c]);
     else if (c === "KnockbackResist") f[c] = h("input", { type: "number", class: "num", min: 0, max: 1, step: 0.05, value: e[c] ?? 0 });
+    else if (c === "HitEffect") {
+      const cur = String(e[c] || "blood").trim().toLowerCase();
+      const opts = BQ.HIT_EFFECTS.includes(cur) ? BQ.HIT_EFFECTS : [...BQ.HIT_EFFECTS, cur];
+      f[c] = h("select", { name: "HitEffect" }, opts.map(v => h("option", { value: v }, v)));
+      f[c].value = cur;
+    }
     else f[c] = num(e[c]);
     grid.append(h("label", {}, c), h("div", {}, f[c], help[c] ? h("span", { class: "hint" }, " " + help[c]) : null));
   }

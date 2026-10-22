@@ -67,8 +67,8 @@ const q1 = await p.evaluate(async () => {
 });
 await openGH();
 const ph = await p.getAttribute(".sync-modal input[type=text]", "placeholder");
-// A db from before 2026-10-20 gets enemies.KnockbackResist on open: named once.
-const AUTO = (await p.evaluate(() => BQ.st.enemiesUpgraded) ? "Mobs: added the KnockbackResist column; " : "") + "Quests: edited 1; Dialogue: edited 1";
+// A db from before 2026-10-22 gets enemies.KnockbackResist/HitEffect on open: named once.
+const AUTO = (await p.evaluate(() => BQ.st.enemiesUpgraded) ? "Mobs: added the KnockbackResist/HitEffect columns; " : "") + "Quests: edited 1; Dialogue: edited 1";
 ok(ph === AUTO, "auto message: " + ph);
 await p.click(".sync-modal button:has-text('Commit to GitHub')");
 await waitOut(/Committed [0-9a-f]{7} to main/);

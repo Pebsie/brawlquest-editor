@@ -23,14 +23,32 @@ const BQ = (() => {
   const PLOT_UPGRADE = [PLOT_TABLE, "DROP TABLE IF EXISTS plot_upgrade;", `CREATE TABLE plot_upgrade (${PLOT_COLS});`,
     "INSERT INTO plot_upgrade (id, Name, X, Y, W, H, Rent, MinLevel, Agent) SELECT p.id, p.Name, p.X, p.Y, p.W, p.H, p.Rent, p.MinLevel, IFNULL((SELECT Agent FROM plot q WHERE q.id = p.id), 0) FROM plot p, (SELECT 0 AS Agent) d;",
     "DROP TABLE plot;", "ALTER TABLE plot_upgrade RENAME TO plot;"];
-  // Same as the API's content/migrations/2026-10-20-boss-knockback.sql: adds
-  // enemies.KnockbackResist (0 = full knockback, 1 = immune), bosses (Old
-  // World Crystal loot, the Rift Colossus) immune, and is safe to run twice.
-  const ENEMY_COLS = "id INTEGER PRIMARY KEY, Name TEXT, ATK INTEGER, Image TEXT, HP INTEGER, Range INTEGER, CanMove BOOL, XP INTEGER, Width INTEGER DEFAULT 1, Height INTEGER DEFAULT 1, Attributes TEXT DEFAULT 'None', AttackSpeed INTEGER NOT NULL DEFAULT 1, KnockbackResist REAL NOT NULL DEFAULT 0";
+  // Same as the API's content/migrations/2026-10-20-boss-knockback.sql and
+  // 2026-10-22-hit-effects.sql: adds enemies.KnockbackResist (0 = full
+  // knockback, 1 = immune), bosses (Old World Crystal loot, the Rift Colossus)
+  // immune, and enemies.HitEffect (what comes off a mob when hit: blood, wood,
+  // stone...; the audited values). Safe to run twice; tuned values are kept.
+  const ENEMY_COLS = "id INTEGER PRIMARY KEY, Name TEXT, ATK INTEGER, Image TEXT, HP INTEGER, Range INTEGER, CanMove BOOL, XP INTEGER, Width INTEGER DEFAULT 1, Height INTEGER DEFAULT 1, Attributes TEXT DEFAULT 'None', AttackSpeed INTEGER NOT NULL DEFAULT 1, KnockbackResist REAL NOT NULL DEFAULT 0, HitEffect TEXT NOT NULL DEFAULT 'blood'";
   const ENEMY_KB_UPGRADE = ["DROP TABLE IF EXISTS enemies_upgrade;", `CREATE TABLE enemies_upgrade (${ENEMY_COLS});`,
-    "INSERT INTO enemies_upgrade (id, Name, ATK, Image, HP, Range, CanMove, XP, Width, Height, Attributes, AttackSpeed, KnockbackResist) SELECT e.id, e.Name, e.ATK, e.Image, e.HP, e.Range, e.CanMove, e.XP, e.Width, e.Height, e.Attributes, IFNULL((SELECT AttackSpeed FROM enemies q WHERE q.id = e.id), 1), IFNULL((SELECT KnockbackResist FROM enemies q WHERE q.id = e.id), 0) FROM enemies e, (SELECT 1 AS AttackSpeed, 0 AS KnockbackResist) d;",
+    "INSERT INTO enemies_upgrade (id, Name, ATK, Image, HP, Range, CanMove, XP, Width, Height, Attributes, AttackSpeed, KnockbackResist, HitEffect) SELECT e.id, e.Name, e.ATK, e.Image, e.HP, e.Range, e.CanMove, e.XP, e.Width, e.Height, e.Attributes, IFNULL((SELECT AttackSpeed FROM enemies q WHERE q.id = e.id), 1), IFNULL((SELECT KnockbackResist FROM enemies q WHERE q.id = e.id), 0), IFNULL(NULLIF((SELECT HitEffect FROM enemies q WHERE q.id = e.id), ''), 'blood') FROM enemies e, (SELECT 1 AS AttackSpeed, 0 AS KnockbackResist, 'blood' AS HitEffect) d;",
     "DROP TABLE enemies;", "ALTER TABLE enemies_upgrade RENAME TO enemies;",
-    "UPDATE enemies SET KnockbackResist = 1 WHERE KnockbackResist = 0 AND (id IN (SELECT EnemyID FROM loot WHERE ItemID = 53) OR Name = 'Rift Colossus');"];
+    "UPDATE enemies SET KnockbackResist = 1 WHERE KnockbackResist = 0 AND (id IN (SELECT EnemyID FROM loot WHERE ItemID = 53) OR Name = 'Rift Colossus');",
+    "UPDATE enemies SET HitEffect = 'bone' WHERE HitEffect = 'blood' AND id IN (52, 54, 55, 56);",
+    "UPDATE enemies SET HitEffect = 'crystal' WHERE HitEffect = 'blood' AND id IN (13, 1201, 1202, 1203);",
+    "UPDATE enemies SET HitEffect = 'ectoplasm' WHERE HitEffect = 'blood' AND id IN (30, 39, 40, 41, 42, 1200);",
+    "UPDATE enemies SET HitEffect = 'embers' WHERE HitEffect = 'blood' AND id IN (31, 35, 36);",
+    "UPDATE enemies SET HitEffect = 'ice' WHERE HitEffect = 'blood' AND id IN (32, 33, 34);",
+    "UPDATE enemies SET HitEffect = 'ichor' WHERE HitEffect = 'blood' AND id IN (2, 6);",
+    "UPDATE enemies SET HitEffect = 'leaf' WHERE HitEffect = 'blood' AND id IN (49, 51, 53);",
+    "UPDATE enemies SET HitEffect = 'metal' WHERE HitEffect = 'blood' AND id IN (38, 57);",
+    "UPDATE enemies SET HitEffect = 'pulp' WHERE HitEffect = 'blood' AND id IN (59);",
+    "UPDATE enemies SET HitEffect = 'slime' WHERE HitEffect = 'blood' AND id IN (48, 50);",
+    "UPDATE enemies SET HitEffect = 'stone' WHERE HitEffect = 'blood' AND id IN (3, 4, 22);",
+    "UPDATE enemies SET HitEffect = 'water' WHERE HitEffect = 'blood' AND id IN (60);",
+    "UPDATE enemies SET HitEffect = 'wood' WHERE HitEffect = 'blood' AND id IN (1, 5, 29, 37, 58);"];
+  // What the client draws for enemies.HitEffect (scripts/effects/hit_materials.lua);
+  // anything else falls back to blood there.
+  const HIT_EFFECTS = ["blood", "wood", "stone", "crystal", "ice", "bone", "slime", "ichor", "ectoplasm", "water", "metal", "embers", "leaf", "pulp", "none"];
   const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
   const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
 
@@ -43,10 +61,13 @@ const BQ = (() => {
     db = new SQL.Database(new Uint8Array(buf));
     st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.touched = null; st.version++;
     st.warnings = checkSchema();
-    if (!cols("enemies").includes("KnockbackResist")) {
+    const ec = cols("enemies");
+    if (!ec.includes("KnockbackResist") || !ec.includes("HitEffect")) {
       db.exec("BEGIN;" + ENEMY_KB_UPGRADE.join("\n") + "COMMIT;");
       st.enemiesUpgraded = true;
-      st.warnings.push("Added the enemies.KnockbackResist column (0 = full knockback, 1 = immune; bosses set to 1) to this copy. The server needs content/migrations/2026-10-20-boss-knockback.sql; Export SQL includes the same step.");
+      const added = [!ec.includes("KnockbackResist") && "enemies.KnockbackResist (0 = full knockback, 1 = immune; bosses set to 1)",
+        !ec.includes("HitEffect") && "enemies.HitEffect (what comes off a mob when hit: wood for trees, bone for skeletons...)"].filter(Boolean);
+      st.warnings.push(`Added ${added.join(" and ")} to this copy. The server needs content/migrations/2026-10-20-boss-knockback.sql and 2026-10-22-hit-effects.sql; Export SQL includes the same step.`);
     }
     if (has("plot") && !cols("plot").includes("Agent")) {
       db.exec("BEGIN;" + PLOT_UPGRADE.join("\n") + "COMMIT;");
@@ -137,6 +158,10 @@ const BQ = (() => {
         const kb = +row.KnockbackResist;
         if (!(kb >= 0 && kb <= 1)) throw new Error("knockback resist is 0 (full knockback) to 1 (immune)");
         row.KnockbackResist = kb;
+      }
+      if ("HitEffect" in row) {
+        row.HitEffect = String(row.HitEffect ?? "").trim().toLowerCase() || "blood";
+        if (!HIT_EFFECTS.includes(row.HitEffect)) throw new Error("hit effect must be one of " + HIT_EFFECTS.join(", "));
       }
       if (!String(row.Attributes ?? "").trim()) row.Attributes = "None";
     } else if (table === "effects") {
@@ -300,7 +325,7 @@ const BQ = (() => {
       const plots = st.plotUpgraded || st.changes.some(c => /\bplot\b/.test(c));
       let schema = plots ? "-- plot table with the Agent column (as content/migrations/2026-10-19-plot-agents.sql)\n" + PLOT_UPGRADE.join("\n") + "\n" : "";
       if (st.enemiesUpgraded || st.changes.some(c => /INTO enemies\b/.test(c)))
-        schema += "-- enemies.KnockbackResist (as content/migrations/2026-10-20-boss-knockback.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
+        schema += "-- enemies.KnockbackResist and HitEffect (as content/migrations/2026-10-20-boss-knockback.sql and 2026-10-22-hit-effects.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
       return { sql: head + schema + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
     },
     clearExport() { st.changes = []; return { ok: true }; },
@@ -315,7 +340,7 @@ const BQ = (() => {
   };
 
   return {
-    init, open, api, st, has: () => !!db, effectUsers: id => effectUsers(id),
+    init, open, api, st, has: () => !!db, effectUsers: id => effectUsers(id), HIT_EFFECTS,
     bytes: () => db.export(),
     // Read-only helpers for the history, GitHub and check modules.
     query: (sql, params) => q(sql, params),

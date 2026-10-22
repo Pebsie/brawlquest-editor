@@ -46,7 +46,12 @@ ok(/used by .*Spider/.test(await p.textContent("#status")), "deleting an effect 
 
 // Mobs: spider has the projectile
 await p.click("#tabs button[data-tab=mobs]"); await p.waitForSelector(".list .row");
-await p.fill(".list input[type=search]", "cave spider");
+// (opening a db that needed a column upgrade re-renders the tab once more
+// after load: re-type the filter until it sticks)
+for (let i = 0; i < 20; i++) {
+  await p.fill(".list input[type=search]", "cave spider"); await wait(150);
+  if ((await p.$$eval(".list .row", r => r.map(x => x.textContent))).every(t => /cave spider/i.test(t))) break;
+}
 await p.click(".list .row"); await wait(300);
 ok(await p.$eval(".prim select", s => s.value) === "projectile", "Cave Spider primitive is a projectile");
 ok(await p.$eval(".prim [data-key=effect]", s => s.selectedOptions[0].textContent) === "Webbed Up (1)", "effect select shows Webbed Up");
