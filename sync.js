@@ -220,6 +220,7 @@ const BQSync = (() => {
 
   // ------------------------------------------------------------ GitHub UI
   async function openFromGitHub(o = {}) {
+    if (!BQGitHub.connected()) return githubModal();
     const what = o.commit ? `commit ${short(o.commit)}` : `the latest bq-content.db on ${o.branch || "main"}`;
     if (BQ.has() && BQ.st.dirty && !confirm(`Open ${what}? Your current edits stay in History.`)) return;
     try {
@@ -367,13 +368,19 @@ const BQSync = (() => {
       out,
       h("h3", {}, "Version history of bq-content.db"),
       hist);
+    brSel.addEventListener("change", () => loadHist(brSel.value));
+    loadHist(cur);
+    async function loadHist(branch) {
+    hist.replaceChildren(h("p", { class: "hint" }, "Loading versions…"));
     try {
-      const list = await BQGitHub.history(brSel.value || "main");
+      const list = await BQGitHub.history(branch || "main");
+      if (brSel.value !== branch && branch !== cur) return;
       hist.replaceChildren(list.length ? h("table", { class: "snaps" }, h("tbody", {}, list.map(c => h("tr", {},
         h("td", { class: "nowrap" }, when(c.date)),
         h("td", {}, c.message.split("\n")[0], h("div", { class: "hint" }, c.author, " · ", h("a", { href: commitURL(c.sha), target: "_blank", rel: "noopener" }, short(c.sha)))),
-        h("td", {}, h("button", { onclick: () => openFromGitHub({ commit: c.sha, branch: brSel.value }) }, "Open")))))) : h("p", { class: "hint" }, "No commits yet."));
+        h("td", {}, h("button", { onclick: () => openFromGitHub({ commit: c.sha, branch }) }, "Open")))))) : h("p", { class: "hint" }, "No commits yet."));
     } catch (e) { hist.replaceChildren(h("p", { class: "err" }, e.message)); }
+    }
   }
   function conflictView(body, r, typed) {
     const stamp = stampOf(Date.now());
