@@ -4,7 +4,9 @@
 // SQL migration export.
 const BQ = (() => {
   let SQL = null, db = null;
-  const st = { name: "", changes: [], dirty: false, warnings: [] };
+  // version counts edits; touched names the tables edited since the history
+  // module last looked (null = all of them, after an open).
+  const st = { name: "", changes: [], dirty: false, warnings: [], version: 0, touched: null };
   const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects"];
   // Status effects (the API's effects.go creates the same table at startup).
   const EFFECT_TABLE = "CREATE TABLE IF NOT EXISTS effects (id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Description TEXT NOT NULL DEFAULT '', Icon TEXT NOT NULL DEFAULT '', Visual TEXT NOT NULL DEFAULT '', Duration REAL NOT NULL DEFAULT 3, Stacking TEXT NOT NULL DEFAULT 'refresh', MaxStacks INTEGER NOT NULL DEFAULT 1, Modifiers TEXT NOT NULL DEFAULT '[]');";
@@ -39,7 +41,7 @@ const BQ = (() => {
     await init();
     if (db) db.close();
     db = new SQL.Database(new Uint8Array(buf));
-    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false;
+    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.touched = null; st.version++;
     st.warnings = checkSchema();
     if (!cols("enemies").includes("KnockbackResist")) {
       db.exec("BEGIN;" + ENEMY_KB_UPGRADE.join("\n") + "COMMIT;");
@@ -83,6 +85,8 @@ const BQ = (() => {
     catch (e) { db.exec("ROLLBACK"); throw new Error(e.message + " (in: " + stmts.find(Boolean).slice(0, 120) + ")"); }
     st.changes.push(`-- ${new Date().toISOString().replace("T", " ").slice(0, 19)} ${note}\n${stmts.join("\n")}`);
     st.dirty = true;
+    st.version++;
+    if (st.touched) for (const s of stmts) for (const m of s.matchAll(/\b(?:INTO|UPDATE|FROM|TABLE(?: IF (?:NOT )?EXISTS)?)\s+"?(\w+)/gi)) st.touched.add(m[1]);
   }
 
   function validate(table, row) {
@@ -313,5 +317,14 @@ const BQ = (() => {
   return {
     init, open, api, st, has: () => !!db, effectUsers: id => effectUsers(id),
     bytes: () => db.export(),
+    // Read-only helpers for the history, GitHub and check modules.
+    query: (sql, params) => q(sql, params),
+    // Run fn(q) on a throwaway copy opened from bytes (not the open db).
+    async withBytes(bytes, fn) {
+      await init();
+      const tmp = new SQL.Database(new Uint8Array(bytes));
+      const tq = (sql, params) => { const s = tmp.prepare(sql); const out = []; if (params) s.bind(params); while (s.step()) out.push(s.getAsObject()); s.free(); return out; };
+      try { return await fn(tq); } finally { tmp.close(); }
+    },
   };
 })();
