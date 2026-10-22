@@ -153,3 +153,21 @@ img.missing{opacity:.25}
 .node .povr code{font-size:12px}
 .reachbox { margin: 4px 0; }
 .reachbox canvas.reachmap { display: block; border: 1px solid #555; cursor: crosshair; image-rendering: pixelated; }
+/* history, GitHub sync, checks */
+.sync{color:#8a9;font-size:12px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sync.err{color:#f77}
+.note{background:#1b2a40;color:#cde;padding:8px 12px;border-bottom:1px solid #2d4466}
+.note button{margin-left:4px}
+.modal-body{overflow:auto;min-height:0}
+.modal-body h3{margin:14px 0 6px;font-size:14px;color:#9bd}
+table.snaps{border-collapse:collapse;width:100%}
+table.snaps td{border-top:1px solid #262b34;padding:6px 8px;vertical-align:top}
+td.nowrap{white-space:nowrap}
+.tag{display:inline-block;font-size:11px;border-radius:3px;padding:0 6px;background:#262b34;color:#9ab}
+.tag.unsaved{background:#4a3a10;color:#fe9}
+ul.issues{margin:4px 0 8px;padding-left:20px;max-width:900px}
+ul.issues li{margin:3px 0}
+ul.issues.err li b{color:#f99}
+.steps-list li{margin:4px 0}
+.gh-out{margin:6px 0;color:#9ab;white-space:pre-wrap}
+.gh-out.err{color:#f77}
