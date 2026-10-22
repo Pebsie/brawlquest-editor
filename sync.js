@@ -3,7 +3,9 @@
 // a commit (validate.js), and GitHub sync (gh.js). Uses app.js's h, $, status,
 // openBytes, download and syncFile.
 const BQSync = (() => {
-  const DELAY = 45e3, MAX_WAIT = 120e3;
+  // Autosave about 45 s after the last edit, at most 2 min after the first
+  // (bqAutosaveMs overrides the delay, for the headless tests).
+  const DELAY = +localStorage.getItem("bqAutosaveMs") || 45e3, MAX_WAIT = Math.max(DELAY, 120e3 * (DELAY / 45e3));
   const SY = { fp: null, snapFp: null, base: null, baseFp: null, baseIssues: new Set(), timer: 0, firstChange: 0, lastChange: 0,
     lastHash: 0, lastSnap: null, lastCommitAt: Date.now(), busy: false, storeOk: true };
   const autoMins = () => +(localStorage.getItem("bqAutoCommit") || 0);
@@ -37,7 +39,7 @@ const BQSync = (() => {
     BQ.st.touched = new Set();
     return SY.fp;
   }
-  const changesSince = fp => BQDump.diff(fp, currentFp()).text;
+  const changesSince = fp => [...(SY.upgrades || []), BQDump.diff(fp, currentFp()).text].filter(Boolean).join("; ");
   const issueKey = p => p.level + "|" + p.where + "|" + p.msg;
 
   // ------------------------------------------------------------ snapshots
@@ -84,9 +86,14 @@ const BQSync = (() => {
     const prev = await BQStore.latest().catch(() => null);
     SY.fp = null; SY.fp = currentFp(); SY.snapFp = SY.fp;
     SY.baseIssues = new Set(BQCheck.run(BQ.query).all.map(issueKey));
-    SY.base = d.base || null; SY.baseFp = null; SY.lastCommitAt = Date.now();
-    if (d.baseBytes) SY.baseFp = await BQ.withBytes(d.baseBytes, q => BQDump.fingerprint(q));
-    else if (SY.base) loadBaseFp(SY.base);
+    SY.base = d.base || null; SY.baseFp = null; SY.lastCommitAt = Date.now(); SY.upgrades = [];
+    // The commit summary counts from the db as opened. Columns the editor
+    // added on open (db.js) are named once instead of as every row edited.
+    if (d.source === "github") {
+      SY.upgrades = upgradeNotes();
+      SY.baseFp = SY.fp;
+      keepBase(SY.base, BQ.bytes(), SY.upgrades);
+    } else if (SY.base) loadBaseFp(SY.base);
     if (d.source === "history") { SY.lastHash = d.meta.hash; SY.lastId = d.meta.id; SY.lastSnap = d.meta.time; showSync(); }
     else {
       SY.lastHash = 0; SY.lastId = 0;
@@ -95,16 +102,19 @@ const BQSync = (() => {
     }
     hideNotice();
   });
+  function upgradeNotes() {
+    return [BQ.st.enemiesUpgraded && "Mobs: added the KnockbackResist column", BQ.st.plotUpgraded && "Plots: added the Agent column"].filter(Boolean);
+  }
   async function loadBaseFp(base) {
     try {
       const kb = await BQStore.kvGet("base");
-      if (kb && kb.commit === base.commit) SY.baseFp = await BQ.withBytes(await gunzipMaybe(kb), q => BQDump.fingerprint(q));
-    } catch { /* summary falls back to the last commit */ }
+      if (kb && kb.commit === base.commit) { SY.baseFp = await BQ.withBytes(await gunzipMaybe(kb), q => BQDump.fingerprint(q)); SY.upgrades = kb.upgrades || []; }
+    } catch { /* no summary: the message says "Content edits" */ }
   }
-  async function keepBase(base, bytes) {
+  async function keepBase(base, bytes, upgrades) {
     let data = bytes, gz = false;
     if (BQStore.canGzip) { try { data = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer()); gz = true; } catch { /* raw */ } }
-    await BQStore.kvSet("base", { commit: base.commit, gz, bytes: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) }).catch(() => {});
+    await BQStore.kvSet("base", { commit: base.commit, upgrades: upgrades || [], gz, bytes: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) }).catch(() => {});
   }
   async function gunzipMaybe(kb) {
     const raw = new Uint8Array(kb.bytes);
@@ -177,7 +187,8 @@ const BQSync = (() => {
       h("div", { class: "bar" }, h("button", { disabled: !BQ.has(), onclick: async () => { await snapshot({ label: "Snapshot" }); historyModal(); } }, "Snapshot now")),
       list.length ? h("table", { class: "snaps" }, h("tbody", {}, rows)) : h("p", {}, "No snapshots yet. They start once a db is open."));
   }
-  const snapName = m => m.name.replace(/(\.db|\.sqlite3?)?$/i, "") + "-" + new Date(m.time).toISOString().slice(0, 16).replace(/[T:]/g, "") + ".db";
+  const stampOf = t => { const d = new Date(t), z = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}`; };
+  const snapName = m => m.name.replace(/(\.db|\.sqlite3?)?$/i, "") + "-" + stampOf(m.time) + ".db";
 
   // ------------------------------------------------------------ checks
   // Resolves true when action may go ahead: no errors and no warnings that
@@ -216,9 +227,8 @@ const BQSync = (() => {
       status(`Downloading ${what}…`);
       const r = await BQGitHub.load({ branch: o.branch || "main", commit: o.commit });
       if (o.commit && o.branch) r.base.branch = o.branch;
-      await keepBase(r.base, r.bytes);
       closeModal();
-      await openBytes(r.bytes.slice(), BQGitHub.FILE, { source: "github", base: r.base, baseBytes: r.bytes });
+      await openBytes(r.bytes, BQGitHub.FILE, { source: "github", base: r.base });
       status(`Opened ${r.base.branch}@${short(r.base.commit)}: ${r.base.message.split("\n")[0]}`);
     } catch (e) { status(e.message, true); alert(e.message); }
   }
@@ -269,10 +279,10 @@ const BQSync = (() => {
       if (r.nothing) { say(`Nothing to commit: bq-content.db on ${branch} is already this.`); SY.base = SY.base || { branch, commit: parent }; return r; }
       const nb = o.newBranch || branch;
       SY.base = { branch: nb, commit: r.sha, message, date: new Date().toISOString() };
-      SY.baseFp = currentFp(); SY.baseIssues = new Set(BQCheck.run(BQ.query).all.map(issueKey));
+      SY.baseFp = currentFp(); SY.upgrades = []; SY.baseIssues = new Set(BQCheck.run(BQ.query).all.map(issueKey));
       SY.lastCommitAt = Date.now();
       BQ.st.dirty = false; syncFile();
-      keepBase(SY.base, bytes);
+      keepBase(SY.base, bytes, []);
       SY.lastHash = 0;
       await snapshot({ label: `Committed ${short(r.sha)} to ${nb}` });
       say(`Committed ${short(r.sha)} to ${nb}: ${message.split("\n")[0]}`);
@@ -366,7 +376,7 @@ const BQSync = (() => {
     } catch (e) { hist.replaceChildren(h("p", { class: "err" }, e.message)); }
   }
   function conflictView(body, r, typed) {
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
+    const stamp = stampOf(Date.now());
     const name = h("input", { type: "text", value: `editor/${stamp}`, style: "width:260px" });
     const out = h("div", { class: "gh-out" });
     const run = async o => {
