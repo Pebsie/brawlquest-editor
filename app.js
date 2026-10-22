@@ -24,8 +24,10 @@ async function api(path, body) {
   const fn = { content: () => BQ.api.content(), world: () => BQ.api.world(), save: () => BQ.api.save(body),
     delete: () => BQ.api.delete(body), tiles: () => BQ.api.tiles(body), patterns: () => BQ.api.patterns(body),
     export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()), portraits: () => BQ.api.portraits(body) }[path];
+  const v = BQ.st.version;
   const out = fn();
   syncFile();
+  if (BQ.st.version !== v) document.dispatchEvent(new CustomEvent("bq:change", { detail: { path } }));
   return out;
 }
 
@@ -76,19 +78,30 @@ function syncFile() {
 async function openFile(file) {
   if (/users/i.test(file.name)) { alert("That looks like a player database. Open bq-content.db only."); return; }
   status("Opening " + file.name + "…");
-  try {
-    const warnings = await BQ.open(await file.arrayBuffer(), file.name);
-    S.world = null; S.quest = S.npc = S.item = null;
-    $("#welcome").hidden = true; $("#main").hidden = false; $("#tabs").hidden = false;
-    $("#warn").hidden = !warnings.length; $("#warn").textContent = warnings.join(" ");
-    await loadAll(); syncFile();
-    if (location.hash.length > 1) await applyRoute(); else renderTab();
-  } catch (e) { status(e.message, true); alert(e.message); }
+  try { await openBytes(await file.arrayBuffer(), file.name, { source: "file", lastModified: file.lastModified }); }
+  catch (e) { status(e.message, true); alert(e.message); }
 }
-function saveDb() {
+// Open a db from bytes. o.source: "file", "github" or "history"; the history
+// and GitHub modules (sync.js) are told through the bq:open event.
+async function openBytes(buf, name, o = {}) {
+  const warnings = await BQ.open(buf, name);
+  if (o.restore) {
+    BQ.st.dirty = !!o.restore.dirty; BQ.st.changes = o.restore.changes || [];
+    BQ.st.plotUpgraded = !!o.restore.plotUpgraded; BQ.st.enemiesUpgraded = !!o.restore.enemiesUpgraded;
+  }
+  S.world = null; S.quest = S.npc = S.item = null;
+  $("#welcome").hidden = true; $("#main").hidden = false; $("#tabs").hidden = false;
+  $("#warn").hidden = !warnings.length; $("#warn").textContent = warnings.join(" ");
+  await loadAll(); syncFile();
+  document.dispatchEvent(new CustomEvent("bq:open", { detail: { name, ...o } }));
+  if (location.hash.length > 1) await applyRoute(); else renderTab();
+}
+async function saveDb() {
+  if (window.BQSync && !(await BQSync.checkBefore("Save .db"))) return;
   const name = BQ.st.name.replace(/(\.db|\.sqlite3?)?$/i, "") + "-edited.db";
   download(new Blob([BQ.bytes()], { type: "application/x-sqlite3" }), /edited/.test(BQ.st.name) ? BQ.st.name : name);
   BQ.st.dirty = false; syncFile();
+  document.dispatchEvent(new CustomEvent("bq:saved", { detail: { how: "download" } }));
   status("Downloaded. Copy it over bq-content.db on the server (keep a backup) and restart the API.");
 }
 function download(blob, name) {
