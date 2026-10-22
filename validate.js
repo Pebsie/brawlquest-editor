@@ -84,7 +84,7 @@ const BQCheck = (() => {
       loot: { why: "initEnemies panics (nil rows) without it", types: { EnemyID: "i", AmountVariance: "i", Chance: "i", ItemID: "i", Amount: "i" } },
       npc: { why: "initNPC loads no NPCs without it", types: { id: "i", Name: "s", ImgPath: "s", SpawnX: "i", SpawnY: "i" }, nullable: ["Faction", "Conversation"] },
       conversation: { why: "initNPC loads no dialogue without it", types: { id: "i", Identifier: "s", Title: "s" }, nullable: ["ImgPath", "Options", "ItemsGiven"] },
-      quest_def: { why: "loadQuestDefs loads no quests without it", whole: true, types: { id: "i", Act: "i", Zone: "s", Title: "s", Summary: "s", Level: "i", MinLevel: "i", Giver: "i", TurnIn: "i", Prereqs: "s", Offer: "s", Accept: "s", Progress: "s", Complete: "s", XP: "i", Gold: "i", Rewards: "s", Steps: "s" } },
+      quest_def: { soft: true, why: "the API runs with no quests (apply content/migrations/2026-10-13-questline.sql)", whole: true, types: { id: "i", Act: "i", Zone: "s", Title: "s", Summary: "s", Level: "i", MinLevel: "i", Giver: "i", TurnIn: "i", Prereqs: "s", Offer: "s", Accept: "s", Progress: "s", Complete: "s", XP: "i", Gold: "i", Rewards: "s", Steps: "s" } },
       craft: { star: 4, why: "initCraftItems panics (nil rows) without it", types: { id: "i", ItemID: "i", Items: "s", Chance: "i" } },
       forge: { star: 3, why: "initForging panics (nil rows) without it", types: { id: "i", EnterID: "i", ResultID: "i" } },
       world: { star: 9, why: "initWorld panics (nil rows) without it", types: { id: "i", GroundTile: "s", ForegroundTile: "s", Name: "s", X: "i", Y: "i", Music: "s", Collision: "b", Enemy: "s" } },
@@ -94,7 +94,7 @@ const BQCheck = (() => {
     };
     const ok = {};
     for (const [t, d] of Object.entries(L)) {
-      if (!tables.has(t)) { if (!d.optional) add("error", t, t, `table ${t} is missing: ${d.why}`); continue; }
+      if (!tables.has(t)) { if (!d.optional) add(d.soft ? "warning" : "error", t, t, `table ${t} is missing: ${d.why}`); continue; }
       const have = colsOf(t);
       if (d.star && have.length !== d.star) { add("error", t, t, `${t} has ${have.length} columns; the API reads SELECT * into exactly ${d.star} (${Object.keys(d.types).join(", ")}). Every row would load wrong.`); continue; }
       if (d.star) Object.keys(d.types).forEach((c, i) => { if (have[i] !== c) add("warning", t, t, `${t} column ${i + 1} is ${have[i]}, the API reads it as ${c} (SELECT * goes by position)`); });

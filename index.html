@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BrawlQuest Content Editor</title>
-<meta name="bq-editor-version" content="reach-map-sleep-2026-10-20">
+<meta name="bq-editor-version" content="safe-saving-github-2026-10-22">
 <meta name="description" content="Edit a BrawlQuest bq-content.db in your browser: items, loot, mobs and boss patterns, quests, NPCs, dialogue and the world map.">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -13,7 +13,10 @@
   <b>BrawlQuest Editor</b>
   <label class="btn">Open .db<input type="file" id="open" accept=".db,.sqlite,.sqlite3" hidden></label>
   <button id="btn-save" class="primary" disabled>Save .db</button>
+  <button id="btn-github" title="Open from and commit to BrawlQuest/brawlquest-content">GitHub</button>
+  <button id="btn-history" title="Autosaved snapshots in this browser">History</button>
   <span id="file" class="file"></span>
+  <span id="sync" class="sync"></span>
   <nav id="tabs" hidden>
     <button data-tab="map" class="on">Map</button>
     <button data-tab="quests">Quests</button>
@@ -28,15 +31,18 @@
   <span id="status"></span>
 </header>
 <div id="warn" class="warn" hidden></div>
+<div id="notice" class="note" hidden></div>
 <section id="welcome" class="welcome">
   <h1>BrawlQuest Content Editor</h1>
-  <p>Open (or drop here) a <code>bq-content.db</code>. Everything happens in this tab: nothing is uploaded.</p>
+  <p>Open (or drop here) a <code>bq-content.db</code>, or open it from GitHub. Everything happens in this tab: nothing is uploaded unless you commit to GitHub.</p>
+  <p><button onclick="BQSync.openFromGitHub()">Open from GitHub</button> <button onclick="BQSync.historyModal()">History</button></p>
   <ul>
     <li>Quests and their steps, NPCs and dialogue trees, items and loot tables</li>
     <li>Mobs and their boss pattern primitives (zones, soaks, scripted moving zones, projectiles, summons, cast times and interrupts, effect sprites) with a live preview</li>
     <li>Status effects (buffs and debuffs such as Webbed Up) that projectiles apply</li>
     <li>World map with sprites: drag NPCs and mobs, place spawns, paint tiles</li>
     <li><b>Save .db</b> downloads the edited database for the game; <b>Export SQL</b> gives the same changes as a migration</li>
+    <li>Autosave to this browser with a history you can restore from; <b>GitHub</b> opens and commits <code>bq-content.db</code> in BrawlQuest/brawlquest-content, checked first</li>
   </ul>
   <p class="hint">Quests need the questline migration (<code>quest_def</code> table). Never open <code>bq-users.db</code> here.</p>
   <p class="hint">The previous editor is still at <a href="legacy/">legacy/</a>.</p>
@@ -49,5 +55,10 @@
 <script src="app.js"></script>
 <script src="mobs.js"></script>
 <script src="effects.js"></script>
+<script src="validate.js"></script>
+<script src="dump.js"></script>
+<script src="store.js"></script>
+<script src="gh.js"></script>
+<script src="sync.js"></script>
 </body>
 </html>
