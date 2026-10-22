@@ -97,7 +97,7 @@ async function openBytes(buf, name, o = {}) {
   if (location.hash.length > 1) await applyRoute(); else renderTab();
 }
 async function saveDb() {
-  if (window.BQSync && !(await BQSync.checkBefore("Save .db"))) return;
+  if (typeof BQSync !== "undefined" && !(await BQSync.checkBefore("Save .db"))) return;
   const name = BQ.st.name.replace(/(\.db|\.sqlite3?)?$/i, "") + "-edited.db";
   download(new Blob([BQ.bytes()], { type: "application/x-sqlite3" }), /edited/.test(BQ.st.name) ? BQ.st.name : name);
   BQ.st.dirty = false; syncFile();
