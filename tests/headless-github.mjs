@@ -67,12 +67,13 @@ const q1 = await p.evaluate(async () => {
 });
 await openGH();
 const ph = await p.getAttribute(".sync-modal input[type=text]", "placeholder");
-const AUTO = "Mobs: added the KnockbackResist column; Quests: edited 1; Dialogue: edited 1";
+// A db from before 2026-10-20 gets enemies.KnockbackResist on open: named once.
+const AUTO = (await p.evaluate(() => BQ.st.enemiesUpgraded) ? "Mobs: added the KnockbackResist column; " : "") + "Quests: edited 1; Dialogue: edited 1";
 ok(ph === AUTO, "auto message: " + ph);
 await p.click(".sync-modal button:has-text('Commit to GitHub')");
 await waitOut(/Committed [0-9a-f]{7} to main/);
 const c1 = main();
-ok(c1 !== gh.root && msgOf(c1).split("\n")[0].length <= 72 && msgOf(c1).endsWith("\n\n" + AUTO) && AUTO.startsWith(msgOf(c1).split("\n")[0].replace(/…$/, "")), "committed to main with the auto message (long: short first line, all of it in the body)");
+ok(c1 !== gh.root && (AUTO.length <= 72 ? msgOf(c1) === AUTO : msgOf(c1).split("\n")[0].length <= 72 && msgOf(c1).endsWith("\n\n" + AUTO) && AUTO.startsWith(msgOf(c1).split("\n")[0].replace(/…$/, ""))), "committed to main with the auto message (long: short first line, all of it in the body)");
 ok(gh.commits.get(c1).parents[0] === gh.root, "parent is the commit it was opened from");
 const dbNow = Buffer.from(await p.evaluate(() => Array.from(BQ.bytes())));
 ok(gh.blob(fileAt(c1, "bq-content.db")).equals(dbNow), "bq-content.db in the commit is the open db");
