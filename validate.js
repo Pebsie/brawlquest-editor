@@ -12,7 +12,7 @@ const BQCheck = (() => {
   // null are ignored.
   const PAIR = { list: "pair" };
   const T = {
-    step: { Type: "string", Target: "string", NPC: "int", Count: "int", X: "int", Y: "int", Radius: "float", Consume: "bool", Text: "string", Line: "string", Hint: "string" },
+    step: { Type: "string", Target: "string", Targets: "names", NPC: "int", Count: "int", X: "int", Y: "int", Radius: "float", Consume: "bool", Text: "string", Line: "string", Hint: "string" },
     reward: { ItemID: "int", Amount: "int" },
     invItem: { ID: "int", Amount: "int", ItemID: "int", Enchantment: "string", PlayerID: "int" },
     action: {
@@ -35,6 +35,8 @@ const BQCheck = (() => {
     else if (t === "float") { if (typeof v !== "number") bad("a number"); }
     else if (t === "string") { if (typeof v !== "string") bad("text"); }
     else if (t === "bool") { if (typeof v !== "boolean") bad("true or false"); }
+    // questline.go nameList: a list of names (one name alone also loads)
+    else if (t === "names") { if (typeof v !== "string" && !(Array.isArray(v) && v.every(x => typeof x === "string" || x === null))) bad("a list of names [\"...\"]"); }
     else if (t === PAIR) {
       if (!Array.isArray(v)) return bad("a list of [x, y]");
       v.forEach((p, i) => { if (!Array.isArray(p) || p.some(n => typeof n !== "number")) out.push(`${path}[${i}] must be [x, y] numbers`); });
@@ -152,9 +154,20 @@ const BQCheck = (() => {
         if (!s || typeof s !== "object") return;
         const g = k => s[Object.keys(s).find(x => x.toLowerCase() === k.toLowerCase())];
         const type = g("Type"), target = String(g("Target") ?? ""), at = `step ${i + 1} (${type})`, sr = `#quest/${r.id}/step/${i}`;
+        // Target plus Targets (more enemies or items counting towards the
+        // same step), as questline.go questStep.names reads them.
+        const tl = g("Targets"), extra = (Array.isArray(tl) ? tl : typeof tl === "string" ? [tl] : []).filter(x => typeof x === "string" && x.trim());
+        const names = [...new Set([target, ...extra].map(x => x.trim()).filter(Boolean))];
         if (!STEP_TYPES.includes(type)) add("error", "quest_def", w, `${at}: unknown step type`, sr);
-        if ((type === "kill" || type === "boss") && enemyNames && !enemyNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: no enemy named "${target}"`, sr);
-        if (type === "collect" && itemNames && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: no item named "${target}"`, sr);
+        if ((type === "kill" || type === "boss") && enemyNames) {
+          if (!names.length) add("error", "quest_def", w, `${at}: no enemy named ""`, sr);
+          names.forEach(n => { if (!enemyNames.has(n.toLowerCase())) add("error", "quest_def", w, `${at}: no enemy named "${n}"`, sr); });
+        }
+        if (type === "collect" && itemNames) {
+          if (!names.length) add("error", "quest_def", w, `${at}: no item named ""`, sr);
+          names.forEach(n => { if (!itemNames.has(n.toLowerCase())) add("error", "quest_def", w, `${at}: no item named "${n}"`, sr); });
+        }
+        if (extra.length && ["talk", "reach", "equip", "level"].includes(type)) add("warning", "quest_def", w, `${at}: Targets is ignored on ${type} steps`, sr);
         if (type === "craft" && target && itemNames && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: no item named "${target}"`, sr);
         if (type === "equip" && target && itemNames && !["weapon", "shield", "head", "chest", "legs", "mount"].includes(target.toLowerCase()) && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: "${target}" is not an item or a slot`, sr);
         if (type === "talk" && npcIds && !npcIds.has(+g("NPC"))) add("error", "quest_def", w, `${at}: NPC ${g("NPC") ?? "(none)"} doesn't exist`, sr);

@@ -191,7 +191,9 @@ const STEP_FIELDS = {
   reach: ["X", "Y", "Radius"], use: ["Target", "Count"], craft: ["Target", "Count"], equip: ["Target"], level: ["Count"],
 };
 const STEP_HELP = {
-  kill: "Target = enemy name", boss: "Target = boss enemy name", collect: "Target = item name; Consume takes the items at hand-in",
+  kill: "Target = enemy name. \"+ also counts\" adds more enemies that count towards the same Count (e.g. Spider and Cave Spider for \"Kill 10 spiders\"); the Text below is what players see",
+  boss: "Target = boss enemy name (\"+ also counts\" for more than one)",
+  collect: "Target = item name; Consume takes the items at hand-in. \"+ also counts\" adds more items: held amounts add up, Consume takes them in list order",
   talk: "Talk to an NPC; Line is what they say", reach: "Walk within Radius tiles of X,Y",
   use: "Target = action: swing, shield, sprint, potion, mount, spell, build, stat, forge, party, enchant…",
   craft: "Target = item name crafted", equip: "Target = item name or slot", level: "Count = level to reach",
@@ -243,6 +245,31 @@ function reachMap(s, onPick) {
   return { el, draw };
 }
 
+// "Also counts": more enemies (kill, boss) or items (collect) towards the
+// same step. Stored as Targets, the full list with Target first; Target stays
+// the first so older servers still count it. No extras: no Targets key.
+function stepExtras(s) {
+  const t = String(s.Target || "").trim().toLowerCase(), seen = new Set([t]);
+  const raw = Array.isArray(s.Targets) ? s.Targets : (typeof s.Targets === "string" ? [s.Targets] : []);
+  return raw.map(x => String(x ?? "").trim()).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase()));
+}
+function setStepExtras(s, extras) {
+  if (!String(s.Target || "").trim() && extras.length) s.Target = extras.shift();
+  if (extras.length) s.Targets = [s.Target, ...extras]; else delete s.Targets;
+}
+function alsoCounts(s, names, redraw) {
+  const extras = stepExtras(s);
+  const box = h("span", { class: "also" });
+  extras.forEach((n, i) => box.append(h("span", { class: "chip" }, n,
+    h("button", { title: "Remove", onclick: () => { extras.splice(i, 1); setStepExtras(s, extras); redraw(); } }, "×"))));
+  const taken = new Set([String(s.Target || "").toLowerCase(), ...extras.map(x => x.toLowerCase())]);
+  const add = h("select", { class: "also-add" }, h("option", { value: "" }, "+ also counts…"),
+    names.filter(n => !taken.has(n.toLowerCase())).map(n => h("option", { value: n }, n)));
+  add.onchange = () => { if (add.value) { extras.push(add.value); setStepExtras(s, extras); redraw(); } };
+  box.append(add);
+  return box;
+}
+
 function renderQuests(m) {
   if (!S.c.hasQuestline) {
     m.append(h("div", { class: "form" }, h("h2", {}, "No questline in this database"),
@@ -291,7 +318,7 @@ function questForm(form, q) {
   const drawSteps = () => {
     stepBox.textContent = "";
     steps.forEach((s, i) => {
-      const type = h("select", { onchange: () => { s.Type = type.value; drawSteps(); } }, Object.keys(STEP_FIELDS).map(t => h("option", { value: t }, t)));
+      const type = h("select", { onchange: () => { if ((s.Type === "collect") !== (type.value === "collect")) delete s.Targets; s.Type = type.value; drawSteps(); } }, Object.keys(STEP_FIELDS).map(t => h("option", { value: t }, t)));
       type.value = s.Type;
       const top = h("div", { class: "top" }, h("b", {}, `${i + 1}.`), type);
       const inputs = {};
@@ -300,13 +327,17 @@ function questForm(form, q) {
         let el;
         if (k === "NPC") { el = npcSelect(s.NPC, () => (s.NPC = +el.value)); }
         else if (k === "Consume") { el = h("input", { type: "checkbox", onchange: () => (s.Consume = el.checked) }); el.checked = !!s.Consume; }
-        else if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) { el = enemySelect(s.Target); el.onchange = () => (s.Target = el.value); }
+        else if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) { el = enemySelect(s.Target); el.onchange = () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== el.value.toLowerCase())); drawSteps(); }; }
+        else if (k === "Target" && s.Type === "collect") { el = txt(s.Target); el.setAttribute("list", "bq-item-names"); el.onchange = () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== el.value.trim().toLowerCase())); drawSteps(); }; el.oninput = () => (s.Target = el.value); }
         else if (k === "Target") { el = txt(s.Target); el.oninput = () => (s.Target = el.value); }
         else if (k === "Line") { el = txt(s.Line || "", "What the NPC says"); el.classList.add("qline-in"); el.dataset.step = i; el.oninput = () => { s.Line = el.value; if (conv) conv.refresh(); }; }
         else { el = num(s[k]); el.oninput = () => { s[k] = +el.value; if (mini) mini.draw(); }; }
         inputs[k] = el;
         top.append(h("span", { class: "hint" }, k), el);
+        if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) top.append(alsoCounts(s, S.c.enemies.map(e => e.Name), drawSteps));
+        if (k === "Target" && s.Type === "collect") top.append(alsoCounts(s, S.c.items.map(i => i.Name), drawSteps));
       }
+      if (!["kill", "boss", "collect"].includes(s.Type)) delete s.Targets;
       top.append(h("span", { style: "flex:1" }),
         h("button", { onclick: () => { if (i) { [steps[i - 1], steps[i]] = [steps[i], steps[i - 1]]; drawSteps(); } } }, "↑"),
         h("button", { onclick: () => { steps.splice(i, 1); drawSteps(); } }, "×"));
@@ -316,6 +347,7 @@ function questForm(form, q) {
       stepBox.append(h("div", { class: "step", id: "qstep-" + i }, top, h("div", { class: "hint" }, STEP_HELP[s.Type] || ""), mini ? mini.el : "", text, hint));
     });
     stepBox.append(h("button", { onclick: () => { steps.push({ Type: "kill", Target: "", Count: 1, Text: "" }); drawSteps(); } }, "+ Step"));
+    if (!document.getElementById("bq-item-names")) document.body.append(h("datalist", { id: "bq-item-names" }, S.c.items.map(i => h("option", { value: i.Name }))));
     if (conv) conv.refresh();
   };
   let conv = null;
@@ -1427,8 +1459,10 @@ function questLinks(q) {
   const targets = [];
   steps.forEach((st, i) => {
     let l = null;
-    if ((st.Type === "kill" || st.Type === "boss") && enemyBy[st.Target]) l = link("#loot/" + enemyBy[st.Target].id, `${st.Type} ${st.Target}`);
-    else if (["collect", "craft", "equip"].includes(st.Type) && itemByName[st.Target]) l = link("#item/" + itemByName[st.Target].id, `${st.Type} ${st.Target}`);
+    const all = [st.Target, ...stepExtras(st)].filter(Boolean);
+    if ((st.Type === "kill" || st.Type === "boss") && all.some(n => enemyBy[n])) l = h("span", {}, st.Type + " ", all.map((n, j) => [j ? " or " : "", enemyBy[n] ? link("#loot/" + enemyBy[n].id, n) : n]));
+    else if (st.Type === "collect" && all.some(n => itemByName[n])) l = h("span", {}, st.Type + " ", all.map((n, j) => [j ? " or " : "", itemByName[n] ? link("#item/" + itemByName[n].id, n) : n]));
+    else if (["craft", "equip"].includes(st.Type) && itemByName[st.Target]) l = link("#item/" + itemByName[st.Target].id, `${st.Type} ${st.Target}`);
     else if (st.Type === "talk" && S.npcBy[st.NPC]) l = link("#npc/" + st.NPC, "talk to " + S.npcBy[st.NPC].Name);
     else if (st.Type === "reach") l = link(`#map/${st.X},${st.Y}`, `reach ${st.X},${st.Y}`);
     else l = h("span", {}, `${st.Type} ${st.Target || st.Count || ""}`);
