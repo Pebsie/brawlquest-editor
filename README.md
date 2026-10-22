@@ -316,6 +316,22 @@ client) by the client's `tools/build_fx_sprites.py`; existing client art
   their head and stand back up when it ends. Effects with a `stun` modifier
   do this by default when Visual is blank; set Visual to `none` to turn it off.
 
+## One step, several enemies (or items)
+
+- A `kill` or `boss` step can count more than one enemy towards the same
+  Count, e.g. "Kill 10 spiders" where both Spider and Cave Spider count. Pick
+  the first enemy as Target, then use **+ also counts...** next to it to add
+  more; each shows as a chip (x removes it). The Text box is the label
+  players see in the tracker ("Kill 10 spiders"), so write it for the group.
+- `collect` steps have the same: held amounts of every listed item add up,
+  and Consume takes them in list order.
+- Stored inside `quest_def.Steps` as `"Targets": ["Spider", "Cave Spider"]`
+  (the full list, Target first; Target is kept so older servers still count
+  the first one). No extras means no `Targets` key, exactly as before. Names
+  match exactly (any case), never partially. No schema change.
+- The checks report any listed enemy or item that doesn't exist, and a
+  `Targets` that isn't a list of names.
+
 ## Navigation
 
 NPCs, quests and dialogue are linked both ways: an NPC lists the quests it
