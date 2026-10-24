@@ -13,11 +13,22 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
 2. Edit in the tabs:
    * **Map**: tile sprites, NPCs, mob spawns, quest reach points, plots.
      * **Paint tiles**: the brush has Ground, Object (keep / paint / clear),
-       Collision, Area and a size (1, 2, 3, 5). Pick sprites from the
+       Collision, Zone (`world.Name`: lighting, music, quest zones) and a size (1, 2, 3, 5). Pick sprites from the
        thumbnail grid (search, folders, "On the map" by use, recently used).
        Edits show as you draw; they are stored when you let go. Alt-click a
-       tile to copy its ground and object. "Show collision" / "Show area
-       names" overlays.
+       tile to copy its ground and object. "Show collision" / "Show zone
+       names" / "Show areas" overlays.
+     * **Areas**: named regions painted per tile (a house, a mine), separate
+       from zones. Each has Interior (Outside / Roofed / Cave: roofed and cave
+       are inside, no rain), "Rain can fall here" for outdoor areas, a room
+       reverb (small, room, hall, cave, large cave) with Wet and Dry levels,
+       and an ambient sound and light level (stored, not used by the game
+       yet). Paint or erase with a 1/2/3/5 brush, or Room fill (connected
+       tiles with the same ground). Alt-click picks the area under the
+       cursor. Tables `areas` and `area_tiles` (the API's
+       `content/migrations/2026-10-24-areas.sql`); a db without them offers to
+       create them. Unpainted tiles use the old rule in the game (cave, floor
+       and wall grounds are inside).
      * **Place mobs**: pick the enemy from a thumbnail grid, click to place.
      * **Select**: drag NPCs and mobs; "Change sprite..." / "Change..." open a
        sprite picker for the NPC or the mob on that tile.

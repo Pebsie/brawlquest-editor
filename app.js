@@ -23,7 +23,9 @@ async function api(path, body) {
   if (!BQ.has()) throw new Error("Open a bq-content.db first");
   const fn = { content: () => BQ.api.content(), world: () => BQ.api.world(), save: () => BQ.api.save(body),
     delete: () => BQ.api.delete(body), tiles: () => BQ.api.tiles(body), patterns: () => BQ.api.patterns(body),
-    export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()), portraits: () => BQ.api.portraits(body) }[path];
+    export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()), portraits: () => BQ.api.portraits(body),
+    areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
+    areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body) }[path];
   const v = BQ.st.version;
   const out = fn();
   syncFile();
@@ -125,6 +127,7 @@ async function loadWorld() {
   const w = await api("world");
   S.world = { strings: w.strings, tiles: new Map() };
   for (const t of w.tiles) S.world.tiles.set(t[0] + "," + t[1], t);
+  await loadAreas();
 }
 
 async function save(table, row) {
@@ -702,6 +705,7 @@ function mapDown(e) {
   } else if (M.tool === "plot") plotDown(e, t);
   else if (M.tool === "spawn") placeSpawns(t);
   else if (M.tool === "erase") { brushTiles(t).forEach(b => patch(b.x, b.y, { Enemy: "" })); M.drag = { paint: true, last: t }; }
+  else if (M.tool === "areas") arDown(e, t);
   else if (M.tool === "paint") {
     if (e.altKey) { eyedrop(t); return; }
     paintAt(t); M.drag = { paint: true, last: t };
@@ -721,6 +725,7 @@ function mapMove(e) {
   M.hover = t;
   if (M.drag.npc || M.drag.mob) { M.drag.to = t; drawMap(); }
   else if (M.drag.plotRect || M.drag.movePlot || M.drag.resize) plotMove(t, e);
+  else if (M.drag.area) arDrag(t);
   else if (M.drag.paint) {
     for (const s of lineTiles(M.drag.last, t).slice(1)) {
       if (M.tool === "erase") brushTiles(s).forEach(b => patch(b.x, b.y, { Enemy: "" })); else paintAt(s);
@@ -738,6 +743,7 @@ async function mapUp() {
   } else if (d.mob && d.to && (d.to.x !== d.from.x || d.to.y !== d.from.y)) {
     patch(d.from.x, d.from.y, { Enemy: "" }); patch(d.to.x, d.to.y, { Enemy: d.mob }); M.sel = d.to; await flush();
   } else if (d.paint) await flush();
+  else if (d.area) await arFlush();
 }
 
 // Edits show at once: the tile is changed in S.world (what drawMap draws)
@@ -793,7 +799,7 @@ function brushSet() {
 }
 function paintAt(t) {
   const set = brushSet();
-  if (!Object.keys(set).length) { status("The brush is empty: pick a ground or object sprite, or set collision or an area.", true); return; }
+  if (!Object.keys(set).length) { status("The brush is empty: pick a ground or object sprite, or set collision or a zone.", true); return; }
   for (const b of brushTiles(t)) patch(b.x, b.y, set);
 }
 function eyedrop(t) {
@@ -817,19 +823,21 @@ function drawSide() {
   s.className = "side" + (M.tool === "paint" || M.tool === "spawn" ? " wide" : "");
   s.textContent = "";
   const tools = h("div", { class: "tools" });
-  for (const [k, l] of [["select", "Select / drag"], ["spawn", "Place mobs"], ["erase", "Erase mobs"], ["paint", "Paint tiles"], ["plot", "Plots"]])
+  for (const [k, l] of [["select", "Select / drag"], ["spawn", "Place mobs"], ["erase", "Erase mobs"], ["paint", "Paint tiles"], ["areas", "Areas"], ["plot", "Plots"]])
     tools.append(h("button", { class: M.tool === k ? "on" : "", onclick: () => { if (M.tool === "plot" && k !== "plot" && !plotConfirmDiscard()) return; M.tool = k; M.cv.style.cursor = ""; drawSide(); drawMap(); } }, l));
   s.append(h("h3", {}, "Tools"), tools,
     h("p", { class: "hint" }, "Wheel zooms. Right-drag (or drag empty ground in Select) pans. In Select, drag an NPC or a mob to move it."));
   if (M.tool === "plot") plotSide(s);
   if (M.tool === "spawn") spawnSide(s);
   if (M.tool === "paint") paintSide(s);
+  if (M.tool === "areas") areasSide(s);
   if (M.tool === "erase") s.append(h("h3", {}, "Erase mobs"), h("div", { class: "row2" }, h("span", {}, "Brush size"), seg([[1, "1"], [2, "2"], [3, "3"], [5, "5"]], M.brush.size, v => { M.brush.size = v; drawSide(); })),
     h("p", { class: "hint" }, "Click or drag over spawns to remove them."));
   s.append(h("h3", {}, "Overlays"), h("div", { class: "legend" }, h("span", { style: "background:#ffd34d" }), "NPC  ", h("span", { style: "background:#ff4d4d" }), "mob spawn  ",
     h("span", { style: "background:#5af" }), "quest reach point  ", h("span", { style: "background:#78ff8c" }), "plot"),
     h("label", { class: "chk" }, (() => { const c = h("input", { type: "checkbox", onchange: () => { M.showColl = c.checked; drawMap(); } }); c.checked = M.showColl; return c; })(), " Show collision"),
-    h("label", { class: "chk" }, (() => { const c = h("input", { type: "checkbox", onchange: () => { M.showAreas = c.checked; drawMap(); } }); c.checked = M.showAreas; return c; })(), " Show area names"));
+    h("label", { class: "chk" }, (() => { const c = h("input", { type: "checkbox", onchange: () => { M.showAreas = c.checked; drawMap(); } }); c.checked = M.showAreas; return c; })(), " Show zone names"),
+    M.tool === "areas" ? null : h("label", { class: "chk" }, (() => { const c = h("input", { type: "checkbox", onchange: () => { AR.show = c.checked; drawMap(); } }); c.checked = AR.show; return c; })(), " Show areas"));
   if (M.sel && M.tool === "select") selSide(s);
   const go = { x: num(Math.round(M.cx)), y: num(Math.round(M.cy)) };
   const npcJump = npcSelect(0, () => { const n = S.npcBy[npcJump.value]; if (n) { M.cx = n.SpawnX; M.cy = n.SpawnY; M.scale = 24; M.sel = { x: n.SpawnX, y: n.SpawnY }; drawSide(); drawMap(); } });
@@ -839,7 +847,7 @@ function selSide(s) {
   const t = tile(M.sel.x, M.sel.y), n = npcAt(M.sel.x, M.sel.y);
   s.append(h("h3", {}, `Tile ${M.sel.x}, ${M.sel.y}`));
   if (t) s.append(h("div", { class: "tileinfo" }, thumb(str(t[2]), null, "ground"), thumb(str(t[3]) || "", null, "object"),
-    h("div", { class: "hint" }, `Area: ${str(t[4]) || "-"}`, h("br"), `Ground: ${spriteLabel(str(t[2]))}`, h("br"),
+    h("div", { class: "hint" }, `Zone: ${str(t[4]) || "-"}`, h("br"), `Area: ${areaNameAt(M.sel.x, M.sel.y) || "-"}`, h("br"), `Ground: ${spriteLabel(str(t[2]))}`, h("br"),
       `Object: ${spriteLabel(str(t[3])) || "-"}`, h("br"), t[5] ? "Blocked" : "Walkable")));
   if (t && str(t[6])) {
     const en = S.c.enemies.find(v => v.Name === str(t[6]));
@@ -870,7 +878,7 @@ function paintSide(s) {
   const areas = [...new Set([...S.world.tiles.values()].map(t => str(t[4])))].filter(Boolean).sort();
   let dl = $("#areaNames"); if (!dl) { dl = h("datalist", { id: "areaNames" }); document.body.append(dl); }
   dl.replaceChildren(...areas.map(a => h("option", { value: a })));
-  const area = h("input", { type: "text", list: "areaNames", value: b.area ?? "", placeholder: "Area name", oninput: () => { b.area = area.value; drawMap(); } });
+  const area = h("input", { type: "text", list: "areaNames", value: b.area ?? "", placeholder: "Zone name", oninput: () => { b.area = area.value; drawMap(); } });
   const refresh = () => { drawSide(); drawMap(); };
   s.append(h("h3", {}, "Brush"),
     h("div", { class: "brush" },
@@ -884,7 +892,7 @@ function paintSide(s) {
         seg([["keep", "Keep"], ["set", "Paint"], ["clear", "Clear"]], b.fore === undefined ? "keep" : b.fore === "" ? "clear" : "set",
           v => { if (v === "keep") b.fore = undefined; else if (v === "clear") b.fore = ""; else { b.target = "fore"; b.fore = b.fore || recentGet("fore")[0] || "assets/world/objects/tree.png"; } refresh(); })),
       h("div", { class: "brow" }, h("span", { class: "bl" }, "Collision"), seg([["", "Keep"], ["1", "Blocked"], ["0", "Walkable"]], b.coll, v => { b.coll = v; refresh(); })),
-      h("div", { class: "brow" }, h("span", { class: "bl" }, "Area"), seg([["keep", "Keep"], ["set", "Set"]], b.area == null ? "keep" : "set", v => { b.area = v === "keep" ? null : (b.area || areas[0] || ""); refresh(); }),
+      h("div", { class: "brow" }, h("span", { class: "bl", title: "The zone (world.Name): lighting, music, quest zones. Inside/outside and reverb are the Areas tool." }, "Zone"), seg([["keep", "Keep"], ["set", "Set"]], b.area == null ? "keep" : "set", v => { b.area = v === "keep" ? null : (b.area || areas[0] || ""); refresh(); }),
         b.area != null ? area : null),
       h("div", { class: "brow" }, h("span", { class: "bl" }, "Size"), seg([[1, "1"], [2, "2"], [3, "3"], [5, "5"]], b.size, v => { b.size = v; refresh(); }))),
     h("p", { class: "hint" }, "Click or drag on the map to paint; the change shows straight away and is stored when you let go. Alt-click a tile to copy its ground and object into the brush."),
@@ -925,8 +933,9 @@ function drawMapNow() {
     if (areaHi !== null && str(t[4]) === areaHi) { g.fillStyle = "rgba(80,200,255,.28)"; g.fillRect(px(x), py(y), sc, sc); }
     if (forest && isFreeBuild(str(t[4]))) { g.fillStyle = "rgba(255,140,0,.22)"; g.fillRect(px(x), py(y), sc + .5, sc + .5); }
   }
-  // area names
-  if (sc < 10 || M.showAreas || areaHi !== null) {
+  drawAreasLayer(g, x0, x1, y0, y1, px, py, sc);
+  // zone names
+  if (M.tool !== "areas" && (sc < 10 || M.showAreas || areaHi !== null)) {
     g.font = "bold 13px sans-serif"; const shown = new Set(); const step = Math.max(3, Math.ceil(90 / sc));
     for (let y = y0; y <= y1; y += step) for (let x = x0; x <= x1; x += step) {
       const t = tile(x, y); const n = t && str(t[4]);
@@ -976,10 +985,11 @@ function drawMapNow() {
       g.strokeStyle = M.tool === "erase" ? "#f55" : "#fff"; g.lineWidth = 2; g.strokeRect(px(t.x) + 1, py(t.y) + 1, sc - 2, sc - 2); g.lineWidth = 1;
     }
   }
+  drawAreasBrush(g, px, py, sc);
   // hover readout
   if (M.hover) {
-    const t = tile(M.hover.x, M.hover.y);
-    const txt = `${M.hover.x}, ${M.hover.y}` + (t ? `  ·  ${str(t[4]) || "no area"}  ·  ${spriteLabel(str(t[2]))}${str(t[3]) ? " + " + spriteLabel(str(t[3])) : ""}${t[5] ? "  ·  blocked" : ""}` : "  ·  off the map");
+    const t = tile(M.hover.x, M.hover.y), an = areaNameAt(M.hover.x, M.hover.y);
+    const txt = `${M.hover.x}, ${M.hover.y}` + (t ? `  ·  ${str(t[4]) || "no zone"}${an ? "  ·  area " + an : ""}  ·  ${spriteLabel(str(t[2]))}${str(t[3]) ? " + " + spriteLabel(str(t[3])) : ""}${t[5] ? "  ·  blocked" : ""}` : "  ·  off the map");
     g.font = "14px sans-serif"; const tw = g.measureText(txt).width;
     g.fillStyle = "rgba(0,0,0,.72)"; g.fillRect(8, cv.height - 30, tw + 16, 24);
     g.fillStyle = "#fff"; g.fillText(txt, 16, cv.height - 13);

@@ -18,6 +18,23 @@ const BQ = (() => {
   const PLOT_MAX = 12;
   const PLOT_COLS = "id INTEGER PRIMARY KEY, Name TEXT NOT NULL DEFAULT '', X INTEGER NOT NULL, Y INTEGER NOT NULL, W INTEGER NOT NULL DEFAULT 8, H INTEGER NOT NULL DEFAULT 8, Rent INTEGER NOT NULL DEFAULT 50, MinLevel INTEGER NOT NULL DEFAULT 1, Agent INTEGER NOT NULL DEFAULT 0";
   const PLOT_TABLE = `CREATE TABLE IF NOT EXISTS plot (${PLOT_COLS});`;
+  // Areas (content/migrations/2026-10-24-areas.sql in the API): named regions
+  // painted per tile, a layer beside the zones (world.Name). The API creates
+  // the same two tables, empty, at startup.
+  const AREA_TABLES = [`CREATE TABLE IF NOT EXISTS areas (
+  id INTEGER PRIMARY KEY, Name TEXT NOT NULL,
+  Interior TEXT NOT NULL DEFAULT 'none',
+  Weather INTEGER NOT NULL DEFAULT 1,
+  Reverb TEXT NOT NULL DEFAULT 'none',
+  ReverbWet REAL NOT NULL DEFAULT 0.5,
+  ReverbDry REAL NOT NULL DEFAULT 1.0,
+  Ambient TEXT NOT NULL DEFAULT '',
+  AmbientVol REAL NOT NULL DEFAULT 0.5,
+  Light REAL,
+  Priority INTEGER NOT NULL DEFAULT 0);`,
+    "CREATE TABLE IF NOT EXISTS area_tiles (X INTEGER NOT NULL, Y INTEGER NOT NULL, AreaID INTEGER NOT NULL, PRIMARY KEY (X, Y));"];
+  const INTERIORS = ["none", "roofed", "cave"];
+  const REVERBS = ["none", "small", "room", "hall", "cave", "largecave"];
   // Same as the API's content/migrations/2026-10-19-plot-agents.sql: adds
   // plot.Agent (Land Agent npc id, 0 = any) and is safe to run twice.
   const PLOT_UPGRADE = [PLOT_TABLE, "DROP TABLE IF EXISTS plot_upgrade;", `CREATE TABLE plot_upgrade (${PLOT_COLS});`,
@@ -326,9 +343,54 @@ const BQ = (() => {
       let schema = plots ? "-- plot table with the Agent column (as content/migrations/2026-10-19-plot-agents.sql)\n" + PLOT_UPGRADE.join("\n") + "\n" : "";
       if (st.enemiesUpgraded || st.changes.some(c => /INTO enemies\b/.test(c)))
         schema += "-- enemies.KnockbackResist and HitEffect (as content/migrations/2026-10-20-boss-knockback.sql and 2026-10-22-hit-effects.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
+      if (st.changes.some(c => /\barea(_tiles|s)\b/.test(c))) schema += "-- areas tables (as content/migrations/2026-10-24-areas.sql)\n" + AREA_TABLES.join("\n") + "\n";
       return { sql: head + schema + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
     },
     clearExport() { st.changes = []; return { ok: true }; },
+    // ---- areas
+    areas() {
+      if (!has("areas") || !has("area_tiles")) return { missing: true, areas: [], tiles: [] };
+      return { missing: false,
+        areas: q("SELECT id, Name, Interior, Weather, Reverb, ReverbWet, ReverbDry, Ambient, AmbientVol, Light, Priority FROM areas ORDER BY id"),
+        tiles: q("SELECT X, Y, AreaID FROM area_tiles").map(r => [r.X, r.Y, r.AreaID]) };
+    },
+    areasCreate() { apply(AREA_TABLES, "areas tables (as content/migrations/2026-10-24-areas.sql)"); return { ok: true }; },
+    areaSave(row) {
+      if (!has("areas")) apply(AREA_TABLES, "areas tables (as content/migrations/2026-10-24-areas.sql)");
+      const name = String(row.Name || "").trim();
+      if (!name) throw new Error("An area needs a name");
+      const n = (v, d, lo, hi) => { v = v === "" || v == null ? d : +v; if (!isFinite(v)) v = d; return Math.min(hi, Math.max(lo, v)); };
+      const r = { Name: name, Interior: INTERIORS.includes(row.Interior) ? row.Interior : "none", Weather: row.Weather ? 1 : 0,
+        Reverb: REVERBS.includes(row.Reverb) ? row.Reverb : "none", ReverbWet: n(row.ReverbWet, 0.5, 0, 1), ReverbDry: n(row.ReverbDry, 1, 0, 1),
+        Ambient: String(row.Ambient || ""), AmbientVol: n(row.AmbientVol, 0.5, 0, 1),
+        Light: row.Light === null || row.Light === undefined || row.Light === "" ? null : n(row.Light, 1, 0, 2), Priority: Math.trunc(n(row.Priority, 0, -100, 100)) };
+      let id = Math.trunc(+row.id || 0);
+      if (!id) id = (q("SELECT IFNULL(MAX(id), 0) + 1 AS n FROM areas")[0].n);
+      const lv = v => v === null ? "NULL" : lit(v);
+      apply([`INSERT OR REPLACE INTO areas (id, Name, Interior, Weather, Reverb, ReverbWet, ReverbDry, Ambient, AmbientVol, Light, Priority) VALUES (${id}, ${lit(r.Name)}, ${lit(r.Interior)}, ${r.Weather}, ${lit(r.Reverb)}, ${r.ReverbWet}, ${r.ReverbDry}, ${lit(r.Ambient)}, ${r.AmbientVol}, ${lv(r.Light)}, ${r.Priority});`],
+        `area ${id} ${r.Name}`);
+      return { id };
+    },
+    areaDelete(id) {
+      id = Math.trunc(+id);
+      apply([`DELETE FROM area_tiles WHERE AreaID = ${id};`, `DELETE FROM areas WHERE id = ${id};`], `area ${id} deleted`);
+      return { ok: true };
+    },
+    // [{X, Y, AreaID}]: AreaID 0 unpaints the tile.
+    areaTiles(patches) {
+      if (!has("area_tiles")) apply(AREA_TABLES, "areas tables (as content/migrations/2026-10-24-areas.sql)");
+      if (patches.length > 20000) throw new Error("too many tiles in one save");
+      const known = new Set(q("SELECT id FROM areas").map(r => r.id));
+      const s = [];
+      for (const p of patches) {
+        const x = Math.trunc(p.X), y = Math.trunc(p.Y), a = Math.trunc(+p.AreaID || 0);
+        if (!a) s.push(`DELETE FROM area_tiles WHERE X = ${x} AND Y = ${y};`);
+        else if (!known.has(a)) throw new Error("unknown area " + a);
+        else s.push(`INSERT OR REPLACE INTO area_tiles (X, Y, AreaID) VALUES (${x}, ${y}, ${a});`);
+      }
+      if (s.length) apply(s, `area tiles x${patches.length}`);
+      return { tiles: patches.length };
+    },
     // Clear dialogue node portrait overrides (ids); with from, only nodes that
     // still hold that image. The node then shows the speaking NPC's sprite.
     portraits({ ids, from }) {
