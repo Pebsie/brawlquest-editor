@@ -81,7 +81,7 @@ const BQCheck = (() => {
     // type makes Go's Scan fail and the rest of that row load blank.
     const L = {
       items: { star: 10, why: "initItems (SELECT * FROM items) exits the API without it", types: { id: "i", Name: "s", Type: "s", Val: "s", ImgPath: "s", Desc: "s", Worth: "i", Attributes: "s", Subtype: "s", Cooldown: "i" } },
-      enemies: { why: "initEnemies panics (nil rows) without it", types: { id: "i", Name: "s", ATK: "i", Image: "s", HP: "i", Range: "i", CanMove: "b", XP: "i", Width: "i", Height: "i", Attributes: "s" }, opt: { AttackSpeed: "i", KnockbackResist: "n", HitEffect: "s" } },
+      enemies: { why: "initEnemies panics (nil rows) without it", types: { id: "i", Name: "s", ATK: "i", Image: "s", HP: "i", Range: "i", CanMove: "b", XP: "i", Width: "i", Height: "i", Attributes: "s" }, opt: { AttackSpeed: "i", KnockbackResist: "n", HitEffect: "s", SpawnsDay: "i", SpawnsNight: "i" } },
       enemySpells: { why: "initEnemies panics (nil rows) without it", types: { EnemyID: "i", Name: "s", Value: "s", Frequency: "i" } },
       loot: { why: "initEnemies panics (nil rows) without it", types: { EnemyID: "i", AmountVariance: "i", Chance: "i", ItemID: "i", Amount: "i" } },
       npc: { why: "initNPC loads no NPCs without it", types: { id: "i", Name: "s", ImgPath: "s", SpawnX: "i", SpawnY: "i" }, nullable: ["Faction", "Conversation"] },
