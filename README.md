@@ -36,6 +36,11 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
    * **Quests**: title, text (offer, accept, in progress, complete), steps
      (kill, boss, collect, talk, reach, use, craft, equip, level), rewards,
      prerequisites, levels. Needs the questline migration (`quest_def`).
+     **Complete objectives in order** (`quest_def.Sequential`): unticked, the
+     default, every objective counts at once ("kill 3 Spiders" and "kill 3 Cave
+     Spiders" fill together); ticked, one at a time in order. Opening a db
+     without the column adds it (every quest unticked), as the API's
+     `content/migrations/2026-10-24-quest-sequential.sql` does.
    * **NPCs & dialogue**: name, sprite, position, dialogue nodes and answers,
      and the quest lines each NPC speaks.
    * **Items**: name, type, Val, image (with preview), description, worth,
