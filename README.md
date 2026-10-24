@@ -172,7 +172,13 @@ Mobs and bosses use only the `boss_patterns` primitives the API runs
   ichor, ectoplasm, water, metal, embers, leaf, pulp or none; the client falls
   back to blood for anything else. The 2026-10-22 hit-effects migration sets
   every mob by what it is made of; the editor applies it to an older copy too
-  and includes it in Export SQL). Renaming moves the mob's map
+  and includes it in Export SQL), Spawns in day and Spawns at night
+  (`SpawnsDay` / `SpawnsNight`, two boxes, both ticked for every mob after the
+  2026-10-25 day-night-spawns migration, which the editor also applies to an
+  older copy). A day on the world clock is 30 minutes: day 06:00-18:00, night
+  18:00-06:00. A spawner waits for its mob's time, and a mob caught out when
+  the time turns fades away once it is out of combat, with no loot or XP.
+  Leave both ticked for a mob that is always about. Renaming moves the mob's map
   spawns (`world.Enemy`) along. Delete is refused while it is placed on the map;
   otherwise its loot, legacy spells and patterns go with it. It is also
   refused while another mob's spawn primitive summons it. Legacy

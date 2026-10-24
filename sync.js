@@ -103,7 +103,7 @@ const BQSync = (() => {
     hideNotice();
   });
   function upgradeNotes() {
-    return [BQ.st.enemiesUpgraded && "Mobs: added the KnockbackResist/HitEffect columns", BQ.st.plotUpgraded && "Plots: added the Agent column", BQ.st.questsUpgraded && "Quests: added the Sequential column"].filter(Boolean);
+    return [BQ.st.enemiesUpgraded && "Mobs: added the KnockbackResist/HitEffect/SpawnsDay/SpawnsNight columns", BQ.st.plotUpgraded && "Plots: added the Agent column", BQ.st.questsUpgraded && "Quests: added the Sequential column"].filter(Boolean);
   }
   async function loadBaseFp(base) {
     try {
