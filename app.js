@@ -89,7 +89,7 @@ async function openBytes(buf, name, o = {}) {
   const warnings = await BQ.open(buf, name);
   if (o.restore) {
     BQ.st.dirty = !!o.restore.dirty; BQ.st.changes = o.restore.changes || [];
-    BQ.st.plotUpgraded = !!o.restore.plotUpgraded; BQ.st.enemiesUpgraded = !!o.restore.enemiesUpgraded;
+    BQ.st.plotUpgraded = !!o.restore.plotUpgraded; BQ.st.enemiesUpgraded = !!o.restore.enemiesUpgraded; BQ.st.questsUpgraded = !!o.restore.questsUpgraded;
   }
   S.world = null; S.quest = S.npc = S.item = null;
   $("#welcome").hidden = true; $("#main").hidden = false; $("#tabs").hidden = false;
@@ -283,7 +283,7 @@ function renderQuests(m) {
   const form = h("div", { class: "form" });
   const pick = q => { S.quest = q; m.replaceChildren(listPanel(() => S.c.quests, q => `${q.Level} ${q.Title}`, () => S.quest && S.quest.id, it => go("#quest/" + it.id), newQ), form); questForm(form, q); };
   const newQ = () => pick({ id: 0, Act: 1, Zone: "", Title: "New quest", Summary: "", Level: 1, MinLevel: 1, Giver: 0, TurnIn: 0,
-    Prereqs: "[]", Offer: "", Accept: "", Progress: "", Complete: "", XP: 100, Gold: 10, Rewards: "[]",
+    Prereqs: "[]", Offer: "", Accept: "", Progress: "", Complete: "", XP: 100, Gold: 10, Rewards: "[]", Sequential: 0,
     Steps: JSON.stringify([{ Type: "kill", Target: "", Count: 1, Text: "" }]) });
   pick(S.quest ? (S.c.quests.find(q => q.id === S.quest.id) || S.c.quests[0]) : S.c.quests[0] || null);
   if (!S.c.quests.length) newQ();
@@ -298,7 +298,9 @@ function questForm(form, q) {
     Giver: npcSelect(q.Giver), TurnIn: npcSelect(q.TurnIn), Summary: area(q.Summary),
     Offer: area(q.Offer), Accept: area(q.Accept), Progress: area(q.Progress), Complete: area(q.Complete),
     XP: num(q.XP), Gold: num(q.Gold),
+    Sequential: h("input", { type: "checkbox", id: "q-sequential" }),
   };
+  f.Sequential.checked = !!+q.Sequential;
   for (const k of ["Offer", "Accept", "Progress", "Complete", "Summary"]) f[k].id = "qline-" + k;
   for (const k of QUEST_LINES) f[k].addEventListener("input", () => { if (conv) conv.refresh(); });
   const prereqs = new Set(parseJSON(q.Prereqs, []));
@@ -374,6 +376,7 @@ function questForm(form, q) {
     MinLevel: +f.MinLevel.value, Giver: +f.Giver.value, TurnIn: +f.TurnIn.value, Prereqs: JSON.stringify([...prereqs]),
     Offer: f.Offer.value, Accept: f.Accept.value, Progress: f.Progress.value, Complete: f.Complete.value,
     XP: +f.XP.value, Gold: +f.Gold.value, Rewards: JSON.stringify(rewards), Steps: JSON.stringify(steps),
+    Sequential: f.Sequential.checked ? 1 : 0,
   });
   form.append(
     h("h2", {}, q.id ? `Quest ${q.id}` : "New quest"),
@@ -387,7 +390,11 @@ function questForm(form, q) {
       field("XP / Gold", h("div", {}, f.XP, " XP  ", f.Gold, " gold"))),
     h("p", { class: "hint" }, "Text can use {SHIELD}, {INTERACT}, {MOUNTS}, {CHARACTER} for the player's keys."),
     q.id ? (conv = questConversation(q, f, steps, stepBox)) : null,
-    h("h3", {}, "Steps (done in order)"), stepBox,
+    h("h3", {}, "Steps"),
+    h("label", { class: "chk", title: "Off: every objective counts at once (kill 3 Spiders and kill 3 Cave Spiders fill together). On: one objective at a time, in order: only the current one counts." },
+      f.Sequential, " Complete objectives in order"),
+    h("p", { class: "hint" }, "Unticked (the default): players can work on every objective at once; the quest is ready when all are done."),
+    stepBox,
     h("h3", {}, "Item rewards"), rwBox,
     h("div", { class: "bar" },
       h("button", { class: "primary", onclick: async () => { const id = await save("quest_def", collect()); S.quest = { id }; renderTab(); } }, "Save"),

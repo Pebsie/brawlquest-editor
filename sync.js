@@ -66,7 +66,7 @@ const BQSync = (() => {
       const fp = currentFp();
       const summary = SY.snapFp ? BQDump.diff(SY.snapFp, fp).text : "";
       const id = await BQStore.add({ bytes, name: BQ.st.name, summary, unsaved, label: o.label || "",
-        base: SY.base, hash, changes: BQ.st.changes, flags: { plotUpgraded: !!BQ.st.plotUpgraded, enemiesUpgraded: !!BQ.st.enemiesUpgraded } }, o.fast);
+        base: SY.base, hash, changes: BQ.st.changes, flags: { plotUpgraded: !!BQ.st.plotUpgraded, enemiesUpgraded: !!BQ.st.enemiesUpgraded, questsUpgraded: !!BQ.st.questsUpgraded } }, o.fast);
       SY.snapFp = fp; SY.lastHash = hash; SY.lastId = id; SY.lastSnap = Date.now(); SY.storeOk = true;
       showSync();
       return id;
@@ -103,7 +103,7 @@ const BQSync = (() => {
     hideNotice();
   });
   function upgradeNotes() {
-    return [BQ.st.enemiesUpgraded && "Mobs: added the KnockbackResist/HitEffect columns", BQ.st.plotUpgraded && "Plots: added the Agent column"].filter(Boolean);
+    return [BQ.st.enemiesUpgraded && "Mobs: added the KnockbackResist/HitEffect columns", BQ.st.plotUpgraded && "Plots: added the Agent column", BQ.st.questsUpgraded && "Quests: added the Sequential column"].filter(Boolean);
   }
   async function loadBaseFp(base) {
     try {

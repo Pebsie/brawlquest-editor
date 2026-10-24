@@ -66,6 +66,14 @@ const BQ = (() => {
   // What the client draws for enemies.HitEffect (scripts/effects/hit_materials.lua);
   // anything else falls back to blood there.
   const HIT_EFFECTS = ["blood", "wood", "stone", "crystal", "ice", "bone", "slime", "ichor", "ectoplasm", "water", "metal", "embers", "leaf", "pulp", "none"];
+  // Same as the API's content/migrations/2026-10-24-quest-sequential.sql:
+  // adds quest_def.Sequential (0 = every objective counts at once, the
+  // default for every quest; 1 = one at a time, in order). Safe to run twice;
+  // values already set are kept.
+  const QUEST_COLS = "id INTEGER PRIMARY KEY, Act INTEGER NOT NULL DEFAULT 1, Zone TEXT NOT NULL DEFAULT '', Title TEXT NOT NULL, Summary TEXT NOT NULL DEFAULT '', Level INTEGER NOT NULL DEFAULT 1, MinLevel INTEGER NOT NULL DEFAULT 1, Giver INTEGER NOT NULL, TurnIn INTEGER NOT NULL, Prereqs TEXT NOT NULL DEFAULT '[]', Offer TEXT NOT NULL DEFAULT '', Accept TEXT NOT NULL DEFAULT '', Progress TEXT NOT NULL DEFAULT '', Complete TEXT NOT NULL DEFAULT '', XP INTEGER NOT NULL DEFAULT 0, Gold INTEGER NOT NULL DEFAULT 0, Rewards TEXT NOT NULL DEFAULT '[]', Steps TEXT NOT NULL DEFAULT '[]', Sequential INTEGER NOT NULL DEFAULT 0";
+  const QUEST_SEQ_UPGRADE = ["DROP TABLE IF EXISTS quest_def_upgrade;", `CREATE TABLE quest_def_upgrade (${QUEST_COLS});`,
+    "INSERT INTO quest_def_upgrade (id, Act, Zone, Title, Summary, Level, MinLevel, Giver, TurnIn, Prereqs, Offer, Accept, Progress, Complete, XP, Gold, Rewards, Steps, Sequential) SELECT e.id, e.Act, e.Zone, e.Title, e.Summary, e.Level, e.MinLevel, e.Giver, e.TurnIn, e.Prereqs, e.Offer, e.Accept, e.Progress, e.Complete, e.XP, e.Gold, e.Rewards, e.Steps, IFNULL((SELECT Sequential FROM quest_def q WHERE q.id = e.id), 0) FROM quest_def e, (SELECT 0 AS Sequential) d;",
+    "DROP TABLE quest_def;", "ALTER TABLE quest_def_upgrade RENAME TO quest_def;"];
   const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
   const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
 
@@ -76,7 +84,7 @@ const BQ = (() => {
     await init();
     if (db) db.close();
     db = new SQL.Database(new Uint8Array(buf));
-    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.touched = null; st.version++;
+    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.questsUpgraded = false; st.touched = null; st.version++;
     st.warnings = checkSchema();
     const ec = cols("enemies");
     if (!ec.includes("KnockbackResist") || !ec.includes("HitEffect")) {
@@ -85,6 +93,11 @@ const BQ = (() => {
       const added = [!ec.includes("KnockbackResist") && "enemies.KnockbackResist (0 = full knockback, 1 = immune; bosses set to 1)",
         !ec.includes("HitEffect") && "enemies.HitEffect (what comes off a mob when hit: wood for trees, bone for skeletons...)"].filter(Boolean);
       st.warnings.push(`Added ${added.join(" and ")} to this copy. The server needs content/migrations/2026-10-20-boss-knockback.sql and 2026-10-22-hit-effects.sql; Export SQL includes the same step.`);
+    }
+    if (has("quest_def") && !cols("quest_def").includes("Sequential")) {
+      db.exec("BEGIN;" + QUEST_SEQ_UPGRADE.join("\n") + "COMMIT;");
+      st.questsUpgraded = true;
+      st.warnings.push("Added quest_def.Sequential (objectives in order or all at once; every quest all at once) to this copy. The server needs content/migrations/2026-10-24-quest-sequential.sql, or a restart of the new API, which adds it itself; Export SQL includes the same step.");
     }
     if (has("plot") && !cols("plot").includes("Agent")) {
       db.exec("BEGIN;" + PLOT_UPGRADE.join("\n") + "COMMIT;");
@@ -258,6 +271,7 @@ const BQ = (() => {
       if (table === "plot" && !has("plot")) apply([PLOT_TABLE], "create plot table");
       if (table === "effects" && !has("effects")) apply([EFFECT_TABLE], "create effects table");
       if (table === "plot") row.Agent = +row.Agent || 0;
+      if (table === "quest_def" && "Sequential" in row) row.Sequential = row.Sequential ? 1 : 0;
       const allowed = cols(table);
       for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
       let id = +row.id || 0;
@@ -344,6 +358,8 @@ const BQ = (() => {
       if (st.enemiesUpgraded || st.changes.some(c => /INTO enemies\b/.test(c)))
         schema += "-- enemies.KnockbackResist and HitEffect (as content/migrations/2026-10-20-boss-knockback.sql and 2026-10-22-hit-effects.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
       if (st.changes.some(c => /\barea(_tiles|s)\b/.test(c))) schema += "-- areas tables (as content/migrations/2026-10-24-areas.sql)\n" + AREA_TABLES.join("\n") + "\n";
+      if (st.questsUpgraded || st.changes.some(c => /INTO quest_def\b/.test(c)))
+        schema += "-- quest_def.Sequential (as content/migrations/2026-10-24-quest-sequential.sql)\n" + QUEST_SEQ_UPGRADE.join("\n") + "\n";
       return { sql: head + schema + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
     },
     clearExport() { st.changes = []; return { ok: true }; },
