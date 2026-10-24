@@ -174,3 +174,19 @@ ul.issues.err li b{color:#f99}
 .also{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
 .also .chip{display:inline-flex;align-items:center;gap:2px;background:#22324a;border:1px solid #3b5c8a;border-radius:10px;padding:0 2px 0 8px;font-size:12px}
 .also .chip button{padding:0 5px;background:none;border:0;color:#9bd;cursor:pointer}
+/* areas */
+.arealist{max-height:30vh;overflow:auto;border:1px solid #2a2f38;border-radius:4px;margin:6px 0;background:#14171c}
+.arearow{display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:pointer;border-bottom:1px solid #1f232b;font-size:13px}
+.arearow:last-child{border-bottom:0}
+.arearow:hover{background:#1b2029}.arearow.sel{background:#2a2716;box-shadow:inset 2px 0 #ffd34d}
+.arearow .an{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arearow .ac{color:#889;font-variant-numeric:tabular-nums;font-size:12px}
+.arearow .sw{flex:none;margin:0}
+.areaprops{border-top:1px solid #2a2f38;margin-top:10px}
+.prow{display:flex;align-items:center;gap:8px;margin:6px 0}
+.prow .pl{width:64px;flex:none;color:#aab}
+.prow input[type=text],.prow select{flex:1;min-width:0}
+.prow input[type=range]{flex:1;min-width:0}
+.prow .sv{width:34px;text-align:right;font-variant-numeric:tabular-nums;color:#ccd;font-size:13px}
+.prow-chk{margin:6px 0 6px 72px}
+.areaprops .sub{margin:12px 0 2px;font-size:12px;color:#778;border-top:1px dashed #2a2f38;padding-top:6px}
