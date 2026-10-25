@@ -11,8 +11,8 @@ const BQDump = (() => {
   const ident = s => `"${String(s).replace(/"/g, '""')}"`;
   const LABEL = { quest_def: "Quests", conversation: "Dialogue", npc: "NPCs", items: "Items", enemies: "Mobs", loot: "Loot",
     world: "Map tiles", craft: "Craft", forge: "Forge", boss_patterns: "Boss patterns", effects: "Effects", plot: "Plots",
-    enemySpells: "Mob spells", routine: "NPC routines", routineNode: "NPC routine nodes", areas: "Areas", area_tiles: "Area tiles" };
-  const ORDER = ["quest_def", "conversation", "npc", "items", "enemies", "boss_patterns", "effects", "loot", "craft", "forge", "plot", "world", "areas", "area_tiles"];
+    enemySpells: "Mob spells", routine: "NPC routines", routineNode: "NPC routine nodes", areas: "Areas", area_tiles: "Area tiles", world_flip: "Flipped objects" };
+  const ORDER = ["quest_def", "conversation", "npc", "items", "enemies", "boss_patterns", "effects", "loot", "craft", "forge", "plot", "world", "world_flip", "areas", "area_tiles"];
 
   function tables(q) {
     return q("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
