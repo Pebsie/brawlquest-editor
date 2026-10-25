@@ -644,7 +644,7 @@ const itemSpriteGroups = () => [{ id: "items", label: "Items", entries: folderEn
 
 // ------------------------------------------------------------------ map
 const M = { scale: 12, cx: 0, cy: 0, tool: "select", drag: null, pending: new Map(), imgs: {}, colours: {}, failed: {}, sel: null, hover: null, raf: 0,
-  brush: { ground: null, fore: undefined, coll: "", area: null, size: 1, target: "ground" }, showColl: false, showAreas: false };
+  brush: { ground: null, fore: undefined, flip: false, coll: "", area: null, size: 1, target: "ground" }, showColl: false, showAreas: false };
 
 function imgFor(path) {
   if (!path) return null;
@@ -760,9 +760,9 @@ function patch(x, y, set) {
   const p = M.pending.get(k) || { X: x, Y: y, Set: {} };
   Object.assign(p.Set, set); M.pending.set(k, p);
   let t = tile(x, y);
-  if (!t) { t = [x, y, idx("assets/world/grounds/grass.png"), 0, 0, 0, 0, 0]; S.world.tiles.set(k, t); }
-  const col = { GroundTile: 2, ForegroundTile: 3, Name: 4, Collision: 5, Enemy: 6 };
-  for (const [c, v] of Object.entries(set)) t[col[c]] = c === "Collision" ? (v ? 1 : 0) : idx(v);
+  if (!t) { t = [x, y, idx("assets/world/grounds/grass.png"), 0, 0, 0, 0, 0, 0]; S.world.tiles.set(k, t); }
+  const col = { GroundTile: 2, ForegroundTile: 3, Name: 4, Collision: 5, Enemy: 6, Flip: 8 };
+  for (const [c, v] of Object.entries(set)) t[col[c]] = c === "Collision" || c === "Flip" ? (v ? 1 : 0) : idx(v);
   M.usage = null;
   drawMap();
 }
@@ -799,7 +799,7 @@ function brushTiles(t) {
 function brushSet() {
   const b = M.brush, set = {};
   if (b.ground) set.GroundTile = b.ground;
-  if (b.fore !== undefined) set.ForegroundTile = b.fore;
+  if (b.fore !== undefined) { set.ForegroundTile = b.fore; set.Flip = !!b.fore && !!b.flip; }
   if (b.coll !== "") set.Collision = b.coll === "1";
   if (b.area != null) set.Name = b.area;
   return set;
@@ -811,7 +811,7 @@ function paintAt(t) {
 }
 function eyedrop(t) {
   const tl = tile(t.x, t.y); if (!tl) return;
-  M.brush.ground = str(tl[2]) || null; M.brush.fore = str(tl[3]);
+  M.brush.ground = str(tl[2]) || null; M.brush.fore = str(tl[3]); M.brush.flip = !!tl[8];
   status(`Brush copied from ${t.x}, ${t.y}: ${spriteLabel(M.brush.ground) || "-"} / ${spriteLabel(M.brush.fore) || "no object"}`);
   drawSide(); drawMap();
 }
@@ -855,7 +855,9 @@ function selSide(s) {
   s.append(h("h3", {}, `Tile ${M.sel.x}, ${M.sel.y}`));
   if (t) s.append(h("div", { class: "tileinfo" }, thumb(str(t[2]), null, "ground"), thumb(str(t[3]) || "", null, "object"),
     h("div", { class: "hint" }, `Zone: ${str(t[4]) || "-"}`, h("br"), `Area: ${areaNameAt(M.sel.x, M.sel.y) || "-"}`, h("br"), `Ground: ${spriteLabel(str(t[2]))}`, h("br"),
-      `Object: ${spriteLabel(str(t[3])) || "-"}`, h("br"), t[5] ? "Blocked" : "Walkable")));
+      `Object: ${spriteLabel(str(t[3])) || "-"}${t[8] && str(t[3]) ? " (flipped)" : ""}`, h("br"), t[5] ? "Blocked" : "Walkable")));
+  if (t && str(t[3])) s.append(h("div", { class: "bar" }, h("button", { title: "Mirror the object left to right (F)", onclick: flipSelected }, t[8] ? "Unflip object" : "Flip object"),
+    h("span", { class: "hint" }, "F")));
   if (t && str(t[6])) {
     const en = S.c.enemies.find(v => v.Name === str(t[6]));
     s.append(h("div", { class: "bar" }, thumb(en && en.Image, () => openPicker({ title: "Change the mob here", groups: enemyGroups, recentKey: "enemy", value: str(t[6]),
@@ -898,11 +900,13 @@ function paintSide(s) {
         h("span", { class: "bn" }, b.fore === undefined ? "keep" : b.fore === "" ? "clear" : spriteLabel(b.fore)),
         seg([["keep", "Keep"], ["set", "Paint"], ["clear", "Clear"]], b.fore === undefined ? "keep" : b.fore === "" ? "clear" : "set",
           v => { if (v === "keep") b.fore = undefined; else if (v === "clear") b.fore = ""; else { b.target = "fore"; b.fore = b.fore || recentGet("fore")[0] || "assets/world/objects/tree.png"; } refresh(); })),
+      h("div", { class: "brow" }, h("span", { class: "bl", title: "Paint the object mirrored left to right (F)" }, "Flip"),
+        seg([[false, "Normal"], [true, "Flipped"]], !!b.flip, v => { b.flip = v; refresh(); }), h("span", { class: "hint" }, "F")),
       h("div", { class: "brow" }, h("span", { class: "bl" }, "Collision"), seg([["", "Keep"], ["1", "Blocked"], ["0", "Walkable"]], b.coll, v => { b.coll = v; refresh(); })),
       h("div", { class: "brow" }, h("span", { class: "bl", title: "The zone (world.Name): lighting, music, quest zones. Inside/outside and reverb are the Areas tool." }, "Zone"), seg([["keep", "Keep"], ["set", "Set"]], b.area == null ? "keep" : "set", v => { b.area = v === "keep" ? null : (b.area || areas[0] || ""); refresh(); }),
         b.area != null ? area : null),
       h("div", { class: "brow" }, h("span", { class: "bl" }, "Size"), seg([[1, "1"], [2, "2"], [3, "3"], [5, "5"]], b.size, v => { b.size = v; refresh(); }))),
-    h("p", { class: "hint" }, "Click or drag on the map to paint; the change shows straight away and is stored when you let go. Alt-click a tile to copy its ground and object into the brush."),
+    h("p", { class: "hint" }, "Click or drag on the map to paint; the change shows straight away and is stored when you let go. Alt-click a tile to copy its ground and object into the brush. F flips the object."),
     h("div", { class: "seg pick-target" }, h("span", {}, "Picking: "),
       h("button", { type: "button", class: target === "ground" ? "on" : "", onclick: () => { b.target = "ground"; refresh(); } }, "Ground"),
       h("button", { type: "button", class: target === "fore" ? "on" : "", onclick: () => { b.target = "fore"; refresh(); } }, "Object")),
@@ -911,6 +915,18 @@ function paintSide(s) {
       onPick: v => { if (target === "ground") { if (v) b.ground = v; } else b.fore = v; refresh(); } }));
 }
 
+// An object sprite, mirrored left to right when flip is set (world_flip),
+// in the same square.
+function drawObj(g, img, x, y, w, h, flip) {
+  if (!flip) { g.drawImage(img, x, y, w, h); return; }
+  g.save(); g.translate(x + w, y); g.scale(-1, 1); g.drawImage(img, 0, 0, w, h); g.restore();
+}
+// Flip the object on the selected tile (Select tool: F or the button).
+function flipSelected() {
+  const t = M.sel && tile(M.sel.x, M.sel.y);
+  if (!t || !str(t[3])) { status("No object on this tile to flip.", true); return; }
+  patch(M.sel.x, M.sel.y, { Flip: !t[8] }); flush(); drawSide();
+}
 function drawMap() { if (!M.raf) M.raf = requestAnimationFrame(() => { M.raf = 0; drawMapNow(); }); }
 function drawMapNow() {
   const cv = M.cv; if (!cv || !S.world || !cv.width) return;
@@ -931,7 +947,7 @@ function drawMapNow() {
     else { g.fillStyle = M.failed[gp] ? "#a0a" : M.colours[gp] || "#3a5"; g.fillRect(px(x), py(y), sc + .5, sc + .5); }
     if (fp) {
       const fi = imgFor(fp);
-      if (sprites && fi) g.drawImage(fi, px(x), py(y), sc + .5, sc + .5);
+      if (sprites && fi) drawObj(g, fi, px(x), py(y), sc + .5, sc + .5, t[8]);
       else if (M.failed[fp]) { g.strokeStyle = "#f0f"; g.beginPath(); g.moveTo(px(x) + 2, py(y) + 2); g.lineTo(px(x) + sc - 2, py(y) + sc - 2); g.moveTo(px(x) + sc - 2, py(y) + 2); g.lineTo(px(x) + 2, py(y) + sc - 2); g.stroke(); }
       else if (M.colours[fp]) { g.fillStyle = M.colours[fp]; g.globalAlpha = .7; g.fillRect(px(x), py(y), sc + .5, sc + .5); g.globalAlpha = 1; }
     }
@@ -986,7 +1002,7 @@ function drawMapNow() {
         g.globalAlpha = .75;
         const gi = b.ground && imgFor(b.ground), fi = b.fore && imgFor(b.fore);
         if (gi) g.drawImage(gi, px(t.x), py(t.y), sc, sc);
-        if (fi) g.drawImage(fi, px(t.x), py(t.y), sc, sc);
+        if (fi) drawObj(g, fi, px(t.x), py(t.y), sc, sc, b.flip);
         g.globalAlpha = 1;
       }
       g.strokeStyle = M.tool === "erase" ? "#f55" : "#fff"; g.lineWidth = 2; g.strokeRect(px(t.x) + 1, py(t.y) + 1, sc - 2, sc - 2); g.lineWidth = 1;
@@ -996,7 +1012,7 @@ function drawMapNow() {
   // hover readout
   if (M.hover) {
     const t = tile(M.hover.x, M.hover.y), an = areaNameAt(M.hover.x, M.hover.y);
-    const txt = `${M.hover.x}, ${M.hover.y}` + (t ? `  ·  ${str(t[4]) || "no zone"}${an ? "  ·  area " + an : ""}  ·  ${spriteLabel(str(t[2]))}${str(t[3]) ? " + " + spriteLabel(str(t[3])) : ""}${t[5] ? "  ·  blocked" : ""}` : "  ·  off the map");
+    const txt = `${M.hover.x}, ${M.hover.y}` + (t ? `  ·  ${str(t[4]) || "no zone"}${an ? "  ·  area " + an : ""}  ·  ${spriteLabel(str(t[2]))}${str(t[3]) ? " + " + spriteLabel(str(t[3])) + (t[8] ? " (flipped)" : "") : ""}${t[5] ? "  ·  blocked" : ""}` : "  ·  off the map");
     g.font = "14px sans-serif"; const tw = g.measureText(txt).width;
     g.fillStyle = "rgba(0,0,0,.72)"; g.fillRect(8, cv.height - 30, tw + 16, 24);
     g.fillStyle = "#fff"; g.fillText(txt, 16, cv.height - 13);
@@ -1284,6 +1300,10 @@ document.addEventListener("keydown", e => {
       drawMap(); clearTimeout(M.sideT); M.sideT = setTimeout(drawSide, 150);
     }
   } else if (!inForm && e.key === "Escape" && M.drag) { M.drag = null; drawMap(); }
+  else if (!inForm && (e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (M.tool === "paint") { e.preventDefault(); M.brush.flip = !M.brush.flip; drawSide(); drawMap(); }
+    else if (M.tool === "select" && M.sel) { e.preventDefault(); flipSelected(); }
+  }
 });
 
 // ------------------------------------------------------------------ items

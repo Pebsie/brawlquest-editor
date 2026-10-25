@@ -33,6 +33,10 @@ const BQ = (() => {
   Light REAL,
   Priority INTEGER NOT NULL DEFAULT 0);`,
     "CREATE TABLE IF NOT EXISTS area_tiles (X INTEGER NOT NULL, Y INTEGER NOT NULL, AreaID INTEGER NOT NULL, PRIMARY KEY (X, Y));"];
+  // Flipped map objects (content/migrations/2026-10-25-world-flip.sql in the
+  // API): one row per tile whose object is drawn mirrored left to right. The
+  // API creates the same table, empty, at startup.
+  const WORLD_FLIP_TABLE = "CREATE TABLE IF NOT EXISTS world_flip (X INTEGER NOT NULL, Y INTEGER NOT NULL, PRIMARY KEY (X, Y));";
   const INTERIORS = ["none", "roofed", "cave"];
   const REVERBS = ["none", "small", "room", "hall", "cave", "largecave"];
   // Same as the API's content/migrations/2026-10-19-plot-agents.sql: adds
@@ -270,10 +274,11 @@ const BQ = (() => {
       const s = v => { v = v == null ? "" : String(v); if (!idx.has(v)) { idx.set(v, strings.length); strings.push(v); } return idx.get(v); };
       const stmt = db.prepare("SELECT X, Y, IFNULL(GroundTile,''), IFNULL(ForegroundTile,''), IFNULL(Name,''), IFNULL(Collision,0), IFNULL(Enemy,''), IFNULL(Music,'') FROM world");
       const tiles = [];
+      const flips = new Set(has("world_flip") ? q("SELECT X, Y FROM world_flip").map(r => r.X + "," + r.Y) : []);
       while (stmt.step()) {
         const r = stmt.get();
         const c = r[5] === 1 || r[5] === "1" || String(r[5]).toLowerCase() === "true" ? 1 : 0;
-        tiles.push([r[0], r[1], s(r[2]), s(r[3]), s(r[4]), c, s(r[6]), s(r[7])]);
+        tiles.push([r[0], r[1], s(r[2]), s(r[3]), s(r[4]), c, s(r[6]), s(r[7]), flips.has(r[0] + "," + r[1]) ? 1 : 0]);
       }
       stmt.free();
       return { strings, tiles };
@@ -347,9 +352,17 @@ const BQ = (() => {
     tiles(patches) {
       if (patches.length > 5000) throw new Error("too many tiles in one save");
       const s = [];
+      let flipTable = has("world_flip");
       for (const p of patches) {
         const sets = [];
         for (const [k, v] of Object.entries(p.Set)) {
+          if (k === "Flip") {
+            // Not a world column: the world_flip layer (see WORLD_FLIP_TABLE).
+            const x = Math.trunc(p.X), y = Math.trunc(p.Y);
+            if (!flipTable) { s.push(WORLD_FLIP_TABLE); flipTable = true; }
+            s.push(v ? `INSERT OR IGNORE INTO world_flip (X, Y) VALUES (${x}, ${y});` : `DELETE FROM world_flip WHERE X = ${x} AND Y = ${y};`);
+            continue;
+          }
           if (!WORLD_COLS[k]) throw new Error("world has no editable column " + k);
           if (k === "Enemy" && v && !q("SELECT 1 FROM enemies WHERE Name=?", [v]).length) throw new Error("unknown enemy " + v);
           sets.push(`${k} = ${lit(v)}`);
@@ -370,6 +383,7 @@ const BQ = (() => {
       let schema = plots ? "-- plot table with the Agent column (as content/migrations/2026-10-19-plot-agents.sql)\n" + PLOT_UPGRADE.join("\n") + "\n" : "";
       if (st.enemiesUpgraded || st.changes.some(c => /INTO enemies\b/.test(c)))
         schema += "-- enemies.KnockbackResist, HitEffect, SpawnsDay and SpawnsNight (as content/migrations/2026-10-20-boss-knockback.sql, 2026-10-22-hit-effects.sql and 2026-10-25-day-night-spawns.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
+      if (st.changes.some(c => /\bworld_flip\b/.test(c))) schema += "-- world_flip table (as content/migrations/2026-10-25-world-flip.sql)\n" + WORLD_FLIP_TABLE + "\n";
       if (st.changes.some(c => /\barea(_tiles|s)\b/.test(c))) schema += "-- areas tables (as content/migrations/2026-10-24-areas.sql)\n" + AREA_TABLES.join("\n") + "\n";
       if (st.questsUpgraded || st.changes.some(c => /INTO quest_def\b/.test(c)))
         schema += "-- quest_def.Sequential (as content/migrations/2026-10-24-quest-sequential.sql)\n" + QUEST_SEQ_UPGRADE.join("\n") + "\n";
