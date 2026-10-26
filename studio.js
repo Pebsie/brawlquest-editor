@@ -14,7 +14,7 @@ const QS = {
   view: "journey", arg: null, sel: null, undo: [], redo: [], cam: null, layout: "story", filter: "",
   play: { level: 1, done: new Set(), state: {}, follow: true, log: [] }, preview: null, notes: null,
 };
-const QS_ICON = { kill: "assets/ui/studio/target.png", boss: "assets/ui/crown.png", collect: "assets/ui/studio/loot.png", talk: "assets/ui/studio/alert.png",
+const QS_ICON = { kill: "assets/ui/studio/target.png", boss: "assets/ui/studio/crown.png", collect: "assets/ui/studio/loot.png", talk: "assets/ui/studio/alert.png",
   reach: "assets/ui/studio/arrow.png", use: "assets/ui/studio/alert-item.png", craft: "assets/items/reagent/Hilt.png", equip: "assets/items/reagent/Metal.png", level: "assets/ui/studio/xp.png" };
 const USE_ACTIONS = ["swing", "shield", "sprint", "potion", "mount", "spell", "build", "stat", "forge", "party", "enchant"];
 const LINE_COLOURS = ["#f2cc59", "#7ac8ff", "#99e699", "#ff9ad5", "#ffb45a", "#c59bff", "#6be3d6", "#ff7b6b", "#d8e07a", "#a0a8ff"];
@@ -41,7 +41,7 @@ function stepLabel(s) {
   if (s.Type === "collect") return `Collect ${c} ${names.join(" or ") || "?"}`;
   if (s.Type === "talk") return `Talk to ${S.npcBy[s.NPC] ? S.npcBy[s.NPC].Name : "?"}`;
   if (s.Type === "reach") return `Reach ${s.X},${s.Y}`;
-  if (s.Type === "use") return `${s.Target || "use"} ×${c}`;
+  if (s.Type === "use") return `${s.Target || "use"} x${c}`;
   if (s.Type === "level") return `Reach level ${c}`;
   return `${s.Type} ${s.Target || ""}`;
 }
@@ -87,8 +87,13 @@ function qsAnalyse() {
     if (missing.length) add(q.id, "err", "prereq", `Needs quest ${missing.join(", ")} first, which doesn't exist`);
     if (ps.includes(q.id)) add(q.id, "err", "cycle", "Needs itself first");
     else if (inCycle.has(q.id)) add(q.id, "err", "cycle", "Circular prerequisites: it can never unlock");
-    if (!ok.has(q.id) && !missing.length && !inCycle.has(q.id)) add(q.id, "err", "unreach", "Unreachable: an earlier quest can never unlock");
-    else if (!ok.has(q.id) && missing.length) add(q.id, "err", "unreach", "Unreachable for every player");
+    if (!ok.has(q.id) && !missing.length && !inCycle.has(q.id)) {
+      // blocked by something earlier: name the quest that is actually broken
+      let b = null; const st = [...ps], seen2 = new Set();
+      while (st.length && !b) { const x = st.shift(); if (seen2.has(x)) continue; seen2.add(x); const xq = by.get(x); if (!xq) continue; if (pre.get(x).some(p => !by.has(p)) || inCycle.has(x)) b = xq; else st.push(...pre.get(x)); }
+      add(q.id, "warn", "blocked", b ? `Locked for everyone: it comes after “${b.Title}”, which can never unlock` : "Locked for everyone: an earlier quest can never unlock");
+    }
+    else if (!ok.has(q.id) && missing.length) add(q.id, "err", "unreach", `Unreachable for every player, and so is everything after it`);
     if (!S.npcBy[q.Giver]) add(q.id, "err", "giver", q.Giver ? `Giver NPC ${q.Giver} doesn't exist` : "Nobody gives this quest");
     if (!S.npcBy[q.TurnIn]) add(q.id, "err", "turnin", q.TurnIn ? `Hand-in NPC ${q.TurnIn} doesn't exist` : "Nobody takes the hand-in");
     const pl = ps.map(p => by.get(p)).filter(Boolean).map(p => p.Level);
@@ -96,7 +101,7 @@ function qsAnalyse() {
       const mx = Math.max(...pl);
       if (q.Level < mx) add(q.id, "warn", "level", `Level drops: Lv ${q.Level} after a Lv ${mx} quest`);
       else if (q.Level - mx > 3) add(q.id, "warn", "level", `Level jump: Lv ${mx} to Lv ${q.Level}`);
-    } else if (q.Level > 1) add(q.id, "info", "root", "Starts a new line: no prerequisites");
+    } else if (q.Level > 1 && !ps.length) add(q.id, "info", "root", "Starts a new line: no prerequisites");
     if (q.MinLevel > q.Level) add(q.id, "warn", "level", `Min level ${q.MinLevel} is above the quest level ${q.Level}`);
     if (!(+q.XP) && !(+q.Gold) && !qRw(q).length) add(q.id, "warn", "reward", "No reward: no XP, gold or items");
     const steps = qSteps(q);
@@ -122,7 +127,7 @@ function qsAnalyse() {
   const lines = [...Array(nLines)].map((_, i) => {
     const qs = quests.filter(q => line.get(q.id) === i).sort((a, b) => (depth.get(a.id) - depth.get(b.id)) || a.Level - b.Level);
     const zones = [...new Set(qs.map(q => q.Zone).filter(Boolean))];
-    return { i, quests: qs, name: qs.length > 1 ? (qs[0].Title + " line") : qs[0].Title, zones, minLevel: Math.min(...qs.map(q => q.Level)), colour: LINE_COLOURS[i % LINE_COLOURS.length] };
+    return { i, quests: qs, name: qs.length > 1 ? `From “${qs[0].Title}”` : qs[0].Title, zones, minLevel: Math.min(...qs.map(q => q.Level)), colour: LINE_COLOURS[i % LINE_COLOURS.length] };
   }).sort((a, b) => b.quests.length - a.quests.length || a.minLevel - b.minLevel);
   // NPC problems: dead-end dialogue, missing greeting
   const npcIssues = new Map(), addN = (id, sev, msg) => { if (!npcIssues.has(id)) npcIssues.set(id, []); npcIssues.get(id).push({ sev, msg }); };
@@ -323,10 +328,10 @@ function qsCard(q, an, p) {
       iss.length ? h("span", { class: "qc-iss " + sev, title: iss.map(x => x.msg).join("\n") }, sev === "info" ? "i" : "!") : null),
     h("div", { class: "qc-mid" },
       h("span", { class: "qc-who", title: `Given by ${giver ? giver.Name : "nobody"}` }, giver ? pix(giver.ImgPath, "pt") : h("span", { class: "pt none" }, "?")),
-      h("span", { class: "qc-arrow" }, "›"),
+      h("span", { class: "qc-arrow" }, ">"),
       h("span", { class: "qc-steps " + (seq ? "seq" : "par"), title: (seq ? "In order:\n" : "All at once:\n") + steps.map(stepLabel).join("\n") },
         steps.slice(0, 4).map((s, i) => [i && seq ? h("i", { class: "qc-then" }) : null, pix(stepIcon(s), "si " + s.Type)]), steps.length > 4 ? h("b", {}, "+" + (steps.length - 4)) : null),
-      h("span", { class: "qc-arrow" }, "›"),
+      h("span", { class: "qc-arrow" }, ">"),
       h("span", { class: "qc-who", title: `Hand in to ${turn ? turn.Name : "nobody"}` }, turn ? pix(turn.ImgPath, "pt") : h("span", { class: "pt none" }, "?"))),
     h("div", { class: "qc-bot" }, h("span", { class: "qc-zone" }, q.Zone || "no zone"),
       h("span", { class: "qc-rw" }, +q.XP ? [pix("assets/ui/studio/xp.png", "mi"), q.XP] : null, " ", +q.Gold ? [pix("assets/ui/studio/gold.png", "mi"), q.Gold] : null,
@@ -345,7 +350,7 @@ function qsJourney(body) {
   const sv = (tag, a) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
   for (const b of L.bands) {
     world.append(h("div", { class: "qs-band" + (b.loose ? " loose" : ""), style: `top:${b.y}px;height:${b.h}px;width:${L.w}px;--lc:${b.colour}` },
-      h("div", { class: "qs-band-l" }, h("b", {}, b.name), " ", h("span", {}, `${b.quests.length} quest${b.quests.length === 1 ? "" : "s"}${b.zones.length ? " · " + b.zones.slice(0, 4).join(", ") + (b.zones.length > 4 ? "…" : "") : ""}`))));
+      h("div", { class: "qs-band-l" }, h("b", {}, b.name), " ", h("span", {}, `${b.quests.length} quest${b.quests.length === 1 ? "" : "s"}${b.zones.length ? " - " + b.zones.slice(0, 4).join(", ") + (b.zones.length > 4 ? "..." : "") : ""}`))));
   }
   const edgeHit = [];
   for (const q of S.c.quests) {
@@ -377,13 +382,13 @@ function qsJourney(body) {
   for (const q of S.c.quests) { const p = L.pos.get(q.id); if (p) world.append(qsCard(q, an, p)); }
   view.append(world);
   // toolbar
-  const search = h("input", { type: "search", class: "qs-in", placeholder: "Find a quest, NPC or zone…", value: QS.filter });
+  const search = h("input", { type: "search", class: "qs-in", placeholder: "Find a quest, NPC or zone...", value: QS.filter });
   search.addEventListener("input", () => { QS.filter = search.value; world.querySelectorAll(".qs-card").forEach(c => { const q = qById(+c.dataset.id); c.classList.toggle("dim", !!QS.filter && !(`${q.Title} ${q.Zone} ${q.id} ${npcName(q.Giver)} ${npcName(q.TurnIn)}`.toLowerCase().includes(QS.filter.toLowerCase()))); }); });
   search.addEventListener("keydown", e => { if (e.key === "Enter") { const c = world.querySelector(".qs-card:not(.dim)"); if (c) qsFocus(+c.dataset.id); } });
   const seg2 = (v, l) => h("button", { class: "qs-btn" + (QS.layout === v ? " on" : ""), onclick: () => { QS.layout = v; QS.cam = null; qsRerender(); } }, l);
   const probList = qsProblemList(an);
   const tools = h("div", { class: "qs-tools" }, seg2("story", "Story order"), seg2("level", "By level"), search,
-    h("button", { class: "qs-btn", title: "Zoom out", onclick: () => pz.zoomAt(view.clientWidth / 2, view.clientHeight / 2, 1 / 1.25) }, "−"),
+    h("button", { class: "qs-btn", title: "Zoom out", onclick: () => pz.zoomAt(view.clientWidth / 2, view.clientHeight / 2, 1 / 1.25) }, "-"),
     h("button", { class: "qs-btn", title: "Zoom in", onclick: () => pz.zoomAt(view.clientWidth / 2, view.clientHeight / 2, 1.25) }, "+"),
     h("button", { class: "qs-btn", title: "Fit the whole journey", onclick: () => { fit(); pz.apply(); } }, "Fit"),
     h("label", { class: "qs-chk", title: "Colour quests by the Playtest character: done, available now, locked" }, h("input", { type: "checkbox", checked: !!QS.play.overlay, onchange: e => { QS.play.overlay = e.target.checked; qsRerender(); } }), ` Lv ${QS.play.level} player`),
@@ -403,7 +408,7 @@ function qsJourney(body) {
   const fresh = !QS.cam; if (fresh) QS.cam = { x: 0, y: 0, z: 1 };
   const pz = qsPanZoom(view, world, QS.cam);
   QS._pz = pz; QS._view = view;
-  requestAnimationFrame(() => { if (fresh) { fit(); pz.apply(); } if (QS.sel && QS.view === "journey" && QS.arg) { qsFocus(QS.sel); QS.arg = null; } });
+  requestAnimationFrame(() => { if (fresh) { Object.assign(QS.cam, { z: view.clientWidth < 700 ? 0.6 : 0.8, x: 10, y: 4 }); pz.apply(); } if (QS.sel && QS.view === "journey" && QS.arg) { qsFocus(QS.sel); QS.arg = null; } });
   // links: drag from a card's port
   let drag = null;
   world.addEventListener("pointerdown", e => {
@@ -446,7 +451,7 @@ function qsProblemList(an) {
   for (const n of S.c.npcs) for (const x of an.npcIssues.get(n.id) || []) rows.push({ n, ...x });
   rows.sort((a, b) => sevRank[b.sev] - sevRank[a.sev]);
   const count = rows.filter(r => r.sev !== "info").length;
-  const el = h("div", { class: "qs-problems", id: "qs-problems" }, h("div", { class: "qs-ph" }, h("b", {}, "What the map found"), h("button", { class: "qs-btn", onclick: () => { QS.showProbs = false; qsRerender(); } }, "×")),
+  const el = h("div", { class: "qs-problems", id: "qs-problems" }, h("div", { class: "qs-ph" }, h("b", {}, "What the map found"), h("button", { class: "qs-btn", onclick: () => { QS.showProbs = false; qsRerender(); } }, "x")),
     rows.length ? rows.map(r => h("div", { class: "qs-prob " + r.sev, onclick: () => (r.q ? qsFocus(r.q.id, true) : qsGo("npc", r.n.id)) },
       h("i", { class: "lg " + r.sev }), h("b", {}, r.q ? r.q.Title : r.n.Name), " ", h("span", {}, r.msg))) : h("p", {}, "Nothing. Lovely."));
   return { el, count };
@@ -527,7 +532,7 @@ function qsInline(value, onSave, o = {}) {
 function qsPickModal(title, entries, onPick, o = {}) {
   const close = () => { ov.remove(); document.removeEventListener("keydown", esc, true); };
   const esc = e => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
-  const q = h("input", { type: "search", class: "qs-in", placeholder: "Search…" });
+  const q = h("input", { type: "search", class: "qs-in", placeholder: "Search..." });
   const grid = h("div", { class: "qs-pgrid" });
   const sel = new Set(o.selected || []);
   const draw = () => {
@@ -539,14 +544,14 @@ function qsPickModal(title, entries, onPick, o = {}) {
   };
   q.addEventListener("input", draw);
   const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } },
-    h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, title.toUpperCase()), h("button", { class: "qs-x", onclick: close }, "×")),
+    h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, title.toUpperCase()), h("button", { class: "qs-x", onclick: close }, "x")),
       h("div", { class: "qs-wbody" }, q, grid,
         o.multi ? h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot", onclick: () => { close(); onPick([...sel]); } }, "Use these"), h("span", { class: "hint" }, "Pick every enemy that should count")) : null)));
   document.body.append(ov); document.addEventListener("keydown", esc, true);
   draw(); q.focus();
 }
-const npcEntries = () => S.c.npcs.map(n => ({ value: n.id, img: n.ImgPath, label: n.Name, note: `${n.Faction || "no faction"} · ${n.SpawnX},${n.SpawnY}` }));
-const enemyEntries = () => S.c.enemies.map(e => ({ value: e.Name, img: e.Image, label: e.Name, note: `HP ${e.HP} · XP ${e.XP}` }));
+const npcEntries = () => S.c.npcs.map(n => ({ value: n.id, img: n.ImgPath, label: n.Name, note: `${n.Faction || "no faction"} - ${n.SpawnX},${n.SpawnY}` }));
+const enemyEntries = () => S.c.enemies.map(e => ({ value: e.Name, img: e.Image, label: e.Name, note: `HP ${e.HP} - XP ${e.XP}` }));
 const itemEntries = () => S.c.items.map(i => ({ value: i.id, img: i.ImgPath, label: i.Name, note: i.Type }));
 
 // ------------------------------------------------------------------ quest sheet (drawer)
@@ -566,8 +571,16 @@ function qsQuestSheet(id) {
       h("div", {}, h("small", {}, role), n ? h("a", { href: "#studio/npc/" + n.id }, n.Name) : h("b", { class: "bad" }, "nobody")));
   };
   const pre = qPre(q), next = an.next.get(id) || [];
-  const chipQ = (pid, rm) => { const p = qById(pid); return h("span", { class: "qs-chip" + (p ? "" : " bad") }, p ? h("a", { href: "#", onclick: e => { e.preventDefault(); qsFocus(pid, true); } }, `Lv ${p.Level} ${p.Title}`) : `#${pid} (missing)`, rm ? h("button", { title: "Remove", onclick: () => P({ Prereqs: JSON.stringify(pre.filter(x => x !== pid)) }, `${q.Title} no longer needs ${p ? p.Title : "#" + pid}`) }, "×") : null); };
-  const addPre = h("select", { class: "qs-sel" }, h("option", { value: "" }, "+ needs…"), S.c.quests.filter(x => x.id !== id && !pre.includes(x.id) && !qsAncestors(x.id).has(id)).map(x => h("option", { value: x.id }, `Lv ${x.Level} · ${x.Title}`)));
+  const fixFor = pid => {
+    // the likeliest meant quest: highest level below this one, same zone first, not after this one
+    const after = new Set([id]); let grew = true; while (grew) { grew = false; for (const x of S.c.quests) if (!after.has(x.id) && qPre(x).some(p => after.has(p))) { after.add(x.id); grew = true; } }
+    const c = S.c.quests.filter(x => !after.has(x.id) && x.Level <= q.Level && !(an.issues.get(x.id) || []).some(i => i.code === "prereq" || i.code === "cycle"));
+    c.sort((a, b) => (b.Zone === q.Zone) - (a.Zone === q.Zone) || b.Level - a.Level || Math.abs(a.id - pid) - Math.abs(b.id - pid));
+    return c[0];
+  };
+  const chipQ = (pid, rm) => { const p = qById(pid); if (!p && rm) { const f = fixFor(pid); if (f) return h("span", { class: "qs-chip bad" }, `#${pid} (missing)`, h("button", { title: "Remove", onclick: () => P({ Prereqs: JSON.stringify(pre.filter(x => x !== pid)) }, `${q.Title} no longer needs #${pid}`) }, "x"), h("button", { class: "qs-mini fix", title: `Same zone, just before it: Lv ${f.Level} ${f.Title}`, onclick: () => P({ Prereqs: JSON.stringify(pre.map(x => (x === pid ? f.id : x))) }, `${q.Title} now comes after ${f.Title}`) }, `fix: after “${f.Title}”?`)); }
+    return h("span", { class: "qs-chip" + (p ? "" : " bad") }, p ? h("a", { href: "#", onclick: e => { e.preventDefault(); qsFocus(pid, true); } }, `Lv ${p.Level} ${p.Title}`) : `#${pid} (missing)`, rm ? h("button", { title: "Remove", onclick: () => P({ Prereqs: JSON.stringify(pre.filter(x => x !== pid)) }, `${q.Title} no longer needs ${p ? p.Title : "#" + pid}`) }, "x") : null); };
+  const addPre = h("select", { class: "qs-sel" }, h("option", { value: "" }, "+ needs..."), S.c.quests.filter(x => x.id !== id && !pre.includes(x.id) && !qsAncestors(x.id).has(id)).map(x => h("option", { value: x.id }, `Lv ${x.Level} - ${x.Title}`)));
   addPre.onchange = () => addPre.value && qsLink(+addPre.value, id);
   // objectives
   const stepRow = (s, i) => {
@@ -581,21 +594,21 @@ function qsQuestSheet(id) {
       h("button", { class: "qs-mini", onclick: () => qsPickModal("Which item?", itemEntries(), v => upd(x => { x.Target = S.itemBy[v].Name; delete x.Targets; }, `Objective ${i + 1}: ${S.itemBy[v].Name}`)) }, names.length ? "change" : "+ item"));
     else if (s.Type === "talk") targets = h("span", { class: "qs-targets" }, h("button", { class: "qs-chip", onclick: () => qsPickModal("Talk to whom?", npcEntries(), v => upd(x => (x.NPC = +v), `Objective ${i + 1}: talk to ${npcName(+v)}`)) }, S.npcBy[s.NPC] ? [pix(S.npcBy[s.NPC].ImgPath, "mi"), S.npcBy[s.NPC].Name] : "pick an NPC"));
     else if (s.Type === "use") { const sel = h("select", { class: "qs-sel" }, USE_ACTIONS.map(a => h("option", { value: a }, a))); sel.value = s.Target; sel.onchange = () => upd(x => (x.Target = sel.value), `Objective ${i + 1}: ${sel.value}`); targets = sel; }
-    const count = ["kill", "collect", "use", "craft", "level"].includes(s.Type) ? h("span", { class: "qs-count" }, "×", qsInline(String(+s.Count || 1), v => upd(x => (x.Count = Math.max(1, +v || 1)), `Objective ${i + 1}: count ${v}`), { num: true })) : null;
+    const count = ["kill", "collect", "use", "craft", "level"].includes(s.Type) ? h("span", { class: "qs-count" }, "x", qsInline(String(+s.Count || 1), v => upd(x => (x.Count = Math.max(1, +v || 1)), `Objective ${i + 1}: count ${v}`), { num: true })) : null;
     const row = h("div", { class: "qs-step t-" + s.Type },
       h("div", { class: "qs-step-h" }, h("b", { class: "qs-n" }, i + 1), pix(stepIcon(s), "si"), h("span", { class: "qs-type" }, s.Type), targets, count, h("span", { class: "qs-sp" }),
-        i ? h("button", { class: "qs-mini", title: "Move up", onclick: () => { const a = ss(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; setSteps(a, `Moved objective ${i + 1} up`); } }, "↑") : null,
-        h("button", { class: "qs-mini", title: "Remove", onclick: () => { const a = ss(); if (a.length < 2) { qsToast("A quest needs at least one objective"); return; } a.splice(i, 1); setSteps(a, `Removed objective ${i + 1}`); } }, "×")),
+        i ? h("button", { class: "qs-mini", title: "Move up", onclick: () => { const a = ss(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; setSteps(a, `Moved objective ${i + 1} up`); } }, "^") : null,
+        h("button", { class: "qs-mini", title: "Remove", onclick: () => { const a = ss(); if (a.length < 2) { qsToast("A quest needs at least one objective"); return; } a.splice(i, 1); setSteps(a, `Removed objective ${i + 1}`); } }, "x")),
       h("div", { class: "qs-step-t" }, qsInline(s.Text, v => upd(x => (x.Text = v), `Objective ${i + 1} text`), { ph: "What the quest tracker says" })),
       s.Type === "talk" ? h("div", { class: "qs-say" }, pix(S.npcBy[s.NPC] ? S.npcBy[s.NPC].ImgPath : "", "mi"), qsInline(s.Line, v => upd(x => (x.Line = v), `${npcName(s.NPC)}'s line`), { multi: true, ph: "What they say when you get there", cls: "rh" })) : null);
     if (s.Type === "reach") {
       const tmp = { ...s };
       const mini = reachMap(tmp, () => upd(x => { x.X = tmp.X; x.Y = tmp.Y; }, `Objective ${i + 1}: reach ${tmp.X},${tmp.Y}`));
-      row.append(h("div", { class: "qs-reach" }, mini.el, h("span", { class: "qs-count" }, "radius ", qsInline(String(+s.Radius || 3), v => upd(x => (x.Radius = Math.max(1, +v || 3)), `Objective ${i + 1}: radius ${v}`), { num: true }), " tiles · blue ground aura in game")));
+      row.append(h("div", { class: "qs-reach" }, mini.el, h("span", { class: "qs-count" }, "radius ", qsInline(String(+s.Radius || 3), v => upd(x => (x.Radius = Math.max(1, +v || 3)), `Objective ${i + 1}: radius ${v}`), { num: true }), " tiles - blue ground aura in game")));
     }
     return row;
   };
-  const addStep = h("select", { class: "qs-sel" }, h("option", { value: "" }, "+ objective…"), ["kill", "reach", "collect", "talk", "use", "build", "craft", "equip", "boss", "level"].map(t => h("option", { value: t }, t)));
+  const addStep = h("select", { class: "qs-sel" }, h("option", { value: "" }, "+ objective..."), ["kill", "reach", "collect", "talk", "use", "build", "craft", "equip", "boss", "level"].map(t => h("option", { value: t }, t)));
   addStep.onchange = () => { const t = addStep.value; if (!t) return; const a = qSteps(q); a.push(qsBlankStep(t, q)); setSteps(a, `Added a ${t} objective`); };
   const seq = !!+q.Sequential;
   // rewards
@@ -603,21 +616,21 @@ function qsQuestSheet(id) {
   const rwBox = h("div", { class: "qs-rw" },
     h("span", { class: "qs-chip" }, pix("assets/ui/studio/xp.png", "mi"), qsInline(String(q.XP), v => P({ XP: Math.max(0, +v || 0) }, `XP ${v}`), { num: true }), " XP"),
     h("span", { class: "qs-chip" }, pix("assets/ui/studio/gold.png", "mi"), qsInline(String(q.Gold), v => P({ Gold: Math.max(0, +v || 0) }, `Gold ${v}`), { num: true }), " gold"),
-    rw.map((r, i) => h("span", { class: "qs-chip" }, S.itemBy[r.ItemID] ? pix(S.itemBy[r.ItemID].ImgPath, "mi") : null, S.itemBy[r.ItemID] ? S.itemBy[r.ItemID].Name : `item ${r.ItemID}?`, " ×", qsInline(String(r.Amount), v => { const a = qRw(q); a[i].Amount = Math.max(1, +v || 1); return P({ Rewards: JSON.stringify(a) }, "Reward amount"); }, { num: true }),
-      h("button", { onclick: () => { const a = qRw(q); a.splice(i, 1); P({ Rewards: JSON.stringify(a) }, "Removed a reward"); } }, "×"))),
+    rw.map((r, i) => h("span", { class: "qs-chip" }, S.itemBy[r.ItemID] ? pix(S.itemBy[r.ItemID].ImgPath, "mi") : null, S.itemBy[r.ItemID] ? S.itemBy[r.ItemID].Name : `item ${r.ItemID}?`, " x", qsInline(String(r.Amount), v => { const a = qRw(q); a[i].Amount = Math.max(1, +v || 1); return P({ Rewards: JSON.stringify(a) }, "Reward amount"); }, { num: true }),
+      h("button", { onclick: () => { const a = qRw(q); a.splice(i, 1); P({ Rewards: JSON.stringify(a) }, "Removed a reward"); } }, "x"))),
     h("button", { class: "qs-mini", onclick: () => qsPickModal("Reward item", itemEntries(), v => { const a = qRw(q); a.push({ ItemID: +v, Amount: 1 }); P({ Rewards: JSON.stringify(a) }, `Reward: ${S.itemBy[v].Name}`); }) }, "+ item"));
   const zones = [...new Set(S.c.quests.map(x => x.Zone).filter(Boolean))].sort();
   if (!$("#qs-zones")) document.body.append(h("datalist", { id: "qs-zones" }));
   $("#qs-zones").replaceChildren(...zones.map(z => h("option", { value: z })));
   d.replaceChildren(
-    h("div", { class: "qs-wtitle" }, h("span", {}, `QUEST ${q.id}`), h("span", { class: "qs-sp" }), h("a", { href: "#quest/" + q.id, class: "qs-link", title: "The full form in the Quests tab" }, "form"), h("button", { class: "qs-x", title: "Close", onclick: () => { QS.sel = null; d.classList.remove("open"); syncHash("#studio/journey"); document.querySelectorAll(".qs-card.sel").forEach(c => c.classList.remove("sel")); } }, "×")),
+    h("div", { class: "qs-wtitle" }, h("span", {}, `QUEST ${q.id}`), h("span", { class: "qs-sp" }), h("a", { href: "#quest/" + q.id, class: "qs-link", title: "The full form in the Quests tab" }, "form"), h("button", { class: "qs-x", title: "Close", onclick: () => { QS.sel = null; d.classList.remove("open"); syncHash("#studio/journey"); document.querySelectorAll(".qs-card.sel").forEach(c => c.classList.remove("sel")); } }, "x")),
     h("div", { class: "qs-sheet" },
       h("div", { class: "qs-title" }, h("span", { class: "qc-lv big", title: "Quest level" }, qsInline(String(q.Level), v => P({ Level: Math.max(1, +v || 1) }, `Level ${v}`), { num: true })),
         qsInline(q.Title, v => P({ Title: v || q.Title }, `Renamed to ${v}`), { cls: "qs-h", ph: "Quest title" })),
-      h("div", { class: "qs-meta" }, "Zone ", qsInline(q.Zone, v => P({ Zone: v }, `Zone ${v}`), { list: "qs-zones", ph: "zone" }), " · Act ", qsInline(String(q.Act), v => P({ Act: +v || 1 }, `Act ${v}`), { num: true }),
-        " · min level ", qsInline(String(q.MinLevel), v => P({ MinLevel: Math.max(1, +v || 1) }, `Min level ${v}`), { num: true })),
+      h("div", { class: "qs-meta" }, "Zone ", qsInline(q.Zone, v => P({ Zone: v }, `Zone ${v}`), { list: "qs-zones", ph: "zone" }), " - Act ", qsInline(String(q.Act), v => P({ Act: +v || 1 }, `Act ${v}`), { num: true }),
+        " - min level ", qsInline(String(q.MinLevel), v => P({ MinLevel: Math.max(1, +v || 1) }, `Min level ${v}`), { num: true })),
       iss.length ? h("div", { class: "qs-iss" }, iss.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))) : null,
-      h("div", { class: "qs-whos" }, who(q.Giver, "gives it", "Giver"), h("span", { class: "qs-bigarrow" }, "»"), who(q.TurnIn, "takes the hand-in", "TurnIn")),
+      h("div", { class: "qs-whos" }, who(q.Giver, "gives it", "Giver"), h("span", { class: "qs-bigarrow" }, ">>"), who(q.TurnIn, "takes the hand-in", "TurnIn")),
       h("h4", {}, "Story"),
       h("div", { class: "qs-chips" }, h("small", {}, "Needs first: "), pre.length ? pre.map(p => chipQ(p, true)) : h("span", { class: "hint" }, "nothing (a starting quest) "), addPre),
       h("div", { class: "qs-chips" }, h("small", {}, "Unlocks: "), next.length ? next.map(p => chipQ(p, false)) : h("span", { class: "hint" }, "nothing yet "), h("button", { class: "qs-mini", onclick: () => qsNewQuest(id) }, "+ quest after this")),
@@ -646,7 +659,7 @@ function qsQuestScript(q, P) {
   const g = S.npcBy[q.Giver], t = S.npcBy[q.TurnIn];
   const steps = qSteps(q);
   const npcLine = (n, key, label, extra) => h("div", { class: "qs-bub npc", "data-line": key },
-    pix(n ? n.ImgPath : "", "bp"), h("div", {}, h("small", {}, `${n ? n.Name : "Nobody"} · ${label}`),
+    pix(n ? n.ImgPath : "", "bp"), h("div", {}, h("small", {}, `${n ? n.Name : "Nobody"} - ${label}`),
       qsInline(q[key], v => P({ [key]: v }, `${label} line`), { multi: true, cls: "rh", ph: "Write what they say" }), extra ? h("div", { class: "qs-auto" }, extra) : null));
   const you = (txt, note) => h("div", { class: "qs-bub you" }, h("span", { class: "qs-opt" }, txt), note ? h("small", {}, note) : null);
   const rewards = [+q.XP ? `${q.XP} XP` : "", +q.Gold ? `${q.Gold} Gold` : "", ...qRw(q).map(r => S.itemBy[r.ItemID] ? `${r.Amount}x ${S.itemBy[r.ItemID].Name}` : "")].filter(Boolean);
@@ -656,7 +669,7 @@ function qsQuestScript(q, P) {
     you("I'll do it.", "or \"Not right now.\" (back to the start)"),
     npcLine(g, "Accept", "accept"),
     you("On it.", "takes the quest and closes the window"),
-    ...steps.map((s, i) => s.Type === "talk" ? h("div", { class: "qs-bub npc" }, pix(S.npcBy[s.NPC] ? S.npcBy[s.NPC].ImgPath : "", "bp"), h("div", {}, h("small", {}, `${npcName(s.NPC)} · objective ${i + 1}`),
+    ...steps.map((s, i) => s.Type === "talk" ? h("div", { class: "qs-bub npc" }, pix(S.npcBy[s.NPC] ? S.npcBy[s.NPC].ImgPath : "", "bp"), h("div", {}, h("small", {}, `${npcName(s.NPC)} - objective ${i + 1}`),
       qsInline(s.Line, v => { const a = qSteps(q); a[i].Line = v; return P({ Steps: JSON.stringify(a) }, `${npcName(s.NPC)}'s line`); }, { multi: true, cls: "rh", ph: "What they say" }), h("div", { class: "qs-auto" }, "then \"Right.\""))) : null),
     you("[In progress] " + q.Title, `if you talk to ${t ? t.Name : "them"} before it's done`),
     npcLine(t, "Progress", "in progress"),
@@ -819,16 +832,16 @@ function qsCast(body) {
     return h("button", { class: "qs-ncard" + (iss.length ? " sev-err" : ""), "data-id": n.id, onclick: () => qsGo("npc", n.id) },
       qsScene(n, null, "small"),
       h("div", { class: "qs-nname" }, n.Name),
-      h("div", { class: "qs-nsub" }, n.Faction || "no faction", " · ", zoneAt(n.SpawnX, n.SpawnY) || `${n.SpawnX},${n.SpawnY}`),
+      h("div", { class: "qs-nsub" }, n.Faction || "no faction", " - ", zoneAt(n.SpawnX, n.SpawnY) || `${n.SpawnX},${n.SpawnY}`),
       h("div", { class: "qs-nstats" },
         r.gives.length ? h("span", { title: "Gives" }, pix("assets/ui/studio/alert.png", "mi"), r.gives.length) : null,
         r.takes.length ? h("span", { title: "Takes hand-ins" }, pix("assets/ui/studio/complete.png", "mi"), r.takes.length) : null,
         r.talks.length ? h("span", { title: "Talk objectives" }, pix("assets/ui/studio/alert-item.png", "mi"), r.talks.length) : null,
-        r.all.length ? h("span", { class: "lv" }, `Lv ${r.all[0].Level}${r.all.length > 1 ? "–" + r.all[r.all.length - 1].Level : ""}`) : h("span", { class: "hint" }, "no quests"),
-        n.Conversation ? h("span", { title: "Has chat dialogue" }, "“…”") : null),
+        r.all.length ? h("span", { class: "lv" }, `Lv ${r.all[0].Level}${r.all.length > 1 ? "-" + r.all[r.all.length - 1].Level : ""}`) : h("span", { class: "hint" }, "no quests"),
+        n.Conversation ? h("span", { title: "Has chat dialogue" }, "“...”") : null),
       iss.length ? h("div", { class: "qs-nbad" }, iss[0].msg) : null);
   };
-  const s = h("input", { type: "search", class: "qs-in", placeholder: "Find someone by name, faction or zone…", value: QS.castFilter || "" });
+  const s = h("input", { type: "search", class: "qs-in", placeholder: "Find someone by name, faction or zone...", value: QS.castFilter || "" });
   s.addEventListener("input", () => { QS.castFilter = s.value; const p = s.selectionStart; qsRerender(); const n = $(".qs-cast .qs-in"); if (n) { n.focus(); n.setSelectionRange(p, p); } });
   body.append(h("div", { class: "qs-cast" },
     h("div", { class: "qs-tools" }, s, h("button", { class: "qs-btn hot", onclick: () => qsNewNpc() }, "+ New NPC"), h("span", { class: "hint" }, `${story.length} in the story, ${extras.length} extras. In journey order: who you meet first comes first.`)),
@@ -846,7 +859,7 @@ function qsWorldCanvas(o) {
     cv.dataset.drawn = 1;
     const g = cv.getContext("2d"); g.imageSmoothingEnabled = false;
     g.fillStyle = "#101010"; g.fillRect(0, 0, W, H);
-    if (!S.world) { g.fillStyle = "#ccc"; g.font = "12px monospace"; g.fillText("Loading the world…", 10, 20); return; }
+    if (!S.world) { g.fillStyle = "#ccc"; g.font = "12px monospace"; g.fillText("Loading the world...", 10, 20); return; }
     const sc = st.sc, hw = Math.ceil(W / sc / 2) + 1, hh = Math.ceil(H / sc / 2) + 1;
     const px = x => Math.round((x - st.cx) * sc + W / 2 - sc / 2), py = y => Math.round((y - st.cy) * sc + H / 2 - sc / 2);
     for (let y = Math.floor(st.cy) - hh; y <= st.cy + hh; y++) for (let x = Math.floor(st.cx) - hw; x <= st.cx + hw; x++) {
@@ -903,7 +916,7 @@ function qsNpcSheet(body, id) {
   const factions = [...new Set(S.c.npcs.map(x => x.Faction).filter(Boolean))].sort();
   if (!$("#qs-factions")) document.body.append(h("datalist", { id: "qs-factions" }));
   $("#qs-factions").replaceChildren(...factions.map(z => h("option", { value: z })));
-  const roleTag = q => [q.Giver === n.id ? "gives" : null, q.TurnIn === n.id ? "takes it in" : null, qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk objective" : null].filter(Boolean).join(" · ");
+  const roleTag = q => [q.Giver === n.id ? "gives" : null, q.TurnIn === n.id ? "takes it in" : null, qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk objective" : null].filter(Boolean).join(" - ");
   const preview = qsGamePanel(n, { P: qsScratch() });
   const notes = qsInline(qsNotesGet(id), v => qsNotesSet(id, v).then(qsRerender), { multi: true, cls: "rh qs-notes", ph: "Who are they? How do they talk? What do they want? (Your notes: not shown in game.)", tag: "div" });
   body.append(h("div", { class: "qs-sheetpage" },
@@ -914,7 +927,7 @@ function qsNpcSheet(body, id) {
             h("div", { class: "qs-heroinfo" }, qsInline(n.Name, v => P({ Name: v || n.Name }, `Renamed to ${v}`), { cls: "qs-h big" }),
               h("div", {}, h("small", {}, "Faction "), qsInline(n.Faction, v => P({ Faction: v }, `Faction ${v}`), { list: "qs-factions", ph: "none" })),
               n.Faction === "Land Agent" ? h("div", { class: "qs-plot" }, "Land Agent: lists rent plots ([Plot] rows) after their quests") : null,
-              h("div", {}, h("small", {}, "Lives at "), `${n.SpawnX},${n.SpawnY}`, zone ? ` · ${zone}` : ""),
+              h("div", {}, h("small", {}, "Lives at "), `${n.SpawnX},${n.SpawnY}`, zone ? ` - ${zone}` : ""),
               h("div", { class: "qs-nstats" }, h("span", {}, pix("assets/ui/studio/alert.png", "mi"), `gives ${r.gives.length}`), h("span", {}, pix("assets/ui/studio/complete.png", "mi"), `takes ${r.takes.length}`), h("span", {}, pix("assets/ui/studio/alert-item.png", "mi"), `talk ${r.talks.length}`)))),
           iss.length ? h("div", { class: "qs-iss" }, iss.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))) : null,
           h("h4", {}, "Personality notes"), notes,
@@ -941,7 +954,7 @@ function qsDialogue(n, preview) {
   const nodeIds = () => (n.Conversation ? treeNodes(n.Conversation) : []).map(c => c.Identifier);
   const r = qsRoles(n);
   box.append(h("div", { class: "qs-rule" }, "When you talk to ", h("b", {}, n.Name), ", quest business comes first: hand-ins, talk objectives, new quests, then quests in progress. Then their own chat below."));
-  if (r.all.length) box.append(h("div", { class: "qs-menu" }, r.takes.map(q => h("span", { class: "qs-opt" }, "[Complete] " + q.Title)), r.talks.map(q => h("span", { class: "qs-opt" }, `[${q.Title}] …`)), r.gives.map(q => h("span", { class: "qs-opt" }, "[Quest] " + q.Title)), n.Faction === "Land Agent" ? h("span", { class: "qs-opt plot" }, "[Plot] Rent a plot") : null));
+  if (r.all.length) box.append(h("div", { class: "qs-menu" }, r.takes.map(q => h("span", { class: "qs-opt" }, "[Complete] " + q.Title)), r.talks.map(q => h("span", { class: "qs-opt" }, `[${q.Title}] ...`)), r.gives.map(q => h("span", { class: "qs-opt" }, "[Quest] " + q.Title)), n.Faction === "Land Agent" ? h("span", { class: "qs-opt plot" }, "[Plot] Rent a plot") : null));
   const thread = h("div", { class: "qs-thread" });
   if (!n.Conversation || !S.convBy[n.Conversation]) {
     thread.append(h("div", { class: "qs-bub npc" }, pix(n.ImgPath, "bp"), h("div", {}, h("small", {}, n.Conversation ? `greeting node "${n.Conversation}" is missing` : "no chat yet"),
@@ -956,17 +969,17 @@ function qsDialogue(n, preview) {
     const nodeEl = (ident, depth) => {
       const c = S.convBy[ident];
       if (!c) return h("div", { class: "qs-bub bad" }, `Missing node "${ident}": this answer is a dead end. `, h("button", { class: "qs-mini", onclick: () => qsCommit("conversation", { id: 0, Identifier: ident, Title: "", ImgPath: "", Options: "[['Goodbye.','1']]", ReputationChange: "", ItemsGiven: "", QuestStart: 0 }, `Created ${ident}`).then(qsRerender) }, "create it"));
-      if (shown.has(ident)) return h("a", { class: "qs-back", href: "#", onclick: e => { e.preventDefault(); const t = box.querySelector(`[data-node="${CSS.escape(ident)}"]`); if (t) { t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } } }, "↩ back to “", (c.Title || "").slice(0, 40), "…”");
+      if (shown.has(ident)) return h("a", { class: "qs-back", href: "#", onclick: e => { e.preventDefault(); const t = box.querySelector(`[data-node="${CSS.escape(ident)}"]`); if (t) { t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } } }, "<- back to “", (c.Title || "").slice(0, 40), "...”");
       shown.add(ident);
       const opts = parseOptions(c.Options);
       const setOpts = (o, label) => saveNode(c, { Options: formatOptions(o) }, label);
       const el = h("div", { class: "qs-node", "data-node": ident },
         h("div", { class: "qs-bub npc", onclick: e => { if (!e.target.closest(".qs-ed")) preview.show("chat:" + ident); } }, pix(hasPortrait(c) ? c.ImgPath : n.ImgPath, "bp"),
-          h("div", {}, h("small", {}, ident === n.Conversation ? "greeting · " + ident : ident), qsInline(c.Title, v => saveNode(c, { Title: v }, `${n.Name}: line edited`), { multi: true, cls: "rh", ph: "What they say" }))));
+          h("div", {}, h("small", {}, ident === n.Conversation ? "greeting - " + ident : ident), qsInline(c.Title, v => saveNode(c, { Title: v }, `${n.Name}: line edited`), { multi: true, cls: "rh", ph: "What they say" }))));
       const answers = h("div", { class: "qs-answers" });
       opts.forEach(([label, to], i) => {
         const ae = label.trim().toLowerCase() === "anything else?";
-        const sel = h("select", { class: "qs-sel tiny", title: "Where this answer goes" }, h("option", { value: "1" }, "ends the chat"), nodeIds().map(x => h("option", { value: x }, "→ " + x)), !nodeIds().includes(to) && to !== "1" && to ? h("option", { value: to }, "→ " + to + " (missing)") : null, h("option", { value: "+new" }, "+ new line…"));
+        const sel = h("select", { class: "qs-sel tiny", title: "Where this answer goes" }, h("option", { value: "1" }, "ends the chat"), nodeIds().map(x => h("option", { value: x }, "→ " + x)), !nodeIds().includes(to) && to !== "1" && to ? h("option", { value: to }, "→ " + to + " (missing)") : null, h("option", { value: "+new" }, "+ new line..."));
         sel.value = to === "" ? "1" : to;
         sel.onchange = async () => {
           const o = parseOptions(c.Options);
@@ -979,9 +992,9 @@ function qsDialogue(n, preview) {
         };
         const a = h("div", { class: "qs-ans" },
           h("div", { class: "qs-bub you" }, h("span", { class: "qs-opt" }, qsInline(label, v => { const o = parseOptions(c.Options); o[i][0] = v || label; return setOpts(o, "Answer edited"); }, { cls: "rh" })), sel,
-            h("button", { class: "qs-mini", title: "Remove this answer", onclick: () => { const o = parseOptions(c.Options); o.splice(i, 1); setOpts(o, "Answer removed"); } }, "×")),
+            h("button", { class: "qs-mini", title: "Remove this answer", onclick: () => { const o = parseOptions(c.Options); o.splice(i, 1); setOpts(o, "Answer removed"); } }, "x")),
           ae ? h("div", { class: "qs-auto" }, "“Anything else?” opens their next quest on offer, if there is one; otherwise it goes ", to === "1" ? "nowhere (ends)" : "to " + to) : null);
-        if (to && to !== "1") a.append(nodeEl(to, depth + 1)); else if (!ae) a.append(h("div", { class: "qs-end" }, "· the window closes ·"));
+        if (to && to !== "1") a.append(nodeEl(to, depth + 1)); else if (!ae) a.append(h("div", { class: "qs-end" }, "the window closes"));
         answers.append(a);
       });
       answers.append(h("button", { class: "qs-mini add", onclick: () => { const o = parseOptions(c.Options); o.push(["...", "1"]); setOpts(o, "Answer added"); } }, "+ answer"));
@@ -996,7 +1009,7 @@ function qsDialogue(n, preview) {
   if (r.all.length) {
     box.append(h("h4", {}, "Their quest lines"));
     for (const q of r.all) {
-      const det = h("details", { class: "qs-qthread" }, h("summary", {}, h("span", { class: "qc-lv" }, q.Level), " ", q.Title, " ", h("small", {}, [q.Giver === n.id ? "gives" : "", q.TurnIn === n.id ? "takes in" : "", qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk" : ""].filter(Boolean).join(" · "))));
+      const det = h("details", { class: "qs-qthread" }, h("summary", {}, h("span", { class: "qc-lv" }, q.Level), " ", q.Title, " ", h("small", {}, [q.Giver === n.id ? "gives" : "", q.TurnIn === n.id ? "takes in" : "", qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk" : ""].filter(Boolean).join(" - "))));
       det.addEventListener("toggle", () => { if (det.open && det.children.length === 1) det.append(qsQuestScript(q, (patch, label) => qsPatchQuest(q.id, patch, label))); });
       box.append(det);
     }
@@ -1021,6 +1034,7 @@ function qsWhyLocked(q) {
 }
 function qsSkipTo(level) {
   const P = QS.play; let grew = true;
+  for (const id of Object.keys(P.state)) { const q = qById(+id); if (q && q.Level < level) { P.done.add(q.id); delete P.state[id]; } }
   while (grew) { grew = false; for (const q of qsOrder()) if (q.Level < level && qsAvail({ ...P, level: Math.max(P.level, q.MinLevel) }, q) && q.MinLevel <= level) { P.done.add(q.id); delete P.state[q.id]; grew = true; } }
   P.level = level; P.log.push({ t: "skip", level });
 }
@@ -1055,7 +1069,7 @@ function qsPlay(body) {
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "WHAT YOU CAN DO NOW")),
         h("div", { class: "qs-wbody" },
           ready.length ? [h("h4", {}, pix("assets/ui/studio/complete.png", "mi"), " Ready to hand in"), ready.map(q => qrow(q, talkBtn(q.TurnIn, "hand in to " + npcName(q.TurnIn))))] : null,
-          active.length ? [h("h4", {}, "In progress"), active.map(q => qrow(q, [h("small", { class: "hint" }, qSteps(q).map(s => s.Text || stepLabel(s)).join(" · ")), " ",
+          active.length ? [h("h4", {}, "In progress"), active.map(q => qrow(q, [h("small", { class: "hint" }, qSteps(q).map(s => s.Text || stepLabel(s)).join(" - ")), " ",
             h("button", { class: "qs-mini", title: "Pretend you've done every objective", onclick: () => { P.state[q.id] = "ready"; P.log.push({ t: "obj", q: q.id }); qsRerender(); } }, "do objectives")]))] : null,
           h("h4", {}, pix("assets/ui/studio/alert.png", "mi"), ` Quests on offer (${avail.length})`),
           avail.length ? [...byGiver.entries()].map(([gid, qs]) => h("div", { class: "qs-pgiver" }, talkBtn(gid), h("small", {}, S.npcBy[gid] ? zoneAt(S.npcBy[gid].SpawnX, S.npcBy[gid].SpawnY) : ""), h("div", {}, qs.map(q => qrow(q))))) : h("p", { class: "hint" }, active.length || ready.length ? "Nothing new: finish what you have." : "Nothing on offer at this level. Dead end! Check the journey for broken links."),
@@ -1083,8 +1097,8 @@ function qsNewQuest(afterId, giverId) {
   const esc = e => { if (e.key === "Escape" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.stopPropagation(); close(); } };
   const body = h("div", { class: "qs-wbody qs-new" });
   const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } },
-    h("div", { class: "qs-win qs-newwin" }, h("div", { class: "qs-wtitle" }, h("span", {}, after ? `NEW QUEST AFTER “${after.Title.toUpperCase()}”` : "NEW QUEST"), h("button", { class: "qs-x", onclick: close }, "×")), body));
-  const types = [["kill", "Kill", "assets/ui/studio/target.png"], ["reach", "Go to", "assets/ui/studio/arrow.png"], ["collect", "Collect", "assets/ui/studio/loot.png"], ["talk", "Talk to", "assets/ui/studio/alert.png"], ["use", "Use", "assets/ui/studio/alert-item.png"], ["build", "Build", "assets/world/objects/Crude Sign.png"], ["boss", "Boss", "assets/ui/crown.png"]];
+    h("div", { class: "qs-win qs-newwin" }, h("div", { class: "qs-wtitle" }, h("span", {}, after ? `NEW QUEST AFTER “${after.Title.toUpperCase()}”` : "NEW QUEST"), h("button", { class: "qs-x", onclick: close }, "x")), body));
+  const types = [["kill", "Kill", "assets/ui/studio/target.png"], ["reach", "Go to", "assets/ui/studio/arrow.png"], ["collect", "Collect", "assets/ui/studio/loot.png"], ["talk", "Talk to", "assets/ui/studio/alert.png"], ["use", "Use", "assets/ui/studio/alert-item.png"], ["build", "Build", "assets/world/objects/Crude Sign.png"], ["boss", "Boss", "assets/ui/studio/crown.png"]];
   const draw = () => {
     const g = S.npcBy[st.Giver], t = S.npcBy[st.TurnIn || st.Giver];
     let cfg;
@@ -1105,7 +1119,7 @@ function qsNewQuest(afterId, giverId) {
       h("div", { class: "qs-types" }, types.map(([k, l, ic]) => h("button", { class: "qs-type" + (st.type === k ? " on" : ""), onclick: () => { st.type = k; if (k === "boss") st.count = 1; draw(); } }, pix(ic, "ti"), l))), cfg,
       h("h4", {}, "3. In your words"),
       h("div", { class: "qs-grid2" }, h("label", {}, "Title"), txtIn("Title", "e.g. Pelt Me, Please"), h("label", {}, "Offer"), areaIn("Offer", `What does ${g ? g.Name : "the giver"} say when they ask?`)),
-      h("details", { class: "qs-more" }, h("summary", {}, `Level ${st.Level} (min ${st.MinLevel}) · ${st.XP} XP · ${st.Gold} gold · ${st.Zone || "no zone"} `, h("small", {}, "suggested from nearby quests")),
+      h("details", { class: "qs-more" }, h("summary", {}, `Level ${st.Level} (min ${st.MinLevel}) - ${st.XP} XP - ${st.Gold} gold - ${st.Zone || "no zone"} `, h("small", {}, "suggested from nearby quests")),
         h("div", { class: "qs-grid2" }, h("label", {}, "Level"), numIn("Level"), h("label", {}, "Min level"), numIn("MinLevel"), h("label", {}, "XP"), numIn("XP"), h("label", {}, "Gold"), numIn("Gold"), h("label", {}, "Zone"), txtIn("Zone", "zone", "qs-zones"))),
       h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot big", onclick: create }, "Make the quest"), h("span", { class: "hint" }, after ? `It unlocks when “${after.Title}” is done.` : "No prerequisite: it's on offer from the start (link it on the map).")));
   };
@@ -1119,7 +1133,7 @@ function qsNewQuest(afterId, giverId) {
     else if (st.type === "collect") { if (!st.item) { qsToast("Pick an item"); return; } step = { Type: "collect", Target: st.item, Count: Math.max(1, st.count), Text: `Collect ${st.count} ${st.item}` }; }
     else if (st.type === "reach") step = { Type: "reach", X: st.x, Y: st.y, Radius: 3, Count: 1, Text: `Go to ${zoneAt(st.x, st.y) || st.x + "," + st.y}` };
     else if (st.type === "talk") { if (!S.npcBy[st.npc]) { qsToast("Pick who to talk to"); return; } step = { Type: "talk", NPC: st.npc, Count: 1, Text: `Talk to ${npcName(st.npc)}`, Line: "" }; }
-    else if (st.type === "use") step = { Type: "use", Target: st.use, Count: Math.max(1, st.count), Text: `${st.use} ×${st.count}` };
+    else if (st.type === "use") step = { Type: "use", Target: st.use, Count: Math.max(1, st.count), Text: `${st.use} x${st.count}` };
     else step = { Type: "use", Target: "build", Count: 1, Text: "Build something" };
     const row = { id: 0, Act: +st.Act || 1, Zone: st.Zone || "", Title: st.Title.trim() || "Untitled quest", Summary: "", Level: Math.max(1, st.Level), MinLevel: Math.max(1, st.MinLevel), Giver: st.Giver, TurnIn: st.TurnIn || st.Giver,
       Prereqs: JSON.stringify(after ? [after.id] : []), Offer: st.Offer, Accept: "", Progress: "", Complete: "", XP: Math.max(0, st.XP), Gold: Math.max(0, st.Gold), Rewards: "[]", Steps: JSON.stringify([step]), Sequential: 0 };
@@ -1136,7 +1150,7 @@ function qsNewNpc() {
   const st = { Name: "", ImgPath: "assets/npc/Person.png", Faction: "", x: near ? near.SpawnX + 3 : 0, y: near ? near.SpawnY : 0 };
   const close = () => { ov.remove(); };
   const body = h("div", { class: "qs-wbody qs-new" });
-  const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } }, h("div", { class: "qs-win qs-newwin" }, h("div", { class: "qs-wtitle" }, h("span", {}, "NEW NPC"), h("button", { class: "qs-x", onclick: close }, "×")), body));
+  const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } }, h("div", { class: "qs-win qs-newwin" }, h("div", { class: "qs-wtitle" }, h("span", {}, "NEW NPC"), h("button", { class: "qs-x", onclick: close }, "x")), body));
   const name = h("input", { class: "qs-in", placeholder: "e.g. Gideon Gazump", oninput: () => (st.Name = name.value) });
   const fac = h("input", { class: "qs-in", placeholder: "faction (optional)", list: "qs-factions", oninput: () => (st.Faction = fac.value) });
   if (!$("#qs-factions")) document.body.append(h("datalist", { id: "qs-factions" }, [...new Set(S.c.npcs.map(x => x.Faction).filter(Boolean))].map(z => h("option", { value: z }))));
@@ -1144,7 +1158,7 @@ function qsNewNpc() {
   const drawLook = () => look.replaceChildren(qsScene({ SpawnX: st.x, SpawnY: st.y }, st.ImgPath, "hero"));
   look.onclick = () => openPicker({ title: "Their look", groups: npcSpriteGroups, recentKey: "npc", value: st.ImgPath, onPick: v => { if (v) { st.ImgPath = v; drawLook(); map.redraw(); } } });
   const zones = [...new Set(S.c.quests.map(q => q.Zone).filter(Boolean))];
-  const jump = h("select", { class: "qs-sel" }, h("option", { value: "" }, "jump to a zone…"), zones.map(z => h("option", { value: z }, z)));
+  const jump = h("select", { class: "qs-sel" }, h("option", { value: "" }, "jump to a zone..."), zones.map(z => h("option", { value: z }, z)));
   jump.onchange = () => { const q = S.c.quests.find(x => x.Zone === jump.value), n = q && S.npcBy[q.Giver]; if (n) { map.st.cx = n.SpawnX; map.st.cy = n.SpawnY; st.x = n.SpawnX + 2; st.y = n.SpawnY; map.redraw(); where.textContent = `${st.x},${st.y}`; } };
   const where = h("b", {}, `${st.x},${st.y}`);
   const pin = { x: st.x, y: st.y };
