@@ -7,6 +7,7 @@
 <meta name="bq-editor-version" content="areas-2026-10-24">
 <meta name="description" content="Edit a BrawlQuest bq-content.db in your browser: items, loot, mobs and boss patterns, quests, NPCs, dialogue and the world map.">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="studio.css">
 </head>
 <body>
 <header>
@@ -18,6 +19,7 @@
   <span id="file" class="file"></span>
   <span id="sync" class="sync"></span>
   <nav id="tabs" hidden>
+    <button data-tab="studio" class="studio-tab">Quest Studio</button>
     <button data-tab="map" class="on">Map</button>
     <button data-tab="quests">Quests</button>
     <button data-tab="npcs">NPCs &amp; dialogue</button>
@@ -37,6 +39,7 @@
   <p>Open (or drop here) a <code>bq-content.db</code>, or open it from GitHub. Everything happens in this tab: nothing is uploaded unless you commit to GitHub.</p>
   <p><button onclick="BQSync.openFromGitHub()">Open from GitHub</button> <button onclick="BQSync.historyModal()">History</button></p>
   <ul>
+    <li><b>Quest Studio</b>: the whole player journey as a map, the cast as character sheets, dialogue as a conversation and a playtest character</li>
     <li>Quests and their steps, NPCs and dialogue trees, items and loot tables</li>
     <li>Mobs and their boss pattern primitives (zones, soaks, scripted moving zones, projectiles, summons, cast times and interrupts, effect sprites) with a live preview</li>
     <li>Status effects (buffs and debuffs such as Webbed Up) that projectiles apply</li>
@@ -54,6 +57,7 @@
 <script src="db.js"></script>
 <script src="app.js"></script>
 <script src="areas.js"></script>
+<script src="studio.js"></script>
 <script src="mobs.js"></script>
 <script src="effects.js"></script>
 <script src="validate.js"></script>

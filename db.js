@@ -7,7 +7,10 @@ const BQ = (() => {
   // version counts edits; touched names the tables edited since the history
   // module last looked (null = all of them, after an open).
   const st = { name: "", changes: [], dirty: false, warnings: [], version: 0, touched: null };
-  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects"];
+  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects", "npc_notes"];
+  // Quest Studio's personality notes per NPC (content/migrations/2026-10-26-npc-notes.sql
+  // in the API). Editor-only: the game never reads it. Created on the first note.
+  const NOTES_TABLE = "CREATE TABLE IF NOT EXISTS npc_notes (id INTEGER PRIMARY KEY, NPC INTEGER NOT NULL UNIQUE, Notes TEXT NOT NULL DEFAULT '');";
   // Status effects (the API's effects.go creates the same table at startup).
   const EFFECT_TABLE = "CREATE TABLE IF NOT EXISTS effects (id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Description TEXT NOT NULL DEFAULT '', Icon TEXT NOT NULL DEFAULT '', Visual TEXT NOT NULL DEFAULT '', Duration REAL NOT NULL DEFAULT 3, Stacking TEXT NOT NULL DEFAULT 'refresh', MaxStacks INTEGER NOT NULL DEFAULT 1, Modifiers TEXT NOT NULL DEFAULT '[]');";
   const STACKING = ["refresh", "stack", "extend", "ignore"];
@@ -255,6 +258,7 @@ const BQ = (() => {
       const quests = has("quest_def") ? q("SELECT * FROM quest_def ORDER BY Level, id") : [];
       return {
         quests, hasQuestline: has("quest_def"),
+        npcNotes: has("npc_notes") ? q("SELECT * FROM npc_notes") : [],
         plots: has("plot") ? q("SELECT * FROM plot ORDER BY Name") : [],
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
@@ -288,6 +292,7 @@ const BQ = (() => {
       if (table === "quest_def" && !has("quest_def")) throw new Error("This database has no quest_def table. Apply the questline migration first.");
       if (table === "plot" && !has("plot")) apply([PLOT_TABLE], "create plot table");
       if (table === "effects" && !has("effects")) apply([EFFECT_TABLE], "create effects table");
+      if (table === "npc_notes" && !has("npc_notes")) apply([NOTES_TABLE], "create npc_notes table");
       if (table === "plot") row.Agent = +row.Agent || 0;
       if (table === "quest_def" && "Sequential" in row) row.Sequential = row.Sequential ? 1 : 0;
       const allowed = cols(table);
