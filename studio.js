@@ -128,7 +128,7 @@ function qsAnalyse() {
     const qs = quests.filter(q => line.get(q.id) === i).sort((a, b) => (depth.get(a.id) - depth.get(b.id)) || a.Level - b.Level);
     const zones = [...new Set(qs.map(q => q.Zone).filter(Boolean))];
     return { i, quests: qs, name: qs.length > 1 ? `From “${qs[0].Title}”` : qs[0].Title, zones, minLevel: Math.min(...qs.map(q => q.Level)), colour: LINE_COLOURS[i % LINE_COLOURS.length] };
-  }).sort((a, b) => b.quests.length - a.quests.length || a.minLevel - b.minLevel);
+  }).sort((a, b) => a.minLevel - b.minLevel || b.quests.length - a.quests.length);
   // NPC problems: dead-end dialogue, missing greeting
   const npcIssues = new Map(), addN = (id, sev, msg) => { if (!npcIssues.has(id)) npcIssues.set(id, []); npcIssues.get(id).push({ sev, msg }); };
   for (const n of S.c.npcs) {
@@ -287,7 +287,7 @@ function qsPanZoom(view, world, cam, onChange) {
 }
 
 // ------------------------------------------------------------------ journey map
-const QJ = { CW: 216, CH: 108, GX: 70, GY: 22, BAND: 54, LEFT: 30, TOP: 40 };
+const QJ = { CW: 216, CH: 108, GX: 70, GY: 22, BAND: 54, LEFT: 110, TOP: 40 };
 function qsLayout(an) {
   const pos = new Map(), bands = [];
   const col = q => (QS.layout === "level" ? Math.max(0, q.Level - 1) : an.depth.get(q.id) || 0);
@@ -638,6 +638,7 @@ function qsQuestSheet(id) {
       h("div", { class: "qs-seg" }, h("button", { class: seq ? "" : "on", onclick: () => seq && P({ Sequential: 0 }, "Objectives all at once") }, "All at once"), h("button", { class: seq ? "on" : "", onclick: () => !seq && P({ Sequential: 1 }, "Objectives in order") }, "In order"),
         h("span", { class: "hint" }, seq ? "One at a time, top to bottom: only the current one counts." : "Every objective counts from the start; kills of any listed enemy count.")),
       h("div", { class: "qs-steps " + (seq ? "seq" : "par") }, steps.map(stepRow)), addStep,
+      qsDailyBox(q, P),
       h("h4", {}, "Rewards"), rwBox,
       h("h4", {}, "What they say ", h("button", { class: "qs-mini", onclick: () => qsPreviewQuest(q) }, "play it")),
       qsQuestScript(q, P)));
@@ -1172,4 +1173,15 @@ function qsNewNpc() {
       close(); qsGo("npc", id);
     } }, "Bring them to life")));
   document.body.append(ov); name.focus();
+}
+
+// Daily quests slot in here: a daily flag and pools of candidate mobs/items
+// are being added to the API (schema note: /workspace/dailyquests/SCHEMA.md).
+// Until quest_def has that column this shows nothing; once it does, the
+// toggle works on it and the pool picker reuses qsPickModal({ multi: true }).
+function qsDailyBox(q, P) {
+  if (!("Daily" in q)) return null;
+  const on = !!+q.Daily;
+  return h("div", { class: "qs-seg" }, h("button", { class: on ? "" : "on", onclick: () => on && P({ Daily: 0 }, "Not a daily") }, "Once"), h("button", { class: on ? "on" : "", onclick: () => !on && P({ Daily: 1 }, "Daily quest") }, "Daily"),
+    h("span", { class: "hint" }, on ? "Rolls a new variant at each daily reset; {mob} {item} {count} in the text are filled in." : "Done once per character."));
 }

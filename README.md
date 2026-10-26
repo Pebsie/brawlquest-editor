@@ -11,6 +11,11 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
 
 1. **Open .db** (or drop the file on the page): a `bq-content.db`. Never `bq-users.db`.
 2. Edit in the tabs:
+   * **Quest Studio**: plan and play through the player journey.
+     * **Journey**: every quest as a card on a pannable, zoomable map (drag, pinch, Ctrl+scroll or trackpad pinch), in story order or by level, grouped into questlines. Each card shows the level, giver and hand-in portraits and the objectives (joined when they are in order). Problems are flagged on the cards and listed under Problems: missing or circular prerequisites (and everything they lock), level drops and jumps, no giver, missing enemies/items/NPCs in objectives, no reward, missing lines. Drag a card's + onto another quest to make it need this one; click an arrow to unlink; click + to add a quest after it. Click a card to edit everything in place (Enter saves, Esc cancels).
+     * **Cast**: NPCs as character cards in the order you meet them; each opens a character sheet with their look, notes (editor-only `npc_notes` table, created on the first note), where they stand on the real map (click to move), their quests, who they're connected to, and their dialogue as a chat you can edit, with the game's conversation window beside it.
+     * **Playtest**: a pretend character: pick a level, take, finish and hand in quests through the same menu rules as the server, and see what's on offer, what's coming up and why.
+     * **+ Quest** / **+ NPC**: quick creation (giver, objective, words; level, XP and gold suggested from nearby quests). Undo/Redo (Ctrl+Z / Ctrl+Shift+Z) for every Studio edit; edits go straight into the open db, so History autosaves them.
    * **Map**: tile sprites, NPCs, mob spawns, quest reach points, plots.
      * **Paint tiles**: the brush has Ground, Object (keep / paint / clear),
        Collision, Zone (`world.Name`: lighting, music, quest zones) and a size (1, 2, 3, 5). Pick sprites from the
