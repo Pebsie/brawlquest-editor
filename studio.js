@@ -254,7 +254,10 @@ function qsPanZoom(view, world, cam, onChange) {
   view.addEventListener("pointerdown", e => {
     if (e.target.closest("button, input, textarea, select, .qs-port, a")) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    view.setPointerCapture(e.pointerId); moved = 0;
+    // No pointer capture yet: a captured pointer's click goes to the view,
+    // not the card under it, so a mouse click on a card did nothing. Capture
+    // only once it is really a pan (or a pinch), in pointermove.
+    moved = 0;
     last = pts.size === 2 ? pinchInfo() : { x: e.clientX, y: e.clientY };
   });
   const pinchInfo = () => { const [a, b] = [...pts.values()]; return { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) }; };
@@ -266,13 +269,14 @@ function qsPanZoom(view, world, cam, onChange) {
       const p = pinchInfo();
       if (last && last.d) { cam.x += p.cx - last.cx; cam.y += p.cy - last.cy; zoomAt(p.cx - r.left, p.cy - r.top, p.d / last.d); }
       last = p; moved += 10;
+      for (const id of pts.keys()) if (!view.hasPointerCapture(id)) try { view.setPointerCapture(id); } catch {}
     } else if (last) {
       const dx = e.clientX - last.x, dy = e.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy);
-      if (moved > 4) { view.classList.add("panning"); cam.x += dx; cam.y += dy; apply(); }
+      if (moved > 6) { if (!view.hasPointerCapture(e.pointerId)) try { view.setPointerCapture(e.pointerId); } catch {} view.classList.add("panning"); cam.x += dx; cam.y += dy; apply(); }
       last = { x: e.clientX, y: e.clientY };
     }
   });
-  const up = e => { pts.delete(e.pointerId); view.classList.remove("panning"); last = pts.size === 1 ? { ...[...pts.values()][0] } : null; if (moved > 4) view.dataset.dragged = "1"; };
+  const up = e => { pts.delete(e.pointerId); view.classList.remove("panning"); last = pts.size === 1 ? { ...[...pts.values()][0] } : null; if (moved > 6) view.dataset.dragged = "1"; };
   view.addEventListener("pointerup", up); view.addEventListener("pointercancel", up);
   view.addEventListener("click", e => { if (view.dataset.dragged) { e.stopPropagation(); e.preventDefault(); delete view.dataset.dragged; } }, true);
   view.addEventListener("wheel", e => {
