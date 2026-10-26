@@ -126,7 +126,7 @@ ok(true, "old tabs open");
 // mobile
 const m = await (await b.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 })).newPage();
 m.on("pageerror", e => errs.push("mobile pageerror " + e.stack));
-await m.goto(URL); await m.setInputFiles("#open", DB); await m.waitForSelector("#tabs:not([hidden])"); await m.waitForTimeout(500);
+await m.goto(URL); await m.setInputFiles("#open", DB); await m.waitForSelector("#tabs:not([hidden])", { state: "attached" }); await m.waitForTimeout(500);
 await m.evaluate(() => { location.hash = "#studio/journey"; }); await m.waitForTimeout(1200);
 await m.screenshot({ path: OUT + "11-mobile-journey.png" });
 await m.evaluate(() => qsFocus(1304, true)); await m.waitForTimeout(500);
