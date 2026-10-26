@@ -24,7 +24,7 @@
 .qs-x{padding:2px 7px;margin-left:6px}
 .qs-sp{flex:1}
 .qs .ico{width:16px;height:16px;object-fit:contain}
-.qs-probs{font:16px BMmini,monospace;color:var(--err);display:inline-flex;gap:4px;align-items:center;white-space:nowrap}
+.qs-probs{font:16px BMmini,monospace;color:var(--err);display:inline-flex;gap:4px;align-items:center;white-space:nowrap;background:none;border:0;padding:2px 4px;cursor:pointer}
 .qs-body{flex:1;min-height:0;display:flex;position:relative;overflow:auto}
 .qs-in{background:#000;color:#fff;border:2px solid var(--line);border-radius:0;padding:5px 7px;font:18px rainyhearts,system-ui,sans-serif;min-width:0}
 .qs-in.num{width:80px}
@@ -109,7 +109,7 @@
 .qs-sheet{padding:8px 12px 40px}
 .qs-sheet h4,.qs-wbody h4,.qs-dlg h4{font:16px BMmini,monospace;color:var(--gold);margin:16px 0 6px;font-weight:normal;display:flex;align-items:center;gap:8px}
 .qs-title{display:flex;gap:8px;align-items:center}
-.qs-h{font-size:28px;color:#fff;flex:1}
+.qs-h{font-size:28px;color:#fff;flex:1;line-height:1.1}
 .qs-h.big{font-size:32px}
 .qs-meta{color:var(--dim);margin:4px 0}
 .qs-ed{cursor:text;border-bottom:1px dashed transparent;white-space:pre-wrap}
@@ -278,4 +278,20 @@ input.qs-edit[type=number]{width:80px}
   .qs-logo{display:none}
   .qs-tools .qs-in{flex-basis:100%;max-width:none;order:-1}
   .qs-ngrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+}
+@media (max-width: 760px){
+  .qs-nav{flex-wrap:wrap;overflow:visible;gap:4px;padding:4px 6px}
+  .qs-nav .qs-sp{display:none}
+  .qs-nav .qs-tab{flex:1 1 30%;justify-content:center;min-height:44px;padding:4px 6px}
+  .qs-nav .qs-probs{min-height:44px;min-width:44px;flex:0 0 auto}
+  .qs-pw{display:none}
+  .qs-nav .qs-btn{min-height:44px;padding:4px 4px;flex:1 1 auto;justify-content:center;font-size:16px}
+  .qs-nav .qs-tab,.qs-nav .qs-btn{box-shadow:none}
+  .qs-tools .qs-btn,.qs-mini,.qs-x,.qs-type,.qs-seg button{min-height:44px;min-width:44px;justify-content:center}
+  .qs-gopt{min-height:44px}
+  .qs-legend{padding-bottom:calc(4px + env(safe-area-inset-bottom))}
+}
+@media (max-width: 400px){
+  .qs-nav .qs-tab .ico{display:none}
+  .qs-nav .qs-probs{font-size:16px}
 }

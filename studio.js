@@ -229,7 +229,7 @@ function qsNav() {
     tab("cast", "Cast", "assets/npc/Adventurer.png"),
     tab("play", "Playtest", "assets/ui/studio/xp.png"),
     h("span", { class: "qs-sp" }),
-    probs ? h("span", { class: "qs-probs", title: "Errors the journey map found" }, pix("assets/ui/studio/alert.png", "ico"), `${probs} problem${probs === 1 ? "" : "s"}`) : null,
+    probs ? h("button", { class: "qs-probs", title: "Errors the journey map found: show the list", onclick: () => { QS.showProbs = true; qsGo("journey"); } }, pix("assets/ui/studio/alert.png", "ico"), String(probs), h("span", { class: "qs-pw" }, ` problem${probs === 1 ? "" : "s"}`)) : null,
     h("button", { class: "qs-btn", id: "qs-undo", title: "Undo (Ctrl+Z)", onclick: qsUndo }, "Undo"),
     h("button", { class: "qs-btn", id: "qs-redo", title: "Redo (Ctrl+Shift+Z)", onclick: qsRedo }, "Redo"),
     h("button", { class: "qs-btn hot", onclick: () => qsNewQuest(QS.sel || 0) }, "+ Quest"),

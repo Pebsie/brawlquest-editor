@@ -1593,6 +1593,7 @@ function switchTab(t) { go("#" + t); }
 async function renderTab() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
   if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|mob|effect|dialog|map|plot|studio)\//.test(location.hash)) syncHash("#" + S.tab);
+  document.body.classList.toggle("in-studio", S.tab === "studio");
   const m = $("#main"); m.textContent = ""; window.onmousemove = window.onmouseup = null; M.cv = null;
   try {
     if (S.tab === "map") { if (!S.world) { status("Loading world…"); await loadWorld(); status(""); } renderMap(m); }
@@ -1609,7 +1610,11 @@ async function renderTab() {
   } catch (e) { status(e.message, true); }
 }
 
-document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => { switchTab(b.dataset.tab); setMenu(false); }));
+// Phones: one slim bar (Open, Save, Menu); Menu opens the tabs, GitHub and History.
+function setMenu(open) { const hd = $("header"); hd.classList.toggle("menu-open", open); $("#btn-menu").setAttribute("aria-expanded", open); $("#btn-menu").textContent = open ? "Close" : "Menu"; }
+$("#btn-menu").addEventListener("click", () => setMenu(!$("header").classList.contains("menu-open")));
+for (const id of ["#btn-github", "#btn-history"]) $(id).addEventListener("click", () => setMenu(false));
 $("#open").addEventListener("change", e => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ""; });
 $("#btn-save").addEventListener("click", saveDb);
 document.addEventListener("dragover", e => e.preventDefault());
