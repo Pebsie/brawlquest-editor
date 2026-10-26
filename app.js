@@ -121,6 +121,7 @@ async function loadAll() {
   S.c.items = S.c.items || [];
   S.itemBy = Object.fromEntries(S.c.items.map(i => [i.id, i]));
   S.enemyBy = Object.fromEntries(S.c.enemies.map(e => [e.id, e]));
+  S.c.npcNotes = S.c.npcNotes || [];
   status(`${S.c.items.length} items · ${S.c.quests.length} quests · ${S.c.npcs.length} NPCs · ${S.c.conversations.length} dialogue nodes`);
 }
 async function loadWorld() {
@@ -1438,7 +1439,7 @@ function nodeOwners(ident) {
   }
   return S.ownerCache[ident] || [];
 }
-const TABS = ["map", "quests", "npcs", "items", "mobs", "effects", "loot", "export", "sprites"];
+const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "loot", "export", "sprites"];
 async function applyRoute() {
   if (!BQ.has() || !S.c) return;
   const [kind, a, b, c] = location.hash.slice(1).split("/").map(decodeURIComponent);
@@ -1455,6 +1456,7 @@ async function applyRoute() {
   else if (kind === "mob") { S.tab = "mobs"; S.mob = { id: +a }; }
   else if (kind === "effect") { S.tab = "effects"; S.effect = { id: +a }; }
   else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p, Agent: +p.Agent || 0 }; M.plotOrig = JSON.stringify(plotRow(M.plotSel)); S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
+  else if (kind === "studio") { S.tab = "studio"; qsRoute(a, b); }
   else if (kind === "map") { S.tab = "map"; if (a) { const [x, y] = a.split(",").map(Number); S.focus = { x, y }; M.sel = { x, y }; } }
   else if (TABS.includes(kind)) S.tab = kind;
   S.routing = true;
@@ -1590,10 +1592,11 @@ function switchTab(t) { go("#" + t); }
 
 async function renderTab() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
-  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|mob|effect|dialog|map|plot)\//.test(location.hash)) syncHash("#" + S.tab);
+  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|mob|effect|dialog|map|plot|studio)\//.test(location.hash)) syncHash("#" + S.tab);
   const m = $("#main"); m.textContent = ""; window.onmousemove = window.onmouseup = null; M.cv = null;
   try {
     if (S.tab === "map") { if (!S.world) { status("Loading world…"); await loadWorld(); status(""); } renderMap(m); }
+    else if (S.tab === "studio") renderStudio(m);
     else if (S.tab === "quests") renderQuests(m);
     else if (S.tab === "npcs") renderNPCs(m);
     else if (S.tab === "items") renderItems(m);
