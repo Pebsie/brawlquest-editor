@@ -188,6 +188,7 @@ async function qsApplyOne(rec, dir) {
   else await api("delete", { table: rec.table, id: (dir === "undo" ? rec.after : rec.before).id });
 }
 async function qsApplyRec(rec, dir) {
+  if (rec.routine) { const r = rec.routine; await api("routineSet", { npc: r.npc, spawn: r.spawn, routines: dir === "undo" ? r.before : r.after }); await loadAll(); return; }
   const list = rec.multi ? (dir === "undo" ? [...rec.multi].reverse() : rec.multi) : [rec];
   for (const r of list) await qsApplyOne(r, dir);
   await loadAll();
@@ -224,9 +225,14 @@ async function qsPatchQuest(id, patch, label) {
 }
 
 // ------------------------------------------------------------------ shell
-// Routes: #studio  #studio/journey[/QID]  #studio/cast  #studio/npc/ID  #studio/play  #studio/new[/AFTER]
-function qsRoute(a, b) {
+// Routes: #studio  #studio/journey[/QID]  #studio/cast  #studio/npc/ID[/routine[/X,Y]]  #studio/play  #studio/new[/AFTER]
+function qsRoute(a, b, c, d) {
   QS.view = a || "journey"; QS.arg = b;
+  // #studio/npc/ID/routine[/X,Y]: their routine editor, at that placement
+  if (a === "npc" && c === "routine") {
+    const n = S.npcBy[+b], at = d ? d.split(",").map(Number) : null, sp = n && (at ? spawnsOf(n).find(v => v.X === at[0] && v.Y === at[1]) : spawnsOf(n)[0]);
+    if (sp) QS.spot = { npc: +b, X: sp.X, Y: sp.Y, add: false };
+  }
   if (QS.view === "journey" && b) QS.sel = +b;
 }
 function renderStudio(m) {
@@ -1043,7 +1049,8 @@ function qsCast(body) {
 function qsWorldCanvas(o) {
   const W = o.w || 320, H = o.h || 200;
   const cv = h("canvas", { class: "qs-wmap", width: W, height: H });
-  const st = { cx: o.cx, cy: o.cy, sc: o.sc || 16 };
+  // o.st: keep the view (centre, zoom) in the caller's object across redraws
+  const st = o.st || { cx: o.cx, cy: o.cy, sc: o.sc || 16 };
   const draw = () => {
     if (!cv.isConnected && cv.dataset.drawn) { MINI_REDRAW.delete(draw); return; }
     cv.dataset.drawn = 1;
@@ -1063,23 +1070,42 @@ function qsWorldCanvas(o) {
     }
     for (const { n, sp } of placements()) { // every place each NPC stands
       if (Math.abs(sp.X - st.cx) > hw || Math.abs(sp.Y - st.cy) > hh) continue;
+      if (o.hide && o.hide() && o.hide().npc === n.id && o.hide().X === sp.X && o.hide().Y === sp.Y) continue;
       const im = imgFor(n.ImgPath);
       if (im) g.drawImage(im, px(sp.X), py(sp.Y), sc, sc);
       if (o.mark === n.id) { g.strokeStyle = "#f2cc59"; g.lineWidth = 2; g.strokeRect(px(sp.X) - 1, py(sp.Y) - 1, sc + 2, sc + 2); }
       if (o.markAt && o.markAt.X === sp.X && o.markAt.Y === sp.Y) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(px(sp.X) - 3, py(sp.Y) - 3, sc + 6, sc + 6); }
     }
+    if (o.overlay) o.overlay(g, px, py, sc);
     if (o.pin) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(px(o.pin.x) - 1, py(o.pin.y) - 1, sc + 2, sc + 2); if (o.pinImg) { const im = imgFor(o.pinImg); if (im) g.drawImage(im, px(o.pin.x), py(o.pin.y), sc, sc); } }
+  };
+  const tileOf = e => {
+    const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * (W / r.width), my = (e.clientY - r.top) * (H / r.height);
+    return { x: Math.floor(st.cx + (mx - W / 2 + st.sc / 2) / st.sc), y: Math.floor(st.cy + (my - H / 2 + st.sc / 2) / st.sc) };
   };
   cv.addEventListener("click", e => {
     if (!o.onPick) return;
-    const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * (W / r.width), my = (e.clientY - r.top) * (H / r.height);
-    const x = Math.floor(st.cx + (mx - W / 2 + st.sc / 2) / st.sc), y = Math.floor(st.cy + (my - H / 2 + st.sc / 2) / st.sc);
-    o.onPick(x, y); draw();
+    const t = tileOf(e);
+    o.onPick(t.x, t.y); draw();
   });
   cv.addEventListener("wheel", e => { e.preventDefault(); if (e.ctrlKey || Math.abs(e.deltaY) >= 50) st.sc = Math.max(4, Math.min(32, st.sc * (e.deltaY < 0 ? 1.25 : 0.8))); else { st.cx += e.deltaX / st.sc; st.cy += e.deltaY / st.sc; } draw(); }, { passive: false });
   let dragAt = null;
-  cv.addEventListener("pointerdown", e => { dragAt = { x: e.clientX, y: e.clientY, m: 0 }; });
-  cv.addEventListener("pointermove", e => { if (!dragAt || !e.buttons) return; const dx = e.clientX - dragAt.x, dy = e.clientY - dragAt.y; dragAt.m += Math.abs(dx) + Math.abs(dy); if (dragAt.m > 6) { st.cx -= dx / st.sc; st.cy -= dy / st.sc; dragAt.x = e.clientX; dragAt.y = e.clientY; draw(); } });
+  // o.grab(x, y): true when something under the pointer is picked up (a
+  // routine point); o.drag(x, y) as it moves, o.drop(x, y, moved) on release.
+  cv.addEventListener("pointerdown", e => {
+    const t = tileOf(e);
+    if (o.grab && o.grab(t.x, t.y)) { dragAt = { grab: true, t, m: 0 }; try { cv.setPointerCapture(e.pointerId); } catch {} draw(); return; }
+    dragAt = { x: e.clientX, y: e.clientY, m: 0 };
+  });
+  cv.addEventListener("pointerup", e => {
+    if (!dragAt || !dragAt.grab) return;
+    const t = tileOf(e), moved = t.x !== dragAt.t.x || t.y !== dragAt.t.y || dragAt.m > 0;
+    dragAt.m = 99; // no click after a grab
+    o.drop(t.x, t.y, moved); draw();
+  });
+  cv.addEventListener("pointermove", e => {
+    if (dragAt && dragAt.grab) { if (!e.buttons && e.pointerType === "mouse") return; const t = tileOf(e); if (t.x !== dragAt.t.x || t.y !== dragAt.t.y) { dragAt.m++; dragAt.t = t; o.drag(t.x, t.y); draw(); } return; }
+    if (!dragAt || !e.buttons) return; const dx = e.clientX - dragAt.x, dy = e.clientY - dragAt.y; dragAt.m += Math.abs(dx) + Math.abs(dy); if (dragAt.m > 6) { st.cx -= dx / st.sc; st.cy -= dy / st.sc; dragAt.x = e.clientX; dragAt.y = e.clientY; draw(); } });
   cv.addEventListener("click", e => { if (dragAt && dragAt.m > 6) e.stopImmediatePropagation(); dragAt = null; }, true);
   cv.style.touchAction = "none";
   MINI_REDRAW.add(draw);
@@ -1138,6 +1164,7 @@ function qsNpcSheet(body, id) {
           h("h4", {}, "Personality notes"), notes,
           h("h4", {}, "Where they stand ", h("span", { class: "hint" }, QS.spot.add ? "tap the map to put them there too" : "tap the map to move the picked place, drag to look around")), spotList, map,
           h("div", {}, h("a", { class: "qs-link", href: `#map/npc/${n.id}` + (QS.spot.add ? "" : `/${QS.spot.X},${QS.spot.Y}`) }, "place them on the big map")))),
+      qsRoutinePanel(n),
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "THEIR QUESTS")),
         h("div", { class: "qs-wbody" }, r.all.length ? h("div", { class: "qs-qlist" }, r.all.map(q => h("a", { class: "qs-qrow" + (qsIsDaily(q) ? " daily" : ""), href: "#studio/journey/" + q.id, title: qsIsDaily(q) ? "Daily. Today: " + qsDayDef(q).Title : null }, h("span", { class: "qc-lv" }, q.Level), qsIsDaily(q) ? qsDailyBadge() : null, h("b", {}, qsIsDaily(q) ? qsPh(q.Title) : q.Title), h("small", {}, roleTag(q))))) : h("p", { class: "hint" }, "None yet."),
           r.gives.some(qsIsDaily) ? h("p", { class: "hint" }, qsDailyBadge(), ` Offers one of ${n.Name}'s dailies a day: hidden after the hand-in until the 21:00 reset.`) : null,

@@ -99,6 +99,9 @@ const BQCheck = (() => {
       // dailyquests.go loadDailyPools: a row that doesn't Scan is skipped.
       // npc.go loadNPCInstances: placements of NPCs (2026-10-27-npc-spawns.sql).
       npc_spawn: { optional: true, types: { id: "i", NPC: "i", X: "i", Y: "i" } },
+      // npc.go loadRoutines: walks per placement (2026-10-27-routine-placements.sql adds Spawn, Speed, Wait).
+      routine: { optional: true, types: { id: "i", NPC: "i", TriggerHour: "i", Loop: "i" }, opt: { Spawn: "i", Speed: "n" } },
+      routineNode: { optional: true, types: { id: "i", Routine: "i", X: "i", Y: "i", Position: "i" }, opt: { Wait: "i" } },
       quest_daily_pool: { optional: true, types: { id: "i", QuestID: "i", Kind: "s", Slot: "i", RefID: "i", Name: "s", Label: "s", Min: "i", Max: "i", X: "i", Y: "i", Radius: "n", Weight: "i" } },
     };
     const ok = {};
@@ -226,6 +229,16 @@ const BQCheck = (() => {
       }
     if (ok.npc && ok.npc_spawn) for (const r of q("SELECT s.id, s.NPC FROM npc_spawn s WHERE s.NPC NOT IN (SELECT id FROM npc) ORDER BY s.id"))
       add("warning", "npc", `NPC placement ${r.id}`, `stands for NPC ${r.NPC}, which doesn't exist (the game skips it)`, "#map");
+    if (ok.npc && ok.routine) {
+      const spawnCol = colsOf("routine").includes("Spawn");
+      for (const r of q(`SELECT r.id, r.NPC, r.TriggerHour, r.Loop, ${spawnCol ? "r.Spawn" : "0 AS Spawn"}, n.Name, (SELECT COUNT(*) FROM ${ok.routineNode ? "routineNode p WHERE p.Routine = r.id" : "(SELECT 1 WHERE 0)"}) AS pts FROM routine r LEFT JOIN npc n ON n.id = r.NPC ORDER BY r.id`)) {
+        const w = `routine ${r.id}` + (r.Name ? ` (${r.Name})` : ""), route = r.Name ? `#studio/npc/${r.NPC}/routine` : "#map";
+        if (!r.Name) { add("warning", "routine", w, `walks NPC ${r.NPC}, which doesn't exist (never used)`, route); continue; }
+        if (!(r.TriggerHour >= 1 && r.TriggerHour <= 24)) add("warning", "routine", w, `starts at hour ${r.TriggerHour}: the clock gives 1-24, so it never starts`, route);
+        if (![0, 1, 2].includes(r.Loop)) add("warning", "routine", w, `Loop ${r.Loop} is read as once (0 once, 1 round and round, 2 there and back)`, route);
+        if (r.Spawn && ok.npc_spawn && !q("SELECT 1 FROM npc_spawn WHERE id = ? AND NPC = ?", [r.Spawn, r.NPC]).length) add("warning", "routine", w, `is for placement ${r.Spawn}, which isn't one of ${r.Name}'s (never used)`, route);
+      }
+    }
     if (ok.npc && nodeIds) for (const r of q("SELECT id, Name, Conversation FROM npc WHERE IFNULL(Conversation, '') <> '' ORDER BY id"))
       if (!nodeIds.has(r.Conversation)) add("warning", "npc", `NPC ${r.id} ${r.Name}`, `greeting node "${r.Conversation}" doesn't exist`, "#npc/" + r.id);
 

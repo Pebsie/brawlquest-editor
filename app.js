@@ -27,7 +27,7 @@ async function api(path, body) {
     areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
     areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body),
     dailyEnable: () => BQ.api.dailyEnable(), dialogueEnable: () => BQ.api.dialogueEnable(), saveMany: () => BQ.api.saveMany(body),
-    spawnsEnable: () => BQ.api.spawnsEnable() }[path];
+    spawnsEnable: () => BQ.api.spawnsEnable(), routinesEnable: () => BQ.api.routinesEnable(), routineSet: () => BQ.api.routineSet(body) }[path];
   const v = BQ.st.version;
   const out = fn();
   syncFile();
@@ -794,6 +794,17 @@ async function npcToolTap(t) {
   drawSide(); drawMap();
 }
 function npcToolDraw(g, px, py, sc) {
+  // the picked placement's routine (Quest Studio > NPC > Daily routine)
+  const rn = M.npcSel && S.npcBy[M.npcSel.npc], rsp = rn && spawnsOf(rn).find(v => v.X === M.npcSel.x && v.Y === M.npcSel.y);
+  if (rsp && typeof rtFor === "function") for (const r of rtFor(rn, rsp)) {
+    if (!r.nodes.length) continue;
+    const c = p => [px(p.X) + sc / 2, py(p.Y) + sc / 2];
+    g.strokeStyle = "#f2cc59"; g.lineWidth = 2; g.beginPath();
+    g.moveTo(...c(rsp)); r.nodes.forEach(p => g.lineTo(...c(p))); g.stroke();
+    g.fillStyle = "#000"; g.strokeStyle = "#f2cc59";
+    r.nodes.forEach((p, i) => { const [x, y] = c(p), d = Math.max(4, sc / 3); g.fillRect(x - d, y - d, d * 2, d * 2); g.strokeRect(x - d, y - d, d * 2, d * 2); if (sc >= 12) { g.fillStyle = "#fff"; g.font = `${Math.round(d * 1.4)}px BMmini, monospace`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String(i + 1), x, y + 1); g.fillStyle = "#000"; } });
+    g.textAlign = "start"; g.textBaseline = "alphabetic"; g.lineWidth = 1;
+  }
   if (M.npcSel) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(px(M.npcSel.x) - 2, py(M.npcSel.y) - 2, sc + 4, sc + 4); g.lineWidth = 1; }
   const pick = M.npcMode === "existing" && S.npcBy[M.npcPick];
   if (pick) { // the other places the picked NPC stands: a ring each
@@ -841,6 +852,7 @@ function npcSide(s) {
       h("div", { class: "npcspots" }, all.map(sp => h("div", { class: "npcspot" + (sp === here ? " on" : "") },
         h("button", { type: "button", onclick: () => { M.cx = sp.X; M.cy = sp.Y; M.npcSel = { npc: sel.id, x: sp.X, y: sp.Y }; drawSide(); drawMap(); } }, `${sp.X}, ${sp.Y}`),
         h("span", { class: "hint" }, zoneName(sp.X, sp.Y)),
+        h("button", { type: "button", class: "rtbtn", title: "Where they walk, and when (Quest Studio)", onclick: () => go(`#studio/npc/${sel.id}/routine/${sp.X},${sp.Y}`) }, (() => { const k = rtFor(sel, sp).length; return k ? `Routine (${k})` : "Routine"; })()),
         h("button", { type: "button", class: "danger", onclick: async () => { if (await removePlacement(sel, sp)) { if (sp === here) M.npcSel = null; drawSide(); drawMap(); } } }, "Remove")))),
       h("div", { class: "bar" }, h("button", { type: "button", onclick: () => { M.npcMode = "existing"; M.npcPick = sel.id; drawSide(); drawMap(); status(`Tap the map to put ${sel.Name} somewhere else too.`); } }, "+ Another place")));
   }
@@ -1645,7 +1657,7 @@ function nodeOwners(ident) {
 const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "loot", "export", "sprites"];
 async function applyRoute() {
   if (!BQ.has() || !S.c) return;
-  const [kind, a, b, c] = location.hash.slice(1).split("/").map(decodeURIComponent);
+  const [kind, a, b, c, d] = location.hash.slice(1).split("/").map(decodeURIComponent);
   let target = null;
   if (kind === "quest") { S.tab = "quests"; S.quest = { id: +a }; if (b === "line") target = "qline-" + c; if (b === "step") target = "qline-step-" + c; }
   else if (kind === "npc") { S.tab = "npcs"; S.npc = { id: +a }; if (b === "quest") target = "npcq-" + c; }
@@ -1659,7 +1671,7 @@ async function applyRoute() {
   else if (kind === "mob") { S.tab = "mobs"; S.mob = { id: +a }; }
   else if (kind === "effect") { S.tab = "effects"; S.effect = { id: +a }; }
   else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p, Agent: +p.Agent || 0 }; M.plotOrig = JSON.stringify(plotRow(M.plotSel)); S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
-  else if (kind === "studio") { S.tab = "studio"; qsRoute(a, b); }
+  else if (kind === "studio") { S.tab = "studio"; qsRoute(a, b, c, d); if (a === "npc" && c === "routine") target = "qs-routine"; }
   else if (kind === "map" && a === "npc") {
     // #map/npc/ID[/X,Y]: the NPCs tool with that NPC picked, at a placement
     S.tab = "map"; M.tool = "npc"; M.npcMode = "existing"; M.npcPick = +b;
