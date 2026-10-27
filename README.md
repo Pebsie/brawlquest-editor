@@ -34,6 +34,18 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
        `content/migrations/2026-10-24-areas.sql`); a db without them offers to
        create them. Unpainted tiles use the old rule in the game (cave, floor
        and wall grounds are inside).
+     * **NPCs**: put someone in the world where you click or tap: "Someone
+       you have" (search the cast) or "A new NPC" (name, look, faction).
+       One NPC can stand in many places (a Guard at every gate): same
+       name, words and quests at each, and the game offers, takes hand-ins
+       and shows markers at all of them. Drag a placement to move it; the
+       panel lists every place of the picked NPC with Remove. Each place is
+       a row in `npc_spawn` (the API's `content/migrations/2026-10-27-npc-spawns.sql`,
+       `docs/NPC_SPAWNS.md`); the first placement turns the table on in a
+       db without it (every NPC's current position becomes its first
+       place). `npc.SpawnX`/`SpawnY` follow each NPC's first place. On a
+       phone the map sits above the panel: one finger taps and drags,
+       two fingers pan and pinch-zoom.
      * **Place mobs**: pick the enemy from a thumbnail grid, click to place.
      * **Select**: drag NPCs and mobs; "Change sprite..." / "Change..." open a
        sprite picker for the NPC or the mob on that tile.
@@ -61,6 +73,10 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
    `bq-content.db` with it and restart the API.
 4. **Export SQL** gives the same edits as a migration (keyed, safe to apply twice)
    for `content/migrations/`.
+
+Saves never reset a column they don't send: a form without `Daily`,
+`Sequential`, the quest dialogue columns or anything newer keeps the row's
+current value.
 
 ## Saving, history and GitHub
 

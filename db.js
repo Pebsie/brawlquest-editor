@@ -7,7 +7,16 @@ const BQ = (() => {
   // version counts edits; touched names the tables edited since the history
   // module last looked (null = all of them, after an open).
   const st = { name: "", changes: [], dirty: false, warnings: [], version: 0, touched: null };
-  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects", "npc_notes", "quest_daily_pool"];
+  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects", "npc_notes", "quest_daily_pool", "npc_spawn"];
+  // NPC placements (the API's content/migrations/2026-10-27-npc-spawns.sql,
+  // docs/NPC_SPAWNS.md): one NPC standing in many places. Same statements as
+  // the migration (so either path dumps the same): the table, and every
+  // placed NPC's current SpawnX/SpawnY as its first placement. npc.SpawnX /
+  // SpawnY stay as a mirror of the first placement (-999: none).
+  const SPAWN_MIGRATION = ["CREATE TABLE IF NOT EXISTS npc_spawn (\n  id INTEGER PRIMARY KEY,\n  NPC INTEGER NOT NULL,\n  X INTEGER NOT NULL,\n  Y INTEGER NOT NULL\n);",
+    "CREATE INDEX IF NOT EXISTS npc_spawn_npc ON npc_spawn(NPC);",
+    "INSERT INTO npc_spawn (NPC, X, Y)\n  SELECT n.id, n.SpawnX, n.SpawnY FROM npc n\n  WHERE n.SpawnX > -999 AND NOT EXISTS (SELECT 1 FROM npc_spawn s WHERE s.NPC = n.id)\n  ORDER BY n.id;"];
+  const mirrorSpawn = id => `UPDATE npc SET SpawnX = IFNULL((SELECT X FROM npc_spawn WHERE NPC = ${+id} ORDER BY id LIMIT 1), -999), SpawnY = IFNULL((SELECT Y FROM npc_spawn WHERE NPC = ${+id} ORDER BY id LIMIT 1), -999) WHERE id = ${+id};`;
   // Quest Studio's personality notes per NPC (content/migrations/2026-10-26-npc-notes.sql
   // in the API). Editor-only: the game never reads it. Created on the first note.
   const NOTES_TABLE = "CREATE TABLE IF NOT EXISTS npc_notes (id INTEGER PRIMARY KEY, NPC INTEGER NOT NULL UNIQUE, Notes TEXT NOT NULL DEFAULT '');";
@@ -316,6 +325,8 @@ const BQ = (() => {
         dailyPools: has("quest_daily_pool") ? q("SELECT * FROM quest_daily_pool ORDER BY QuestID, Kind, Slot, id") : [],
         plots: has("plot") ? q("SELECT * FROM plot ORDER BY Name") : [],
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
+        hasSpawns: has("npc_spawn"),
+        npcSpawns: has("npc_spawn") ? q("SELECT id, NPC, X, Y FROM npc_spawn ORDER BY NPC, id") : [],
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
         enemies: q("SELECT * FROM enemies ORDER BY Name"),
         enemyCols: cols("enemies"),
@@ -364,8 +375,19 @@ const BQ = (() => {
         for (const c of DIALOGUE_COLS) if (!(c in row)) row[c] = cur && cur[c] != null ? cur[c] : c === "Replies" ? "{}" : "";
         for (const c of DIALOGUE_COLS) row[c] = String(row[c] ?? (c === "Replies" ? "{}" : ""));
       }
+      if (table === "npc_spawn") {
+        if (!has("npc_spawn")) api.spawnsEnable();
+        row.NPC = Math.trunc(+row.NPC); row.X = Math.round(+row.X); row.Y = Math.round(+row.Y);
+        if (!q("SELECT 1 FROM npc WHERE id = ?", [row.NPC]).length) throw new Error("no NPC " + row.NPC);
+        if (!isFinite(row.X) || !isFinite(row.Y)) throw new Error("a placement needs a whole-tile X and Y");
+      }
       const allowed = cols(table);
       for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
+      // A save never resets a column it doesn't send (Daily, Sequential, the
+      // dialogue columns, anything newer than this editor): they keep the
+      // row's current value.
+      const prev = +row.id > 0 ? q(`SELECT * FROM ${table} WHERE id = ?`, [+row.id])[0] : null;
+      if (prev) for (const c of allowed) if (!(c in row) && prev[c] !== undefined) row[c] = prev[c];
       let id = +row.id || 0;
       if (id <= 0) {
         id = q(`SELECT IFNULL(MAX(id),0)+1 AS n FROM ${table}`)[0].n;
@@ -381,6 +403,15 @@ const BQ = (() => {
         const old = q("SELECT Name FROM enemies WHERE id = ?", [id])[0];
         if (old && old.Name && old.Name !== row.Name) stmts.push(`UPDATE world SET Enemy = ${lit(row.Name)} WHERE Enemy = ${lit(old.Name)};`);
       }
+      if (table === "npc_spawn") stmts.push(mirrorSpawn(row.NPC), ...(prev && +prev.NPC !== row.NPC ? [mirrorSpawn(prev.NPC)] : []));
+      if (table === "npc" && has("npc_spawn") && "SpawnX" in row) {
+        // An old-style move (SpawnX/SpawnY: the NPCs tab, Quest Studio's
+        // "Lives at") moves the first placement, or makes one.
+        const first = q("SELECT id, X, Y FROM npc_spawn WHERE NPC = ? ORDER BY id LIMIT 1", [id])[0];
+        const x = Math.round(+row.SpawnX), y = Math.round(+row.SpawnY);
+        if (first && (first.X !== x || first.Y !== y)) stmts.push(x > -999 ? `UPDATE npc_spawn SET X = ${x}, Y = ${y} WHERE id = ${first.id};` : `DELETE FROM npc_spawn WHERE id = ${first.id};`, mirrorSpawn(id));
+        else if (!first && x > -999) stmts.push(`INSERT INTO npc_spawn (NPC, X, Y) VALUES (${id}, ${x}, ${y});`);
+      }
       apply(stmts, `save ${table} ${id}`);
       return { id };
     },
@@ -388,6 +419,8 @@ const BQ = (() => {
       if (!EDITABLE.includes(table) || !(id > 0)) throw new Error("bad delete");
       const s = [`DELETE FROM ${table} WHERE id = ${+id};`];
       if (table === "npc") s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE NPC = ${+id});`, `DELETE FROM routine WHERE NPC = ${+id};`);
+      if (table === "npc" && has("npc_spawn")) s.push(`DELETE FROM npc_spawn WHERE NPC = ${+id};`);
+      if (table === "npc_spawn") { const sp = q("SELECT NPC FROM npc_spawn WHERE id = ?", [+id])[0]; if (sp) s.push(mirrorSpawn(sp.NPC)); }
       if (table === "items") s.push(`DELETE FROM loot WHERE ItemID = ${+id};`);
       if (table === "effects") {
         const users = effectUsers(+id);
@@ -484,6 +517,12 @@ const BQ = (() => {
       if (!hasDaily()) api.dailyEnable();
       if (!hasDialogue()) apply(DIALOGUE_MIGRATION, "quest conversations (as content/migrations/2026-10-26-quest-dialogue.sql)");
       st.dialogueUpgraded = true;
+      return { ok: true };
+    },
+    // NPC placements on this copy (the API's 2026-10-27-npc-spawns.sql);
+    // done by itself on the first placement saved.
+    spawnsEnable() {
+      if (!has("npc_spawn")) apply(SPAWN_MIGRATION, "npc placements (as content/migrations/2026-10-27-npc-spawns.sql)");
       return { ok: true };
     },
     // Several rows in one change (one undo step in Quest Studio).

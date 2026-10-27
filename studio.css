@@ -443,3 +443,12 @@ select.qs-act{cursor:pointer}
   .qs-rollbox .qs-sel{min-height:44px;font-size:16px}
   .qs-enable .qs-btn,.qs-dailybox .qs-btn{white-space:normal;text-align:left;height:auto;min-height:44px}
 }
+/* NPC sheet: every place they stand */
+.qs-spots{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+.qs-spot{display:inline-flex;align-items:center}
+.qs-spot>button:first-child,.qs-spot.add{font:16px/16px rainyhearts,sans-serif;background:#000;color:#fff;border:2px solid var(--line);border-radius:0;padding:6px 8px;min-height:36px;cursor:pointer}
+.qs-spot>button small{color:var(--dim)}
+.qs-spot.on>button:first-child,.qs-spot.add.on{border-color:var(--gold);color:var(--gold)}
+.qs-spot .qs-x{margin-left:-2px;min-height:36px}
+.qs-spot.add{border-style:dashed}
+@media (max-width: 760px){ .qs-spot>button:first-child,.qs-spot.add,.qs-spot .qs-x{min-height:44px} }

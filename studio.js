@@ -165,7 +165,7 @@ async function qsCommit(table, row, label) {
   qsBar();
   return id;
 }
-const qsList = table => ({ quest_def: S.c.quests, npc: S.c.npcs, conversation: S.c.conversations, quest_daily_pool: S.c.dailyPools || [] }[table]);
+const qsList = table => ({ quest_def: S.c.quests, npc: S.c.npcs, conversation: S.c.conversations, quest_daily_pool: S.c.dailyPools || [], npc_spawn: S.c.npcSpawns || [] }[table]);
 // Several saves and deletes as one change and one undo step:
 // [{ table, row } | { table, id, delete: true }].
 async function qsCommitMany(list, label) {
@@ -1012,11 +1012,12 @@ function qsWorldCanvas(o) {
         else if (M.colours[p]) { g.fillStyle = M.colours[p]; g.fillRect(px(x), py(y), sc, sc); }
       }
     }
-    for (const n of S.c.npcs) {
-      if (Math.abs(n.SpawnX - st.cx) > hw || Math.abs(n.SpawnY - st.cy) > hh) continue;
+    for (const { n, sp } of placements()) { // every place each NPC stands
+      if (Math.abs(sp.X - st.cx) > hw || Math.abs(sp.Y - st.cy) > hh) continue;
       const im = imgFor(n.ImgPath);
-      if (im) g.drawImage(im, px(n.SpawnX), py(n.SpawnY), sc, sc);
-      if (o.mark === n.id) { g.strokeStyle = "#f2cc59"; g.lineWidth = 2; g.strokeRect(px(n.SpawnX) - 1, py(n.SpawnY) - 1, sc + 2, sc + 2); }
+      if (im) g.drawImage(im, px(sp.X), py(sp.Y), sc, sc);
+      if (o.mark === n.id) { g.strokeStyle = "#f2cc59"; g.lineWidth = 2; g.strokeRect(px(sp.X) - 1, py(sp.Y) - 1, sc + 2, sc + 2); }
+      if (o.markAt && o.markAt.X === sp.X && o.markAt.Y === sp.Y) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(px(sp.X) - 3, py(sp.Y) - 3, sc + 6, sc + 6); }
     }
     if (o.pin) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(px(o.pin.x) - 1, py(o.pin.y) - 1, sc + 2, sc + 2); if (o.pinImg) { const im = imgFor(o.pinImg); if (im) g.drawImage(im, px(o.pin.x), py(o.pin.y), sc, sc); } }
   };
@@ -1052,8 +1053,22 @@ function qsNpcSheet(body, id) {
   syncHash("#studio/npc/" + id);
   const an = qsAnalyse(), r = qsRoles(n), links = qsLinks(n), iss = an.npcIssues.get(n.id) || [];
   const P = (patch, label) => qsCommit("npc", { ...S.npcBy[id], ...patch }, label).then(qsRerender);
-  const zone = zoneAt(n.SpawnX, n.SpawnY);
-  const map = qsWorldCanvas({ cx: n.SpawnX, cy: n.SpawnY, w: 360, h: 220, sc: 16, mark: n.id, onPick: (x, y) => { if (confirm(`Move ${n.Name} to ${x},${y}?`)) P({ SpawnX: x, SpawnY: y }, `Moved ${n.Name} to ${x},${y}`); } });
+  // Where they stand: every placement (npc_spawn). Tap one to pick it; a tap
+  // on the map moves the picked one there, or adds a place in "+ place" mode.
+  const spots = spawnsOf(n);
+  QS.spot = QS.spot && QS.spot.npc === id && spots.some(sp => sp.X === QS.spot.X && sp.Y === QS.spot.Y) ? QS.spot : spots[0] ? { npc: id, X: spots[0].X, Y: spots[0].Y, add: false } : { npc: id, X: n.SpawnX > -999 ? n.SpawnX : 0, Y: n.SpawnY > -999 ? n.SpawnY : 0, add: true };
+  const zone = spots.length ? zoneAt(spots[0].X, spots[0].Y) : "";
+  const map = qsWorldCanvas({ cx: QS.spot.X, cy: QS.spot.Y, w: 360, h: 220, sc: 16, mark: n.id, markAt: QS.spot.add ? null : QS.spot, onPick: async (x, y) => {
+    if (spots.some(sp => sp.X === x && sp.Y === y)) { QS.spot = { npc: id, X: x, Y: y, add: false }; qsRerender(); return; }
+    if (QS.spot.add) { await addPlacement(n, x, y); QS.spot = { npc: id, X: x, Y: y, add: false }; qsToast(`${n.Name} now also stands at ${x},${y}`); qsRerender(); return; }
+    const sp = spots.find(v => v.X === QS.spot.X && v.Y === QS.spot.Y);
+    if (sp && confirm(`Move ${n.Name} from ${sp.X},${sp.Y} to ${x},${y}?`)) { await movePlacement(n, sp, x, y); QS.spot = { npc: id, X: x, Y: y, add: false }; qsToast(`Moved ${n.Name} to ${x},${y}`); qsRerender(); }
+  } });
+  const spotList = h("div", { class: "qs-spots" },
+    spots.map(sp => h("span", { class: "qs-spot" + (!QS.spot.add && sp.X === QS.spot.X && sp.Y === QS.spot.Y ? " on" : "") },
+      h("button", { type: "button", onclick: () => { QS.spot = { npc: id, X: sp.X, Y: sp.Y, add: false }; qsRerender(); } }, `${sp.X},${sp.Y}`, h("small", {}, zoneAt(sp.X, sp.Y) ? " " + zoneAt(sp.X, sp.Y) : "")),
+      h("button", { type: "button", class: "qs-x", title: "Remove this place", onclick: async () => { if (await removePlacement(n, sp)) qsRerender(); } }, "×"))),
+    h("button", { type: "button", class: "qs-spot add" + (QS.spot.add ? " on" : ""), onclick: () => { QS.spot = { ...QS.spot, add: !QS.spot.add }; qsRerender(); } }, QS.spot.add ? "tap the map to add..." : "+ place"));
   const factions = [...new Set(S.c.npcs.map(x => x.Faction).filter(Boolean))].sort();
   if (!$("#qs-factions")) document.body.append(h("datalist", { id: "qs-factions" }));
   $("#qs-factions").replaceChildren(...factions.map(z => h("option", { value: z })));
@@ -1070,12 +1085,12 @@ function qsNpcSheet(body, id) {
             h("div", { class: "qs-heroinfo" }, qsInline(n.Name, v => P({ Name: v || n.Name }, `Renamed to ${v}`), { cls: "qs-h big" }),
               h("div", {}, h("small", {}, "Faction "), qsInline(n.Faction, v => P({ Faction: v }, `Faction ${v}`), { list: "qs-factions", ph: "none" })),
               n.Faction === "Land Agent" ? h("div", { class: "qs-plot" }, "Land Agent: lists rent plots ([Plot] rows) after their quests") : null,
-              h("div", {}, h("small", {}, "Lives at "), `${n.SpawnX},${n.SpawnY}`, zone ? ` - ${zone}` : ""),
+              h("div", {}, h("small", {}, spots.length > 1 ? `Stands in ${spots.length} places ` : "Lives at "), spots.length ? `${spots[0].X},${spots[0].Y}` : "nowhere yet", zone ? ` - ${zone}` : "", spots.length > 1 ? " and more" : ""),
               h("div", { class: "qs-nstats" }, h("span", {}, pix("assets/ui/studio/alert.png", "mi"), `gives ${r.gives.length}`), h("span", {}, pix("assets/ui/studio/complete.png", "mi"), `takes ${r.takes.length}`), h("span", {}, pix("assets/ui/studio/alert-item.png", "mi"), `talk ${r.talks.length}`)))),
           iss.length ? h("div", { class: "qs-iss" }, iss.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))) : null,
           h("h4", {}, "Personality notes"), notes,
-          h("h4", {}, "Where they stand ", h("span", { class: "hint" }, "click the map to move them, drag to look around")), map,
-          h("div", {}, h("a", { class: "qs-link", href: `#map/${n.SpawnX},${n.SpawnY}` }, "open on the big map")))),
+          h("h4", {}, "Where they stand ", h("span", { class: "hint" }, QS.spot.add ? "tap the map to put them there too" : "tap the map to move the picked place, drag to look around")), spotList, map,
+          h("div", {}, h("a", { class: "qs-link", href: `#map/npc/${n.id}` + (QS.spot.add ? "" : `/${QS.spot.X},${QS.spot.Y}`) }, "place them on the big map")))),
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "THEIR QUESTS")),
         h("div", { class: "qs-wbody" }, r.all.length ? h("div", { class: "qs-qlist" }, r.all.map(q => h("a", { class: "qs-qrow" + (qsIsDaily(q) ? " daily" : ""), href: "#studio/journey/" + q.id, title: qsIsDaily(q) ? "Daily. Today: " + qsDayDef(q).Title : null }, h("span", { class: "qc-lv" }, q.Level), qsIsDaily(q) ? qsDailyBadge() : null, h("b", {}, qsIsDaily(q) ? qsPh(q.Title) : q.Title), h("small", {}, roleTag(q))))) : h("p", { class: "hint" }, "None yet."),
           r.gives.some(qsIsDaily) ? h("p", { class: "hint" }, qsDailyBadge(), ` Offers one of ${n.Name}'s dailies a day: hidden after the hand-in until the 21:00 reset.`) : null,

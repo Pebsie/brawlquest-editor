@@ -207,3 +207,27 @@ ul.issues.err li b{color:#f99}
   body.in-studio header .file{font-size:11px}
   main{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom)}
 }
+/* map: NPCs tool */
+canvas#map{touch-action:none}
+.npclist{display:flex;flex-direction:column;gap:2px;max-height:42vh;overflow:auto;margin-top:6px}
+.npcrow{display:flex;align-items:center;gap:8px;text-align:left;padding:4px 6px;min-height:40px;background:#1f232b;border:1px solid #2a2f38}
+.npcrow.on{background:#2b3a5c;border-color:#3b6fd4}
+.npcrow img{width:32px;height:32px;image-rendering:pixelated;flex:none}
+.npcrow span{display:flex;flex-direction:column;min-width:0}
+.npcrow small{color:#889}
+.npcnew{display:flex;gap:8px;align-items:flex-start;margin-top:8px}
+.npcnew-f{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.npcnew-f input{width:100%;box-sizing:border-box}
+.npcspots{display:flex;flex-direction:column;gap:4px;margin:6px 0}
+.npcspot{display:flex;align-items:center;gap:8px}
+.npcspot.on>button:first-child{background:#3b6fd4}
+.npcspot .hint{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width: 760px){
+  body:not(.in-studio) main:has(> .mapwrap){flex-direction:column}
+  .mapwrap{flex:none;height:56vh;height:56dvh}
+  main > .side{width:auto;border-left:0;border-top:1px solid #2a2f38;flex:1;min-height:0}
+  .side button,.side input,.side select{min-height:44px;font-size:16px}
+  .side .tools{display:flex;flex-wrap:wrap;gap:4px}
+  .side .tools button{flex:1 1 30%;margin:0}
+  .npcrow{min-height:48px}
+}

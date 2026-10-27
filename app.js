@@ -26,7 +26,8 @@ async function api(path, body) {
     export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()), portraits: () => BQ.api.portraits(body),
     areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
     areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body),
-    dailyEnable: () => BQ.api.dailyEnable(), dialogueEnable: () => BQ.api.dialogueEnable(), saveMany: () => BQ.api.saveMany(body) }[path];
+    dailyEnable: () => BQ.api.dailyEnable(), dialogueEnable: () => BQ.api.dialogueEnable(), saveMany: () => BQ.api.saveMany(body),
+    spawnsEnable: () => BQ.api.spawnsEnable() }[path];
   const v = BQ.st.version;
   const out = fn();
   syncFile();
@@ -118,6 +119,9 @@ async function loadAll() {
   S.c.quests = S.c.quests || []; S.c.conversations = S.c.conversations || [];
   S.convBy = Object.fromEntries(S.c.conversations.map(c => [c.Identifier, c]));
   S.npcBy = Object.fromEntries(S.c.npcs.map(n => [n.id, n]));
+  S.c.npcSpawns = S.c.npcSpawns || [];
+  S.spawnBy = {};
+  for (const sp of S.c.npcSpawns) (S.spawnBy[sp.NPC] = S.spawnBy[sp.NPC] || []).push(sp);
   S.ownerCache = null;
   S.c.items = S.c.items || [];
   S.itemBy = Object.fromEntries(S.c.items.map(i => [i.id, i]));
@@ -687,6 +691,7 @@ function renderMap(m) {
   cv.addEventListener("wheel", e => { e.preventDefault(); M.scale = Math.max(2, Math.min(48, M.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); drawMap(); }, { passive: false });
   cv.addEventListener("contextmenu", e => e.preventDefault());
   cv.addEventListener("mousedown", mapDown);
+  mapTouch(cv);
   cv.addEventListener("mouseleave", () => { if (!M.drag) { M.hover = null; drawMap(); } });
   window.onmousemove = mapMove; window.onmouseup = mapUp;
   drawSide();
@@ -696,7 +701,171 @@ const toTile = e => { const r = M.cv.getBoundingClientRect(); return { x: Math.f
 const toFrac = e => { const r = M.cv.getBoundingClientRect(); return { x: (e.clientX - r.left - M.cv.width / 2) / M.scale + M.cx, y: (e.clientY - r.top - M.cv.height / 2) / M.scale + M.cy }; };
 const tile = (x, y) => S.world.tiles.get(x + "," + y);
 const str = i => S.world.strings[i] || "";
-function npcAt(x, y) { return S.c.npcs.find(n => n.SpawnX === x && n.SpawnY === y); }
+// NPC placements (npc_spawn, docs/NPC_SPAWNS.md in the API): every place an
+// NPC stands. One without rows there stands at its own SpawnX/SpawnY (a
+// "legacy" placement, id 0); -999 is nowhere.
+function spawnsOf(n) {
+  const l = (S.spawnBy && S.spawnBy[n.id]) || [];
+  if (l.length) return l;
+  return n.SpawnX > -999 ? [{ id: 0, NPC: n.id, X: n.SpawnX, Y: n.SpawnY, legacy: true }] : [];
+}
+const placements = () => S.c.npcs.flatMap(n => spawnsOf(n).map(sp => ({ n, sp })));
+function placementAt(x, y) { return placements().find(p => p.sp.X === x && p.sp.Y === y) || null; }
+function npcAt(x, y) { const p = placementAt(x, y); return p ? p.n : undefined; }
+// Move one placement (a legacy one moves the NPC's own SpawnX/SpawnY).
+async function movePlacement(n, sp, x, y) {
+  if (sp.id) await save("npc_spawn", { id: sp.id, NPC: n.id, X: x, Y: y });
+  else await save("npc", { id: n.id, SpawnX: x, SpawnY: y });
+}
+async function addPlacement(n, x, y) {
+  await api("spawnsEnable");
+  return save("npc_spawn", { id: 0, NPC: n.id, X: x, Y: y });
+}
+async function removePlacement(n, sp) {
+  const all = spawnsOf(n);
+  const msg = all.length > 1 ? `Remove ${n.Name} from ${sp.X}, ${sp.Y}? They still stand in ${all.length - 1} other place${all.length > 2 ? "s" : ""}.`
+    : `Remove ${n.Name} from ${sp.X}, ${sp.Y}? It's their only place, so they won't be in the world (the NPC, their words and quests stay; place them again any time).`;
+  if (!confirm(msg)) return false;
+  try {
+    if (sp.id) await api("delete", { table: "npc_spawn", id: sp.id });
+    else await api("save", { table: "npc", row: { id: n.id, SpawnX: -999, SpawnY: -999 } });
+    await loadAll(); status(`Removed a placement of ${n.Name}`); return true;
+  } catch (e) { status(e.message, true); return false; }
+}
+// ---- NPCs tool: place an NPC (one you have, or a new one) where you tap,
+// drag a placement to move it, remove it from the panel. One NPC can stand
+// in many places; each is a row in npc_spawn.
+function npcToolDown(e, t) {
+  const p = placementAt(t.x, t.y);
+  if (p) {
+    M.npcSel = { npc: p.n.id, x: p.sp.X, y: p.sp.Y };
+    M.drag = { npc: p.n, sp: p.sp, from: t };
+    drawSide(); drawMap(); return;
+  }
+  // Empty ground: a drag pans, a tap (released where it went down) places.
+  M.drag = { pan: true, sx: e.clientX, sy: e.clientY, cx: M.cx, cy: M.cy, tap: t };
+}
+function npcArmed() {
+  if (M.npcMode === "new") return !!(M.npcNew && M.npcNew.Name.trim());
+  return !!(M.npcPick && S.npcBy[M.npcPick]);
+}
+async function npcToolTap(t) {
+  if (!npcArmed()) {
+    if (M.npcSel) { M.npcSel = null; drawSide(); drawMap(); }
+    status(M.npcMode === "new" ? "Give the new NPC a name first, then tap the map." : "Pick an NPC in the panel first, then tap the map.", true);
+    return;
+  }
+  if (placementAt(t.x, t.y)) return;
+  try {
+    let n;
+    if (M.npcMode === "new") {
+      await api("spawnsEnable");
+      const nn = M.npcNew;
+      const id = await save("npc", { id: 0, Name: nn.Name.trim(), ImgPath: nn.ImgPath, Faction: nn.Faction || "", Conversation: "", SpawnX: t.x, SpawnY: t.y });
+      n = S.npcBy[id];
+      M.npcMode = "existing"; M.npcPick = id; M.npcNew = { Name: "", ImgPath: nn.ImgPath, Faction: "" };
+      status(`${n.Name} is in the world at ${t.x}, ${t.y}. Tap again to put them somewhere else too.`);
+    } else {
+      n = S.npcBy[M.npcPick];
+      await addPlacement(n, t.x, t.y);
+      status(`${n.Name} now stands at ${t.x}, ${t.y} (${spawnsOf(S.npcBy[n.id]).length} places).`);
+    }
+    M.npcSel = { npc: n.id, x: t.x, y: t.y };
+  } catch (err) { status(err.message, true); }
+  drawSide(); drawMap();
+}
+function npcToolDraw(g, px, py, sc) {
+  if (M.npcSel) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(px(M.npcSel.x) - 2, py(M.npcSel.y) - 2, sc + 4, sc + 4); g.lineWidth = 1; }
+  const pick = M.npcMode === "existing" && S.npcBy[M.npcPick];
+  if (pick) { // the other places the picked NPC stands: a ring each
+    g.strokeStyle = "#fff"; g.setLineDash([3, 3]);
+    for (const sp of spawnsOf(pick)) g.strokeRect(px(sp.X) - 4, py(sp.Y) - 4, sc + 8, sc + 8);
+    g.setLineDash([]);
+  }
+  if (M.hover && npcArmed() && !M.drag) {
+    const img = imgFor(M.npcMode === "new" ? M.npcNew.ImgPath : pick && pick.ImgPath);
+    g.globalAlpha = .6; if (img) g.drawImage(img, px(M.hover.x), py(M.hover.y), sc, sc); g.globalAlpha = 1;
+  }
+}
+function npcSide(s) {
+  M.npcMode = M.npcMode || "existing";
+  M.npcNew = M.npcNew || { Name: "", ImgPath: "assets/npc/Person.png", Faction: "" };
+  s.append(h("h3", {}, "NPCs"),
+    seg([["existing", "Someone you have"], ["new", "A new NPC"]], M.npcMode, v => { M.npcMode = v; drawSide(); drawMap(); }),
+    h("p", { class: "hint" }, "Tap the map to put them there. Drag a placed NPC to move them. One NPC can stand in many places: same name, words and quests at each."));
+  if (M.npcMode === "new") {
+    const nn = M.npcNew;
+    const name = h("input", { type: "text", value: nn.Name, placeholder: "Name, e.g. Gate Guard", oninput: () => { nn.Name = name.value; drawMap(); } });
+    const fac = h("input", { type: "text", value: nn.Faction, placeholder: "Faction (optional)", oninput: () => { nn.Faction = fac.value; } });
+    const pickImg = () => openPicker({ title: "How they look", groups: npcSpriteGroups, recentKey: "npc", value: nn.ImgPath, onPick: v => { if (v) { nn.ImgPath = v; drawSide(); drawMap(); } } });
+    s.append(h("div", { class: "npcnew" }, thumb(nn.ImgPath, pickImg, "Change sprite"), h("div", { class: "npcnew-f" }, name, fac, h("button", { type: "button", onclick: pickImg }, "Change look…"))));
+  } else {
+    const f = h("input", { type: "search", value: M.npcFilter || "", placeholder: "Search NPCs…", oninput: () => { M.npcFilter = f.value; drawList(); } });
+    const list = h("div", { class: "npclist" });
+    const drawList = () => {
+      const q = (M.npcFilter || "").toLowerCase();
+      const rows = S.c.npcs.filter(n => !q || `${n.Name} ${n.Faction}`.toLowerCase().includes(q)).slice(0, 80);
+      list.replaceChildren(...rows.map(n => {
+        const k = spawnsOf(n).length;
+        return h("button", { type: "button", class: "npcrow" + (M.npcPick === n.id ? " on" : ""), onclick: () => { M.npcPick = n.id; drawSide(); drawMap(); } },
+          h("img", { src: assetURL(n.ImgPath), alt: "" }), h("span", {}, h("b", {}, n.Name), h("small", {}, k ? `${k} place${k > 1 ? "s" : ""}` : "not placed")));
+      }));
+    };
+    drawList();
+    s.append(f, list);
+  }
+  const sel = M.npcSel && S.npcBy[M.npcSel.npc];
+  if (sel) {
+    const all = spawnsOf(sel), here = all.find(sp => sp.X === M.npcSel.x && sp.Y === M.npcSel.y);
+    s.append(h("h3", {}, sel.Name),
+      h("div", { class: "bar" }, thumb(sel.ImgPath, null, sel.Name), h("span", {}, `${all.length} place${all.length === 1 ? "" : "s"}`), link("#studio/npc/" + sel.id, "Open in Quest Studio", "btnlink")),
+      h("div", { class: "npcspots" }, all.map(sp => h("div", { class: "npcspot" + (sp === here ? " on" : "") },
+        h("button", { type: "button", onclick: () => { M.cx = sp.X; M.cy = sp.Y; M.npcSel = { npc: sel.id, x: sp.X, y: sp.Y }; drawSide(); drawMap(); } }, `${sp.X}, ${sp.Y}`),
+        h("span", { class: "hint" }, zoneName(sp.X, sp.Y)),
+        h("button", { type: "button", class: "danger", onclick: async () => { if (await removePlacement(sel, sp)) { if (sp === here) M.npcSel = null; drawSide(); drawMap(); } } }, "Remove")))),
+      h("div", { class: "bar" }, h("button", { type: "button", onclick: () => { M.npcMode = "existing"; M.npcPick = sel.id; drawSide(); drawMap(); status(`Tap the map to put ${sel.Name} somewhere else too.`); } }, "+ Another place")));
+  }
+}
+function zoneName(x, y) { const t = tile(x, y); return t ? str(t[4]) : ""; }
+// Touch and pen: one finger works as the mouse does (tools, drags), two
+// fingers pan and pinch-zoom. The mouse keeps its own handlers.
+function mapTouch(cv) {
+  const pts = new Map();
+  let pinch = null;
+  const two = () => { const [a, b] = [...pts.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  cv.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse") return;
+    e.preventDefault(); // no emulated mouse events after
+    cv.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) { M.hover = toTile(e); mapDown(e); }
+    else if (pts.size === 2) {
+      if (M.drag && (M.drag.paint || M.drag.area)) mapUp(); else M.drag = null; // a second finger: no tap, no drag
+      const t = two(); pinch = { ...t, scale: M.scale, cx: M.cx, cy: M.cy };
+    }
+  });
+  cv.addEventListener("pointermove", e => {
+    if (e.pointerType === "mouse" || !pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size >= 2) {
+      const t = two(), r = cv.getBoundingClientRect();
+      const sc = Math.max(2, Math.min(48, pinch.scale * t.d / pinch.d));
+      // keep the world point under the first centre under the fingers
+      const wx = (pinch.x - r.left - cv.width / 2) / pinch.scale + pinch.cx, wy = (pinch.y - r.top - cv.height / 2) / pinch.scale + pinch.cy;
+      M.scale = sc; M.cx = wx - (t.x - r.left - cv.width / 2) / sc; M.cy = wy - (t.y - r.top - cv.height / 2) / sc;
+      drawMap(); return;
+    }
+    if (!pinch) mapMove(e);
+  });
+  const end = e => {
+    if (e.pointerType === "mouse" || !pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pinch) { if (!pts.size) pinch = null; return; }
+    if (!pts.size) mapUp(e);
+  };
+  cv.addEventListener("pointerup", end);
+  cv.addEventListener("pointercancel", e => { if (e.pointerType !== "mouse") { pts.delete(e.pointerId); if (!pts.size) { pinch = null; M.drag = null; } } });
+}
 // Tiles on the line from a to b (so a fast drag leaves no gaps).
 function lineTiles(a, b) {
   const out = []; let x = a.x, y = a.y;
@@ -709,10 +878,11 @@ function mapDown(e) {
   const t = toTile(e);
   M.cv.focus({ preventScroll: true });
   if (e.button === 2 || e.button === 1 || (M.tool === "select" && e.shiftKey)) { M.drag = { pan: true, sx: e.clientX, sy: e.clientY, cx: M.cx, cy: M.cy }; return; }
+  if (M.tool === "npc") { npcToolDown(e, t); return; }
   if (M.tool === "select") {
-    const n = npcAt(t.x, t.y), tl = tile(t.x, t.y);
+    const p = placementAt(t.x, t.y), tl = tile(t.x, t.y);
     M.sel = { x: t.x, y: t.y };
-    if (n) M.drag = { npc: n, from: t };
+    if (p) M.drag = { npc: p.n, sp: p.sp, from: t };
     else if (tl && str(tl[6])) M.drag = { mob: str(tl[6]), from: t };
     else M.drag = { pan: true, sx: e.clientX, sy: e.clientY, cx: M.cx, cy: M.cy };
     drawSide(); drawMap();
@@ -735,7 +905,10 @@ function mapMove(e) {
     if (!M.hover || M.hover.x !== t.x || M.hover.y !== t.y) { M.hover = t; drawMap(); }
     return;
   }
-  if (M.drag.pan) { M.cx = M.drag.cx - (e.clientX - M.drag.sx) / M.scale; M.cy = M.drag.cy - (e.clientY - M.drag.sy) / M.scale; drawMap(); return; }
+  if (M.drag.pan) {
+    if (M.drag.tap && Math.hypot(e.clientX - M.drag.sx, e.clientY - M.drag.sy) > 8) M.drag.tap = null; // a drag pans, a tap places
+    M.cx = M.drag.cx - (e.clientX - M.drag.sx) / M.scale; M.cy = M.drag.cy - (e.clientY - M.drag.sy) / M.scale; drawMap(); return;
+  }
   M.hover = t;
   if (M.drag.npc || M.drag.mob) { M.drag.to = t; drawMap(); }
   else if (M.drag.plotRect || M.drag.movePlot || M.drag.resize) plotMove(t, e);
@@ -751,9 +924,12 @@ async function mapUp() {
   const d = M.drag; M.drag = null;
   if (!d) return;
   if (d.plotRect || d.movePlot || d.resize) { plotUp(d); return; }
+  if (d.tap) { await npcToolTap(d.tap); return; }
   if (d.npc && d.to && (d.to.x !== d.from.x || d.to.y !== d.from.y)) {
-    const n = d.npc; await save("npc", { id: n.id, Name: n.Name, ImgPath: n.ImgPath, Faction: n.Faction, Conversation: n.Conversation, SpawnX: d.to.x, SpawnY: d.to.y });
-    M.sel = d.to; drawSide(); drawMap();
+    await movePlacement(d.npc, d.sp, d.to.x, d.to.y);
+    M.sel = d.to;
+    if (M.npcSel) M.npcSel = { npc: d.npc.id, x: d.to.x, y: d.to.y };
+    drawSide(); drawMap();
   } else if (d.mob && d.to && (d.to.x !== d.from.x || d.to.y !== d.from.y)) {
     patch(d.from.x, d.from.y, { Enemy: "" }); patch(d.to.x, d.to.y, { Enemy: d.mob }); M.sel = d.to; await flush();
   } else if (d.paint) await flush();
@@ -837,12 +1013,13 @@ function drawSide() {
   s.className = "side" + (M.tool === "paint" || M.tool === "spawn" ? " wide" : "");
   s.textContent = "";
   const tools = h("div", { class: "tools" });
-  for (const [k, l] of [["select", "Select / drag"], ["spawn", "Place mobs"], ["erase", "Erase mobs"], ["paint", "Paint tiles"], ["areas", "Areas"], ["plot", "Plots"]])
+  for (const [k, l] of [["select", "Select / drag"], ["npc", "NPCs"], ["spawn", "Place mobs"], ["erase", "Erase mobs"], ["paint", "Paint tiles"], ["areas", "Areas"], ["plot", "Plots"]])
     tools.append(h("button", { class: M.tool === k ? "on" : "", onclick: () => { if (M.tool === "plot" && k !== "plot" && !plotConfirmDiscard()) return; M.tool = k; M.cv.style.cursor = ""; drawSide(); drawMap(); } }, l));
   s.append(h("h3", {}, "Tools"), tools,
-    h("p", { class: "hint" }, "Wheel zooms. Right-drag (or drag empty ground in Select) pans. In Select, drag an NPC or a mob to move it."));
+    h("p", { class: "hint" }, "Wheel or pinch zooms. Right-drag, two fingers, or dragging empty ground in Select / NPCs pans. In Select, drag an NPC or a mob to move it."));
   if (M.tool === "plot") plotSide(s);
   if (M.tool === "spawn") spawnSide(s);
+  if (M.tool === "npc") npcSide(s);
   if (M.tool === "paint") paintSide(s);
   if (M.tool === "areas") areasSide(s);
   if (M.tool === "erase") s.append(h("h3", {}, "Erase mobs"), h("div", { class: "row2" }, h("span", {}, "Brush size"), seg([[1, "1"], [2, "2"], [3, "3"], [5, "5"]], M.brush.size, v => { M.brush.size = v; drawSide(); })),
@@ -989,9 +1166,9 @@ function drawMapNow() {
   }
   // NPCs
   g.font = `${Math.max(11, Math.min(14, sc / 2))}px sans-serif`;
-  for (const n of S.c.npcs) {
-    let x = n.SpawnX, y = n.SpawnY;
-    if (M.drag && M.drag.npc === n && M.drag.to) { x = M.drag.to.x; y = M.drag.to.y; }
+  for (const { n, sp } of placements()) {
+    let x = sp.X, y = sp.Y;
+    if (M.drag && M.drag.npc === n && M.drag.sp === sp && M.drag.to) { x = M.drag.to.x; y = M.drag.to.y; }
     if (x < x0 || x > x1 || y < y0 || y > y1) continue;
     const i = sprites && imgFor(n.ImgPath);
     if (i) g.drawImage(i, px(x), py(y), sc, sc);
@@ -1001,6 +1178,7 @@ function drawMapNow() {
     if (sc >= 6) { g.fillStyle = agent ? "#ff9ad5" : "#ffd34d"; g.fillText(n.Name + (agent && M.tool === "plot" ? " (Land Agent)" : ""), px(x), py(y) - 3); }
   }
   if (M.sel && M.tool === "select") { g.strokeStyle = "#fff"; g.strokeRect(px(M.sel.x) - 1, py(M.sel.y) - 1, sc + 2, sc + 2); }
+  if (M.tool === "npc") npcToolDraw(g, px, py, sc);
   // brush preview under the cursor
   if (M.hover && (M.tool === "paint" || M.tool === "erase")) {
     const b = M.brush;
@@ -1426,7 +1604,7 @@ function renderSprites(m) {
 // ------------------------------------------------------------------ shell
 // ------------------------------------------------------------------ navigation
 // Hash routes, so Back/Forward work and links can be shared:
-//   #map  #map/X,Y  #quests  #quest/ID  #quest/ID/line/Offer  #quest/ID/step/N
+//   #map  #map/X,Y  #map/npc/ID[/X,Y]  #quests  #quest/ID  #quest/ID/line/Offer  #quest/ID/step/N
 //   #npcs  #npc/ID  #npc/ID/quest/QID  #dialog/IDENTIFIER  #items  #item/ID  #loot/ENEMYID  #export  #sprites
 function link(hash, text, cls) { return h("a", { href: hash, class: cls || null }, text); }
 function go(hash) { if (location.hash === hash) applyRoute(); else location.hash = hash; }
@@ -1463,6 +1641,12 @@ async function applyRoute() {
   else if (kind === "effect") { S.tab = "effects"; S.effect = { id: +a }; }
   else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p, Agent: +p.Agent || 0 }; M.plotOrig = JSON.stringify(plotRow(M.plotSel)); S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
   else if (kind === "studio") { S.tab = "studio"; qsRoute(a, b); }
+  else if (kind === "map" && a === "npc") {
+    // #map/npc/ID[/X,Y]: the NPCs tool with that NPC picked, at a placement
+    S.tab = "map"; M.tool = "npc"; M.npcMode = "existing"; M.npcPick = +b;
+    const n = S.npcBy[+b], at = c ? c.split(",").map(Number) : null, sp = n && (at ? { X: at[0], Y: at[1] } : spawnsOf(n)[0]);
+    if (sp) { S.focus = { x: sp.X, y: sp.Y }; M.npcSel = { npc: +b, x: sp.X, y: sp.Y }; }
+  }
   else if (kind === "map") { S.tab = "map"; if (a) { const [x, y] = a.split(",").map(Number); S.focus = { x, y }; M.sel = { x, y }; } }
   else if (TABS.includes(kind)) S.tab = kind;
   S.routing = true;
