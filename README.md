@@ -143,6 +143,16 @@ and Firefox usually grant, Safari may not. The quota is per browser: Chrome and 
 Safari less, and older Safari asks before a site passes about 1 GB. GitHub
 sync needs to be online; autosave doesn't.
 
+## Quest Studio: conversations and daily quests
+
+**The conversation flow.** The quest and NPC sheets show what the player sees, in the game's conversation-window look: the offer, after accepting, in progress and the hand-in. Every line (the NPC's and every answer) is editable inline; lines shared by several quests (an NPC's greeting) are flagged. The NPC sheet starts with an editable **Greeting** (shown when they have nothing for you). A conversation opens on quest business before the greeting (hand-in, then a talk step, then an offer), exactly as the server does; **Playtest** follows the same flow, and declining goes to the menu.
+
+**Branching offers.** "Turn into a conversation" on a quest, then **+ question** under any NPC line. Every answer has its own wording and a small action tag: another line, back to the offer (`@offer`), accept (`@accept`), decline (`@decline`), the menu (`@menu`), anything else (`@more`) or end (`@close`). "I'll do it." / "Not right now." / "On it." are greyed defaults you can overwrite (stored in the quest's `Replies`); several accept or decline answers with different wording are fine. A click-through preview plays the tree as a player (with the Playtest character), and warnings flag an accept that can't be reached, dead ends, loops with no way out and more than 6 answers on a line. **Enable quest conversations in this db** adds the dialogue columns (`OfferTree`, `AcceptTree`, `ProgressTree`, `CompleteTree`, `Replies`) with the same statements as the API's `2026-10-26-quest-dialogue.sql`; old quests stay single-box. Schema: BrawlQuest-API `docs/QUEST_DIALOGUE.md`.
+
+**Daily quests.** A quest's **Once / Daily** switch. A daily keeps pools (`quest_daily_pool`): `{mob}`, `{item}`, `{count}`, `{place}` lists with sprite pickers, groups ("any of these counts"), ranges, odds and places picked on the map. Tap a placeholder chip while editing text to write it in. The roll preview is a port of the server's own roll (same seed per day, quest and list) for today and the next six resets (21:00 server time). Dailies carry a blue ! on the journey, in the Cast and in Playtest, where claimed ones hide until **next reset**. **Enable daily quests in this db** adds the `Daily` column and pool table (the API's `2026-10-26-daily-quests.sql`).
+
+Tests: `tests/headless-quest-talk.mjs`, `tests/headless-daily-quests.mjs` (serve on 127.0.0.1:8977), `tests/qtalk.mjs`, `tests/daily-roll.mjs`, `tests/dialogue-migration.mjs`, `tests/daily-migration.mjs`.
+
 ## Plots
 
 Plots are leased building land outside Foundation Forest (table `plot`,
