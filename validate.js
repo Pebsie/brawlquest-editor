@@ -89,7 +89,7 @@ const BQCheck = (() => {
       loot: { why: "initEnemies panics (nil rows) without it", types: { EnemyID: "i", AmountVariance: "i", Chance: "i", ItemID: "i", Amount: "i" } },
       npc: { why: "initNPC loads no NPCs without it", types: { id: "i", Name: "s", ImgPath: "s", SpawnX: "i", SpawnY: "i" }, nullable: ["Faction", "Conversation"] },
       conversation: { why: "initNPC loads no dialogue without it", types: { id: "i", Identifier: "s", Title: "s" }, nullable: ["ImgPath", "Options", "ItemsGiven"] },
-      quest_def: { soft: true, why: "the API runs with no quests (apply content/migrations/2026-10-13-questline.sql)", whole: true, types: { id: "i", Act: "i", Zone: "s", Title: "s", Summary: "s", Level: "i", MinLevel: "i", Giver: "i", TurnIn: "i", Prereqs: "s", Offer: "s", Accept: "s", Progress: "s", Complete: "s", XP: "i", Gold: "i", Rewards: "s", Steps: "s" }, opt: { Sequential: "i", Daily: "i" } },
+      quest_def: { soft: true, why: "the API runs with no quests (apply content/migrations/2026-10-13-questline.sql)", whole: true, types: { id: "i", Act: "i", Zone: "s", Title: "s", Summary: "s", Level: "i", MinLevel: "i", Giver: "i", TurnIn: "i", Prereqs: "s", Offer: "s", Accept: "s", Progress: "s", Complete: "s", XP: "i", Gold: "i", Rewards: "s", Steps: "s" }, opt: { Sequential: "i", Daily: "i", OfferTree: "s", AcceptTree: "s", ProgressTree: "s", CompleteTree: "s", Replies: "s" } },
       craft: { star: 4, why: "initCraftItems panics (nil rows) without it", types: { id: "i", ItemID: "i", Items: "s", Chance: "i" } },
       forge: { star: 3, why: "initForging panics (nil rows) without it", types: { id: "i", EnterID: "i", ResultID: "i" } },
       world: { star: 9, why: "initWorld panics (nil rows) without it", types: { id: "i", GroundTile: "s", ForegroundTile: "s", Name: "s", X: "i", Y: "i", Music: "s", Collision: "b", Enemy: "s" } },
@@ -204,13 +204,21 @@ const BQCheck = (() => {
       const w = `dialogue ${r.Identifier}`, route = "#dialog/" + encodeURIComponent(r.Identifier || "");
       const re = /\[\s*['"](.*?)['"]\s*,\s*['"]([^'"]*)['"]\s*\]/g;
       let m;
-      while ((m = re.exec(String(r.Options || "")))) if (m[2] !== "1" && !nodeIds.has(m[2])) add("error", "conversation", w, `answer "${m[1]}" leads to node "${m[2]}", which doesn't exist`, route);
+      while ((m = re.exec(String(r.Options || "")))) if (m[2] !== "1" && !m[2].startsWith("@") && !nodeIds.has(m[2])) add("error", "conversation", w, `answer "${m[1]}" leads to node "${m[2]}", which doesn't exist`, route);
       if (String(r.ItemsGiven || "").trim()) {
         const g = goList(r.ItemsGiven, T.invItem, "ItemsGiven");
         g.errs.forEach(e => add("error", "conversation", w, e + " (the API gives nothing)", route));
         if (!g.errs.length) g.v.forEach((x, i) => x && item(x.ItemID, "error", "conversation", w, `ItemsGiven ${i + 1}`, route));
       }
     }
+    // Quest conversations (questtree.go): a tree root that doesn't exist falls back to the single text box.
+    if (ok.quest_def && nodeIds && colsOf("quest_def").includes("OfferTree"))
+      for (const r of q("SELECT id, Title, OfferTree, AcceptTree, ProgressTree, CompleteTree, Replies FROM quest_def ORDER BY id")) {
+        const w = `quest ${r.id} ${r.Title}`, route = "#studio/journey/" + r.id;
+        for (const k of ["OfferTree", "AcceptTree", "ProgressTree", "CompleteTree"])
+          if (String(r[k] || "").trim() && !nodeIds.has(String(r[k]).trim())) add("warning", "quest_def", w, `${k} "${r[k]}" doesn't exist: the game uses the single text box`, route);
+        if (String(r.Replies || "").trim()) { try { const o = JSON.parse(r.Replies); if (!o || typeof o !== "object" || Array.isArray(o)) throw 0; } catch { add("error", "quest_def", w, "Replies is not a JSON object", route); } }
+      }
     if (ok.npc && nodeIds) for (const r of q("SELECT id, Name, Conversation FROM npc WHERE IFNULL(Conversation, '') <> '' ORDER BY id"))
       if (!nodeIds.has(r.Conversation)) add("warning", "npc", `NPC ${r.id} ${r.Name}`, `greeting node "${r.Conversation}" doesn't exist`, "#npc/" + r.id);
 

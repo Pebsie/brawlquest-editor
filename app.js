@@ -26,7 +26,7 @@ async function api(path, body) {
     export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()), portraits: () => BQ.api.portraits(body),
     areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
     areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body),
-    dailyEnable: () => BQ.api.dailyEnable(), saveMany: () => BQ.api.saveMany(body) }[path];
+    dailyEnable: () => BQ.api.dailyEnable(), dialogueEnable: () => BQ.api.dialogueEnable(), saveMany: () => BQ.api.saveMany(body) }[path];
   const v = BQ.st.version;
   const out = fn();
   syncFile();
@@ -418,7 +418,7 @@ function reachable(root) {
     seen.add(id);
     const c = S.convBy[id];
     out.push(c || { Identifier: id, missing: true });
-    if (c) for (const [, next] of parseOptions(c.Options)) queue.push(next);
+    if (c) for (const [, next] of parseOptions(c.Options)) if (!String(next).startsWith("@")) queue.push(next); // @accept, @menu... are actions, not nodes
   }
   return out;
 }

@@ -121,6 +121,10 @@ function qsAnalyse() {
     if (steps.length > 1 && !+q.Sequential && steps.slice(1).some(s => s.Type === "talk" || s.Type === "reach")) add(q.id, "info", "order", "Objectives all count at once. Tick \"in order\" if it's a story sequence");
     for (const k of ["Offer", "Complete"]) if (!String(q[k] || "").trim()) add(q.id, "warn", "line", `No ${k.toLowerCase()} line`);
     if (daily) for (const x of BQDaily.check(q, qsPool(q.id), qsNameSets())) add(q.id, x.sev, "daily", "Daily: " + x.msg);
+    if (S.c.hasDialogue) for (const st of BQTalk.STAGES) {
+      const root = BQTalk.norm(q[st.tree]);
+      if (root) for (const x of BQTalk.analyse(root, qsNodeGet, st, q)) if (x.sev !== "info") add(q.id, x.sev, "talk", `${st.label} conversation: ${x.msg}`);
+    }
   }
   // questlines: connected groups of prerequisite links
   const line = new Map(); let nLines = 0;
@@ -706,8 +710,8 @@ function qsQuestSheet(id) {
       qsDailyBox(q, P),
       daily ? qsRollPreview(q) : null,
       h("h4", {}, "Rewards"), rwBox,
-      h("h4", {}, "What they say ", h("button", { class: "qs-mini", onclick: () => qsPreviewQuest(q) }, "play it")),
-      qsQuestScript(q, P)));
+      h("h4", {}, "What they say ", h("button", { class: "qs-mini", id: "qs-play-quest", onclick: () => qsPreviewQuest(q) }, "play it")),
+      qsFlow(q)));
   d.scrollTop = keep;
 }
 function qsBlankStep(t, q) {
@@ -721,30 +725,6 @@ function qsBlankStep(t, q) {
   if (t === "level") return { Type: "level", Count: (q.Level || 1) + 1, Text: `Reach level ${(q.Level || 1) + 1}` };
   return { Type: t, Target: "", Count: 1, Text: "" };
 }
-// The quest's own lines, in the order the player hears them.
-function qsQuestScript(q, P) {
-  const g = S.npcBy[q.Giver], t = S.npcBy[q.TurnIn];
-  const steps = qSteps(q);
-  const npcLine = (n, key, label, extra) => h("div", { class: "qs-bub npc", "data-line": key },
-    pix(n ? n.ImgPath : "", "bp"), h("div", {}, h("small", {}, `${n ? n.Name : "Nobody"} - ${label}`),
-      qsInline(q[key], v => P({ [key]: v }, `${label} line`), { multi: true, cls: "rh", ph: "Write what they say", chips: qsChipKeys(q) }), extra ? h("div", { class: "qs-auto" }, extra) : null));
-  const you = (txt, note) => h("div", { class: "qs-bub you" }, h("span", { class: "qs-opt" }, txt), note ? h("small", {}, note) : null);
-  const rewards = [+q.XP ? `${q.XP} XP` : "", +q.Gold ? `${q.Gold} Gold` : "", ...qRw(q).map(r => S.itemBy[r.ItemID] ? `${r.Amount}x ${S.itemBy[r.ItemID].Name}` : "")].filter(Boolean);
-  return h("div", { class: "qs-script" },
-    you((qsIsDaily(q) ? "[Daily] " : "[Quest] ") + q.Title, qsIsDaily(q) ? `on ${g ? g.Name : "the giver"}'s menu, filled in from the day's roll; once a day per giver` : `on ${g ? g.Name : "the giver"}'s menu once it unlocks`),
-    npcLine(g, "Offer", "offer", steps.map(s => "- " + (s.Text || stepLabel(s))).join("\n")),
-    you("I'll do it.", "or \"Not right now.\" (back to the start)"),
-    npcLine(g, "Accept", "accept"),
-    you("On it.", "takes the quest and closes the window"),
-    ...steps.map((s, i) => s.Type === "talk" ? h("div", { class: "qs-bub npc" }, pix(S.npcBy[s.NPC] ? S.npcBy[s.NPC].ImgPath : "", "bp"), h("div", {}, h("small", {}, `${npcName(s.NPC)} - objective ${i + 1}`),
-      qsInline(s.Line, v => { const a = qSteps(q); a[i].Line = v; return P({ Steps: JSON.stringify(a) }, `${npcName(s.NPC)}'s line`); }, { multi: true, cls: "rh", ph: "What they say" }), h("div", { class: "qs-auto" }, "then \"Right.\""))) : null),
-    you("[In progress] " + q.Title, `if you talk to ${t ? t.Name : "them"} before it's done`),
-    npcLine(t, "Progress", "in progress"),
-    you("[Complete] " + q.Title, "when every objective is done"),
-    npcLine(t, "Complete", "complete", rewards.length ? "Reward: " + rewards.join(", ") : "No reward"),
-    you("Anything else?", qsIsDaily(q) ? "claimed: hidden until the 21:00 reset; then their next quest on offer, else their greeting" : "goes to their next quest on offer, else their greeting"));
-}
-
 // ------------------------------------------------------------------ the game's dialogue, simulated
 // Same rules as the API's talkTo / questMenuLocked / chatNode, on a pretend
 // player (QS.play or a scratch copy).
@@ -785,25 +765,77 @@ function qsMenu(P, npcId) {
   }
   return [...t, ...k, ...o, ...w];
 }
-const qsNextOffer = (P, npcId) => qsOrder().find(q => q.Giver === npcId && qsAvail(P, q));
+// Story quests before dailies (nextOfferLocked).
+const qsNextOffer = (P, npcId) => qsOrder().find(q => !qsIsDaily(q) && q.Giver === npcId && qsAvail(P, q)) || qsOrder().find(q => qsIsDaily(q) && q.Giver === npcId && qsAvail(P, q));
+// What talking to npcId opens on (questFirstLocked): a hand-in here, a talk
+// objective aimed here, then the first quest on offer; "" = the greeting.
+function qsQuestFirst(P, npcId) {
+  const m = qsMenu(P, npcId);
+  for (const pre of ["turnin:", "talk:"]) { const o = m.find(x => x.k.startsWith(pre)); if (o) return o.k; }
+  const nq = qsNextOffer(P, npcId);
+  return nq ? "offer:" + nq.id : "";
+}
+// A daily's {mob} {count}... in node text and the player's lines, as the
+// player sees the quest (their taken variant, else today's).
+const qsFiller = (P, q) => {
+  if (!qsIsDaily(q)) return s => s;
+  const r = (P.state[q.id] && P.variant && P.variant[q.id]) || qsRoll(q, qsPDay(P));
+  return s => BQDaily.fill(r, s);
+};
+// treeTargetKey: what an option's target does.
+function qsTreeKey(qid, target) {
+  switch (BQTalk.kindOf(target)) {
+    case "accept": return "accept:" + qid;
+    case "menu": return "menu";
+    case "offer": return "offer:" + qid;
+    case "more": return "more";
+    case "close": return "close";
+  }
+  return "q:" + qid + ":" + BQTalk.norm(target);
+}
+// questTreeNode: node `ident` of quest q's conversation, into view v.
+function qsTreeNode(P, q, ident, v, fill) {
+  const id = BQTalk.norm(ident), c = id && S.convBy[id];
+  if (!c) return false;
+  const f = fill || qsFiller(P, q);
+  v.text = f(c.Title); v.node = id;
+  if (c.ImgPath && c.ImgPath !== "None") v.img = c.ImgPath;
+  v.options = parseOptions(c.Options).map(([l, t]) => ({ t: f(l), k: qsTreeKey(q.id, t) }));
+  return true;
+}
 function qsTalk(P, n, key) {
   const v = { name: n.Name, img: n.ImgPath, text: "", options: [], key };
   const close = { t: "Goodbye.", k: "close" };
   if (key === "close") return { ...v, closed: true };
-  if (key === "plot") return { ...v, text: "(The land agent's plot list: rent a plot, see yours, give one up. The game builds this from the plot table.)", options: [{ t: "Back.", k: "" }, close] };
+  if (key === "plot") return { ...v, text: "(The land agent's plot list: rent a plot, see yours, give one up. The game builds this from the plot table.)", options: [{ t: "Back.", k: "menu" }, close] };
   if (key.startsWith("chat:")) return qsChat(P, n, key.slice(5), v);
-  if (key === "more") { const nq = qsNextOffer(P, n.id); key = nq ? "offer:" + nq.id : ""; }
-  const id = +(key.split(":")[1] || 0), q = qById(id), kind = key.split(":")[0];
-  const d = q && qsPDef(P, q);
+  if (key === "more") { const nq = qsNextOffer(P, n.id); key = nq ? "offer:" + nq.id : "menu"; }
+  if (key === "") { const k = qsQuestFirst(P, n.id); if (k) key = k; }
+  let id, node = "", kind = key.split(":")[0];
+  if (kind === "q") { const m = /^q:(\d+):(.+)$/.exec(key); id = m ? +m[1] : 0; node = m ? m[2] : ""; } else id = +(key.split(":")[1] || 0);
+  const q = qById(id), d = q && qsPDef(P, q), f = q ? qsFiller(P, q) : s => s;
   let handled = true;
-  if (kind === "offer" && q && q.Giver === n.id && qsAvail(P, q)) { v.text = d.Offer + "\n\n" + qSteps(d).map(s => "- " + s.Text).join("\n"); v.options = [{ t: "I'll do it.", k: "accept:" + id }, { t: "Not right now.", k: "" }]; v.quest = id; v.line = "Offer"; }
+  if (kind === "offer" && q && q.Giver === n.id && qsAvail(P, q)) {
+    // the OFFER, not the greeting: the tree's first line or the single box, then the objectives
+    const sum = qSteps(d).map(s => "- " + s.Text).join("\n");
+    const acc = { t: f(BQTalk.reply(q, "Accept")), k: "accept:" + id }, dec = { t: f(BQTalk.reply(q, "Decline")), k: "menu" };
+    if (qsTreeNode(P, q, q.OfferTree, v)) {
+      if (sum) v.text += "\n\n" + sum;
+      if (!v.options.some(o => o.k === acc.k)) v.options.push(acc);
+      if (!v.options.some(o => o.k === "menu")) v.options.push(dec);
+    } else { v.text = d.Offer + "\n\n" + sum; v.options = [acc, dec]; }
+    v.quest = id; v.line = "Offer";
+  }
   else if (kind === "accept" && q && q.Giver === n.id && qsAvail(P, q)) {
     P.state[id] = "active"; P.log && P.log.push({ t: "took", q: id, title: d.Title });
     if (qsIsDaily(q)) (P.variant = P.variant || {})[id] = qsRoll(q, qsPDay(P)); // the variant stays with the player past the reset
-    v.text = d.Accept; v.options = [{ t: "On it.", k: "close" }]; v.quest = id; v.line = "Accept";
+    const onIt = { t: qsFiller(P, q)(BQTalk.reply(q, "OnIt")), k: "close" };
+    if (qsTreeNode(P, q, q.AcceptTree, v)) { if (!v.options.length) v.options = [onIt]; } else { v.text = d.Accept; v.options = [onIt]; }
+    v.quest = id; v.line = "Accept";
   }
   else if (kind === "talk" && q && qsTalkStep(P, q, n.id) >= 0) { const i = qsTalkStep(P, q, n.id); P.talked = P.talked || {}; (P.talked[id] = P.talked[id] || new Set()).add(i); v.text = qSteps(d)[i].Line || ""; v.options = [{ t: "Right.", k: "" }]; v.quest = id; v.line = "step:" + i; }
   else if (kind === "turnin" && q && P.state[id] === "ready" && q.TurnIn === n.id) {
+    const ff = qsFiller(P, q);
     delete P.state[id]; if (P.follow) P.level = Math.max(P.level, q.Level);
     if (qsIsDaily(q)) {
       // the claim, dated the loot day of the hand-in; the progress goes
@@ -811,14 +843,22 @@ function qsTalk(P, n, key) {
       P.log && P.log.push({ t: "claimed", q: id, title: d.Title });
     } else { P.done.add(id); P.log && P.log.push({ t: "done", q: id }); }
     const rw = [+q.XP ? q.XP + " XP" : "", +q.Gold ? q.Gold + " Gold" : "", ...qRw(q).map(r => (S.itemBy[r.ItemID] ? `${r.Amount}x ${S.itemBy[r.ItemID].Name}` : ""))].filter(Boolean);
-    v.text = d.Complete + (rw.length ? "\n\nReward: " + rw.join(", ") : ""); v.options = [{ t: "Anything else?", k: "more" }]; v.quest = id; v.line = "Complete";
+    const more = { t: ff(BQTalk.reply(q, "AnythingElse")), k: "more" };
+    if (qsTreeNode(P, q, q.CompleteTree, v, ff)) { if (!v.options.length) v.options = [more]; } else { v.text = d.Complete; v.options = [more]; }
+    v.text += rw.length ? "\n\nReward: " + rw.join(", ") : ""; v.quest = id; v.line = "Complete";
   }
-  else if (kind === "progress" && q) { v.text = d.Progress; v.options = [{ t: "Back.", k: "" }]; v.quest = id; v.line = "Progress"; }
+  else if (kind === "progress" && q) {
+    if (!qsTreeNode(P, q, q.ProgressTree, v)) { v.text = d.Progress; v.options = [{ t: f(BQTalk.reply(q, "Back")), k: "menu" }]; }
+    v.quest = id; v.line = "Progress";
+  }
+  else if (kind === "q" && q && (q.Giver === n.id || q.TurnIn === n.id) && qsTreeNode(P, q, node, v)) { v.quest = id; v.line = "Conversation"; }
   else handled = false;
   if (handled) { if (!v.options.some(o => o.k === "close")) v.options.push(close); return v; }
   const items = qsMenu(P, n.id);
   if (n.Faction === "Land Agent") items.push({ t: "[Plot] Rent a plot", k: "plot" });
-  if (items.length === 1 && (!n.Conversation || /^(turnin|talk):/.test(items[0].k))) return qsTalk(P, n, items[0].k);
+  // a lone in-progress row and no greeting tree: straight to it (never from the menu, where its Back. leads)
+  if (key !== "menu" && items.length === 1 && !n.Conversation) return qsTalk(P, n, items[0].k);
+  v.line = "Greeting";
   if (n.Conversation && S.convBy[n.Conversation]) { const c = qsChat(P, n, n.Conversation, v); c.options = [...items, ...c.options]; return c; }
   v.text = items.length ? "Yes?" : "..."; v.options = [...items, close];
   return v;
@@ -872,7 +912,7 @@ function qsGamePanel(n, o = {}) {
     speech.addEventListener("click", () => { clearInterval(timer); speech.textContent = full; });
     const opts = h("div", { class: "qs-gopts" }, view.options.map((op, j) => h("button", { class: "qs-gopt rh" + (op.t.startsWith("[Plot]") ? " plot" : ""), onclick: () => { view = qsTalk(P, n, op.k); draw(); o.onChange && o.onChange(view); } },
       h("b", {}, j < 9 ? j + 1 + "." : ""), qsFill(op.t))));
-    el.replaceChildren(h("div", { class: "qs-gtitle" }, h("span", {}, view.name.toUpperCase()), view.node ? h("small", {}, view.node) : view.line ? h("small", {}, view.line) : null),
+    el.replaceChildren(h("div", { class: "qs-gtitle" }, h("span", {}, view.name.toUpperCase()), (view.node || view.line) ? h("small", {}, [view.line, view.node].filter(Boolean).join(" - ")) : null),
       h("div", { class: "qs-gbody" }, qsScene(n, view.img), h("div", { class: "qs-gright" }, speech, opts)));
     if (o.onView) o.onView(view);
   };
@@ -882,14 +922,22 @@ function qsGamePanel(n, o = {}) {
   return el;
 }
 function qsScratch() { const p = QS.play; return { level: p.level, done: new Set(p.done), state: { ...p.state }, follow: p.follow, talked: {}, day: qsPDay(p), claims: { ...(p.claims || {}) }, variant: { ...(p.variant || {}) } }; }
-function qsPreviewQuest(q) {
-  const n = S.npcBy[q.Giver]; if (!n) { qsToast("Give the quest a giver first"); return; }
-  const P = { level: Math.max(q.MinLevel, q.Level), done: new Set(qsAncestors(q.id)), state: {}, follow: false, talked: {} };
+// Play a quest's conversation in the game's window. from: offer (default),
+// accept, progress, complete, or the Identifier of a node of its trees.
+function qsPreviewQuest(q, from) {
+  const stg = BQTalk.stage(from || "offer"), atTurnIn = stg && (stg.k === "progress" || stg.k === "complete");
+  const n = S.npcBy[atTurnIn ? q.TurnIn : q.Giver]; if (!n) { qsToast(`Give the quest ${atTurnIn ? "a hand-in NPC" : "a giver"} first`); return; }
+  const P = { level: Math.max(q.MinLevel, q.Level), done: new Set(qsAncestors(q.id)), state: {}, follow: false, talked: {}, day: QS.play && QS.play.day };
+  let start = "offer:" + q.id, note = `As a level ${P.level} player who has done everything before it.`;
+  if (!stg) start = "q:" + q.id + ":" + from;
+  else if (stg.k === "accept") start = "accept:" + q.id;
+  else if (stg.k === "progress") { P.state[q.id] = "active"; start = "progress:" + q.id; note = "Back at the quest with the objectives not done yet."; }
+  else if (stg.k === "complete") { P.state[q.id] = "ready"; start = "turnin:" + q.id; note = "Handing it in with every objective done."; }
   const close = () => { ov.remove(); document.removeEventListener("keydown", esc, true); };
   const esc = e => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
-  const panel = qsGamePanel(n, { P, start: "offer:" + q.id });
+  const panel = qsGamePanel(n, { P, start });
   const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } }, h("div", { class: "qs-gwrap" }, panel,
-    h("div", { class: "qs-row" }, h("span", { class: "hint" }, `As a level ${P.level} player who has done everything before it.`), h("button", { class: "qs-btn", onclick: close }, "Close"))));
+    h("div", { class: "qs-row" }, h("span", { class: "hint" }, note), h("button", { class: "qs-btn", onclick: () => panel.show(start) }, "Again"), h("button", { class: "qs-btn", id: "qs-prev-close", onclick: close }, "Close"))));
   document.body.append(ov); document.addEventListener("keydown", esc, true);
 }
 
@@ -1013,6 +1061,8 @@ function qsNpcSheet(body, id) {
   const preview = qsGamePanel(n, { P: qsScratch() });
   const notes = qsInline(qsNotesGet(id), v => qsNotesSet(id, v).then(qsRerender), { multi: true, cls: "rh qs-notes", ph: "Who are they? How do they talk? What do they want? (Your notes: not shown in game.)", tag: "div" });
   body.append(h("div", { class: "qs-sheetpage" },
+    h("div", { class: "qs-win greet-win", id: "qs-greeting" }, h("div", { class: "qs-wtitle" }, h("span", {}, "GREETING (SHOWN WHEN THEY HAVE NOTHING FOR YOU)"), h("span", { class: "qs-sp" }), h("small", {}, "shared by all their quests")),
+      h("div", { class: "qs-wbody" }, qsGreetingBox(n, {}), h("p", { class: "hint" }, `If ${n.Name} has a quest on offer, a hand-in or a talk objective, the window opens on that instead. Their quests' own lines are further down.`))),
     h("div", { class: "qs-col" },
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "CHARACTER"), h("span", { class: "qs-sp" }), h("a", { class: "qs-link", href: "#studio/cast" }, "cast"), h("a", { class: "qs-link", href: "#npc/" + id }, "form")),
         h("div", { class: "qs-wbody" },
@@ -1047,7 +1097,7 @@ function qsDialogue(n, preview) {
   const saveNode = (c, patch, label) => qsCommit("conversation", { id: c.id, Identifier: c.Identifier, Title: c.Title, ImgPath: c.ImgPath || "", Options: c.Options, ReputationChange: c.ReputationChange || "", ItemsGiven: c.ItemsGiven || "", QuestStart: c.QuestStart || 0, ...patch }, label).then(qsRerender);
   const nodeIds = () => (n.Conversation ? treeNodes(n.Conversation) : []).map(c => c.Identifier);
   const r = qsRoles(n);
-  box.append(h("div", { class: "qs-rule" }, "When you talk to ", h("b", {}, n.Name), ", quest business comes first: hand-ins, talk objectives, new quests, then quests in progress. Then their own chat below."));
+  box.append(h("div", { class: "qs-rule" }, "When you talk to ", h("b", {}, n.Name), " the window opens on quest business, not the greeting: a hand-in, then a talk objective, then a quest on offer. Their greeting (top of this page) only shows when there is none, and under \"Not right now.\". The rest of their chat is below."));
   if (r.all.length) box.append(h("div", { class: "qs-menu" }, r.takes.map(q => h("span", { class: "qs-opt" }, "[Complete] " + q.Title)), r.talks.map(q => h("span", { class: "qs-opt" }, `[${q.Title}] ...`)), r.gives.map(q => h("span", { class: "qs-opt" + (qsIsDaily(q) ? " daily" : "") }, qsIsDaily(q) ? ["[Daily] ", qsPh(q.Title)] : "[Quest] " + q.Title)), n.Faction === "Land Agent" ? h("span", { class: "qs-opt plot" }, "[Plot] Rent a plot") : null));
   const thread = h("div", { class: "qs-thread" });
   if (!n.Conversation || !S.convBy[n.Conversation]) {
@@ -1104,7 +1154,7 @@ function qsDialogue(n, preview) {
     box.append(h("h4", {}, "Their quest lines"));
     for (const q of r.all) {
       const det = h("details", { class: "qs-qthread" + (qsIsDaily(q) ? " daily" : "") }, h("summary", {}, h("span", { class: "qc-lv" }, q.Level), " ", qsIsDaily(q) ? [qsDailyBadge(), " ", qsPh(q.Title)] : q.Title, " ", h("small", {}, [q.Giver === n.id ? "gives" : "", q.TurnIn === n.id ? "takes in" : "", qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk" : ""].filter(Boolean).join(" - "))));
-      det.addEventListener("toggle", () => { if (det.open && det.children.length === 1) det.append(qsQuestScript(q, (patch, label) => qsPatchQuest(q.id, patch, label))); });
+      det.addEventListener("toggle", () => { if (det.open && det.children.length === 1) det.append(qsFlow(q, { npc: n, noGreeting: true })); });
       box.append(det);
     }
   }
