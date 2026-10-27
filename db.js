@@ -104,6 +104,25 @@ const BQ = (() => {
     "INSERT INTO quest_def_upgrade (id, Act, Zone, Title, Summary, Level, MinLevel, Giver, TurnIn, Prereqs, Offer, Accept, Progress, Complete, XP, Gold, Rewards, Steps, Sequential, Daily) SELECT e.id, e.Act, e.Zone, e.Title, e.Summary, e.Level, e.MinLevel, e.Giver, e.TurnIn, e.Prereqs, e.Offer, e.Accept, e.Progress, e.Complete, e.XP, e.Gold, e.Rewards, e.Steps, IFNULL((SELECT Sequential FROM quest_def q WHERE q.id = e.id), 0), IFNULL((SELECT Daily FROM quest_def q WHERE q.id = e.id), 0) FROM quest_def e, (SELECT 0 AS Sequential, 0 AS Daily) d;",
     "DROP TABLE quest_def;", "ALTER TABLE quest_def_upgrade RENAME TO quest_def;", DAILY_POOL_TABLE];
   const hasDaily = () => has("quest_def") && cols("quest_def").includes("Daily") && has("quest_daily_pool");
+  // Quest conversations: the API's content/migrations/2026-10-26-quest-dialogue.sql,
+  // statement for statement (quest_def.OfferTree, AcceptTree, ProgressTree,
+  // CompleteTree and Replies, plus the example branching offer on the
+  // example daily 9001). Needs Daily first, as the migration does. Safe to run
+  // twice. QUEST_DIALOGUE_UPGRADE (for Export SQL) is the rebuild alone.
+  const DIALOGUE_COLS = ["OfferTree", "AcceptTree", "ProgressTree", "CompleteTree", "Replies"];
+  const DIALOGUE_MIGRATION = [
+      "DROP TABLE IF EXISTS quest_def_upgrade;",
+      "CREATE TABLE quest_def_upgrade (\n  id INTEGER PRIMARY KEY,\n  Act INTEGER NOT NULL DEFAULT 1,\n  Zone TEXT NOT NULL DEFAULT '',\n  Title TEXT NOT NULL,\n  Summary TEXT NOT NULL DEFAULT '',\n  Level INTEGER NOT NULL DEFAULT 1,\n  MinLevel INTEGER NOT NULL DEFAULT 1,\n  Giver INTEGER NOT NULL,\n  TurnIn INTEGER NOT NULL,\n  Prereqs TEXT NOT NULL DEFAULT '[]',\n  Offer TEXT NOT NULL DEFAULT '',\n  Accept TEXT NOT NULL DEFAULT '',\n  Progress TEXT NOT NULL DEFAULT '',\n  Complete TEXT NOT NULL DEFAULT '',\n  XP INTEGER NOT NULL DEFAULT 0,\n  Gold INTEGER NOT NULL DEFAULT 0,\n  Rewards TEXT NOT NULL DEFAULT '[]',\n  Steps TEXT NOT NULL DEFAULT '[]',\n  Sequential INTEGER NOT NULL DEFAULT 0,\n  Daily INTEGER NOT NULL DEFAULT 0,\n  OfferTree TEXT NOT NULL DEFAULT '',\n  AcceptTree TEXT NOT NULL DEFAULT '',\n  ProgressTree TEXT NOT NULL DEFAULT '',\n  CompleteTree TEXT NOT NULL DEFAULT '',\n  Replies TEXT NOT NULL DEFAULT '{}'\n);",
+      "INSERT INTO quest_def_upgrade (id, Act, Zone, Title, Summary, Level, MinLevel, Giver, TurnIn, Prereqs,\n    Offer, Accept, Progress, Complete, XP, Gold, Rewards, Steps, Sequential, Daily,\n    OfferTree, AcceptTree, ProgressTree, CompleteTree, Replies)\n  SELECT e.id, e.Act, e.Zone, e.Title, e.Summary, e.Level, e.MinLevel, e.Giver, e.TurnIn, e.Prereqs,\n    e.Offer, e.Accept, e.Progress, e.Complete, e.XP, e.Gold, e.Rewards, e.Steps, e.Sequential, e.Daily,\n    IFNULL((SELECT OfferTree FROM quest_def q WHERE q.id = e.id), ''),\n    IFNULL((SELECT AcceptTree FROM quest_def q WHERE q.id = e.id), ''),\n    IFNULL((SELECT ProgressTree FROM quest_def q WHERE q.id = e.id), ''),\n    IFNULL((SELECT CompleteTree FROM quest_def q WHERE q.id = e.id), ''),\n    IFNULL((SELECT Replies FROM quest_def q WHERE q.id = e.id), '{}')\n  FROM quest_def e,\n    (SELECT '' AS OfferTree, '' AS AcceptTree, '' AS ProgressTree, '' AS CompleteTree, '{}' AS Replies) d;",
+      "DROP TABLE quest_def;",
+      "ALTER TABLE quest_def_upgrade RENAME TO quest_def;",
+      "INSERT INTO conversation (id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart)\n  SELECT 9001, 'q9001-offer', 'Daily drill, recruit. Today it''s {mob}. {count} of them. Same time tomorrow, something else.', '',\n    '[[''Why {mob}?'',''q9001-why''],[''What do I get out of it?'',''q9001-pay''],[''Fine. {count} {mob}, coming up.'',''@accept''],[''Not today, Sergeant.'',''@decline'']]', '0', '', NULL\n  WHERE NOT EXISTS (SELECT 1 FROM conversation WHERE id = 9001 OR Identifier = 'q9001-offer');",
+      "INSERT INTO conversation (id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart)\n  SELECT 9002, 'q9001-why', 'Because I said so. And because they keep wandering into my yard and frightening the targets.', '',\n    '[[''Fair enough. Sign me up.'',''@accept''],[''Back to the drill.'',''@offer'']]', '0', '', NULL\n  WHERE NOT EXISTS (SELECT 1 FROM conversation WHERE id = 9002 OR Identifier = 'q9001-why');",
+      "INSERT INTO conversation (id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart)\n  SELECT 9003, 'q9001-pay', 'Coin. Experience. My undying respect. Mostly the coin.', '',\n    '[[''Deal. Where are they?'',''@accept''],[''Let me think about it.'',''@decline'']]', '0', '', NULL\n  WHERE NOT EXISTS (SELECT 1 FROM conversation WHERE id = 9003 OR Identifier = 'q9001-pay');",
+      "UPDATE quest_def SET OfferTree = 'q9001-offer', Replies = '{\"OnIt\":\"Yes, Sergeant!\"}'\n  WHERE id = 9001 AND OfferTree = '' AND Replies = '{}';"
+  ];
+  const QUEST_DIALOGUE_UPGRADE = [...QUEST_DAILY_UPGRADE, ...DIALOGUE_MIGRATION.slice(0, 5)];
+  const hasDialogue = () => has("quest_def") && DIALOGUE_COLS.every(c => cols("quest_def").includes(c));
   const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
   const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
 
@@ -114,7 +133,7 @@ const BQ = (() => {
     await init();
     if (db) db.close();
     db = new SQL.Database(new Uint8Array(buf));
-    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.questsUpgraded = false; st.dailyUpgraded = false; st.touched = null; st.version++;
+    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.questsUpgraded = false; st.dailyUpgraded = false; st.dialogueUpgraded = false; st.touched = null; st.version++;
     st.warnings = checkSchema();
     const ec = cols("enemies");
     if (!ec.includes("KnockbackResist") || !ec.includes("HitEffect")) {
@@ -188,6 +207,11 @@ const BQ = (() => {
       if (!steps.length) throw new Error("a quest needs at least one step");
       steps.forEach((s, i) => { if (!STEP_TYPES.includes(s.Type)) throw new Error(`step ${i + 1}: unknown type "${s.Type}"`); });
       need("Title", "title is required");
+      if (String(row.Replies ?? "").trim()) {
+        let r; try { r = JSON.parse(row.Replies); } catch (e) { throw new Error("Replies is not valid JSON: " + e.message); }
+        if (!r || typeof r !== "object" || Array.isArray(r)) throw new Error("Replies must be a JSON object");
+        for (const k of Object.keys(r)) if (!["Accept", "Decline", "OnIt", "Back", "AnythingElse"].includes(k)) throw new Error(`Replies has no line called ${k}`);
+      }
     } else if (table === "conversation") {
       need("Identifier", "identifier is required");
       const o = String(row.Options || "").trim();
@@ -288,7 +312,7 @@ const BQ = (() => {
       return {
         quests, hasQuestline: has("quest_def"),
         npcNotes: has("npc_notes") ? q("SELECT * FROM npc_notes") : [],
-        hasDaily: hasDaily(),
+        hasDaily: hasDaily(), hasDialogue: hasDialogue(),
         dailyPools: has("quest_daily_pool") ? q("SELECT * FROM quest_daily_pool ORDER BY QuestID, Kind, Slot, id") : [],
         plots: has("plot") ? q("SELECT * FROM plot ORDER BY Name") : [],
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
@@ -332,6 +356,13 @@ const BQ = (() => {
         // keeps the quest's current value instead of resetting it to 0.
         if (!("Daily" in row)) { const cur = +row.id > 0 ? q("SELECT IFNULL(Daily, 0) AS d FROM quest_def WHERE id = ?", [+row.id])[0] : null; row.Daily = cur ? cur.d : 0; }
         row.Daily = +row.Daily ? 1 : 0;
+      }
+      if (table === "quest_def" && hasDialogue()) {
+        // As the API's editor: a save without the dialogue columns (the Quests
+        // tab form, an old client) keeps what the quest has.
+        const cur = +row.id > 0 ? q("SELECT * FROM quest_def WHERE id = ?", [+row.id])[0] : null;
+        for (const c of DIALOGUE_COLS) if (!(c in row)) row[c] = cur && cur[c] != null ? cur[c] : c === "Replies" ? "{}" : "";
+        for (const c of DIALOGUE_COLS) row[c] = String(row[c] ?? (c === "Replies" ? "{}" : ""));
       }
       const allowed = cols(table);
       for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
@@ -428,8 +459,10 @@ const BQ = (() => {
         schema += "-- enemies.KnockbackResist, HitEffect, SpawnsDay and SpawnsNight (as content/migrations/2026-10-20-boss-knockback.sql, 2026-10-22-hit-effects.sql and 2026-10-25-day-night-spawns.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
       if (st.changes.some(c => /\bworld_flip\b/.test(c))) schema += "-- world_flip table (as content/migrations/2026-10-25-world-flip.sql)\n" + WORLD_FLIP_TABLE + "\n";
       if (st.changes.some(c => /\barea(_tiles|s)\b/.test(c))) schema += "-- areas tables (as content/migrations/2026-10-24-areas.sql)\n" + AREA_TABLES.join("\n") + "\n";
-      const daily = hasDaily();
-      if (daily && (st.dailyUpgraded || st.questsUpgraded || st.changes.some(c => /INTO quest_def\b|\bquest_daily_pool\b/.test(c))))
+      const daily = hasDaily(), dialogue = hasDialogue();
+      if (dialogue && (st.dialogueUpgraded || st.dailyUpgraded || st.questsUpgraded || st.changes.some(c => /INTO quest_def\b|\bquest_daily_pool\b/.test(c))))
+        schema += "-- quest_def.Sequential, Daily, OfferTree, AcceptTree, ProgressTree, CompleteTree and Replies, and the quest_daily_pool table (as content/migrations/2026-10-24-quest-sequential.sql, 2026-10-26-daily-quests.sql and 2026-10-26-quest-dialogue.sql; keeps every column's values)\n" + QUEST_DIALOGUE_UPGRADE.join("\n") + "\n";
+      else if (daily && (st.dailyUpgraded || st.questsUpgraded || st.changes.some(c => /INTO quest_def\b|\bquest_daily_pool\b/.test(c))))
         schema += "-- quest_def.Sequential and Daily, and the quest_daily_pool table (as content/migrations/2026-10-24-quest-sequential.sql and 2026-10-26-daily-quests.sql; keeps both columns' values)\n" + QUEST_DAILY_UPGRADE.join("\n") + "\n";
       else if (st.questsUpgraded || st.changes.some(c => /INTO quest_def\b/.test(c)))
         schema += "-- quest_def.Sequential (as content/migrations/2026-10-24-quest-sequential.sql)\n" + QUEST_SEQ_UPGRADE.join("\n") + "\n";
@@ -442,6 +475,15 @@ const BQ = (() => {
       if (!cols("quest_def").includes("Sequential")) apply(QUEST_SEQ_UPGRADE, "quest_def.Sequential (as content/migrations/2026-10-24-quest-sequential.sql)");
       apply(DAILY_MIGRATION, "daily quests (as content/migrations/2026-10-26-daily-quests.sql)");
       st.dailyUpgraded = true;
+      return { ok: true };
+    },
+    // One tap: the API's quest conversations migration (which needs daily
+    // quests first, as the API's migrations are ordered).
+    dialogueEnable() {
+      if (!has("quest_def")) throw new Error("This database has no quest_def table. Apply the questline migration first.");
+      if (!hasDaily()) api.dailyEnable();
+      if (!hasDialogue()) apply(DIALOGUE_MIGRATION, "quest conversations (as content/migrations/2026-10-26-quest-dialogue.sql)");
+      st.dialogueUpgraded = true;
       return { ok: true };
     },
     // Several rows in one change (one undo step in Quest Studio).

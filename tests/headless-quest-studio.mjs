@@ -32,9 +32,9 @@ await p.screenshot({ path: OUT + "02-journey-quest-sheet-1312.png" });
 const fixT = await p.$eval(".qs-mini.fix", e => e.textContent).catch(() => "");
 console.log("fix suggestion:", fixT);
 // inline edit the offer
-await p.click('#qs-drawer .qs-bub[data-line="Offer"] .qs-ed');
-await p.fill('#qs-drawer .qs-bub[data-line="Offer"] textarea', "Eight non-union bandits. Persuade them. Gently, if you can.");
-await p.press('#qs-drawer .qs-bub[data-line="Offer"] textarea', "Enter"); await wait(500);
+await p.click('#qs-drawer .qs-stage[data-stage="offer"] [data-line="Offer"] .qs-ed');
+await p.fill('#qs-drawer .qs-stage[data-stage="offer"] [data-line="Offer"] textarea', "Eight non-union bandits. Persuade them. Gently, if you can.");
+await p.press('#qs-drawer .qs-stage[data-stage="offer"] [data-line="Offer"] textarea', "Enter"); await wait(500);
 ok((await p.evaluate(() => qById(1312).Offer)) === "Eight non-union bandits. Persuade them. Gently, if you can.", "offer edited inline is in quest_def");
 await p.click("#qs-undo"); await wait(500);
 ok((await p.evaluate(() => qById(1312).Offer)) !== "Eight non-union bandits. Persuade them. Gently, if you can.", "undo restores the offer");
