@@ -1462,7 +1462,7 @@ function qsPoolEditor(q) {
     const v = today.Vals[k];
     const fromMob = kind === "count" && !rows.length && v && v.fromRow;
     return h("div", { class: "qs-slot", "data-key": k },
-      h("div", { class: "qs-slot-h" }, pix(qsKindIcon[kind], "mi"), h("span", { class: "qs-var big" }, "{" + k + "}"), h("b", {}, qsKindName[kind] + (slot > 1 ? ` (list ${slot})` : "")), h("span", { class: "qs-sp" }),
+      h("div", { class: "qs-slot-h" }, pix(qsKindIcon[kind], "mi"), h("span", { class: "qs-var lg" }, "{" + k + "}"), h("b", {}, qsKindName[kind] + (slot > 1 ? ` (list ${slot})` : "")), h("span", { class: "qs-sp" }),
         v ? h("small", { class: "qs-todayv" }, "today: ", h("b", {}, v.Text)) : null),
       used.has(k) ? null : h("div", { class: "hint warn" }, `Nothing uses {${k}} yet: tap a line to edit it and tap the {${k}} chip.`),
       rows.length ? h("div", { class: "qs-cands" }, rows.map(r => qsPoolRow(q, r, total, k))) : h("div", { class: "hint" }, fromMob ? `Rolled from the picked ${BQDaily.key("mob", slot)}'s own range (or its item's). Add a range to set it here instead.` : "Empty: add something to pick from."),

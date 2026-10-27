@@ -300,7 +300,7 @@ input.qs-edit[type=number]{width:80px}
 .qs,.qs-modal{--daily:#59adff}
 .qs-dbadge{width:16px;height:16px}
 .qs-var{display:inline-block;color:#0b1a2b;background:var(--daily);padding:0 4px;margin:0 1px;font:15px/18px BMmini,monospace;white-space:nowrap}
-.qs-var.big{font-size:16px;padding:2px 6px}
+.qs-var.big,.qs-var.lg{font-size:16px;padding:2px 6px;width:auto;height:auto}
 .qs-card.daily{border-color:var(--daily)}
 .qs-card.daily::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(89,173,255,.5)}
 .qs-card .qs-var{font-size:13px;line-height:15px;padding:0 2px}
@@ -437,4 +437,9 @@ select.qs-act{cursor:pointer}
   .qs-sc-add .qs-btn{flex:1 1 40%;justify-content:center;min-height:44px}
   .qs-branches{margin-left:6px;padding-left:6px}
   .qs-sc-body .bp{width:44px;height:44px}
+}
+/* mobile: the timezone picker and the Enable buttons are touch-sized and wrap */
+@media (max-width: 760px){
+  .qs-rollbox .qs-sel{min-height:44px;font-size:16px}
+  .qs-enable .qs-btn,.qs-dailybox .qs-btn{white-space:normal;text-align:left;height:auto;min-height:44px}
 }
