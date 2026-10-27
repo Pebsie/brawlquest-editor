@@ -452,3 +452,34 @@ select.qs-act{cursor:pointer}
 .qs-spot .qs-x{margin-left:-2px;min-height:36px}
 .qs-spot.add{border-style:dashed}
 @media (max-width: 760px){ .qs-spot>button:first-child,.qs-spot.add,.qs-spot .qs-x{min-height:44px} }
+/* conversation first: the NPC's chat with its quests as branches */
+.qs-drawer.wide{width:min(980px,72%)}
+.qs-convo{display:flex;flex-direction:column;gap:10px;min-width:0}
+.qs-qbranch{background:rgba(0,0,0,.35);border:2px solid #000;border-left:6px solid var(--gold);padding:4px 8px;min-width:0}
+.qs-qbranch.daily{border-left-color:var(--daily,#6fc3ff)}
+.qs-qbranch>summary{cursor:pointer;font-size:19px;list-style:none;display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;padding:4px 0;min-height:36px}
+.qs-qbranch>summary::-webkit-details-marker{display:none}
+.qs-qbranch>summary::before{content:"+";font:16px BMmini,monospace;color:var(--gold);width:14px}
+.qs-qbranch[open]>summary::before{content:"-"}
+.qs-qbranch>summary small{color:var(--dim);flex-basis:100%;padding-left:18px}
+.qs-qtag{font:12px/16px BMmini,monospace;color:#000;background:var(--gold);padding:0 4px}
+.qs-qbody{display:flex;flex-direction:column;gap:8px;padding:6px 0 4px}
+.qs-act.act-quest{border-color:var(--gold);color:var(--gold)}
+.qs-op.k-quest .qs-op-n{color:var(--gold)}
+.qs-op.way{outline:2px solid var(--gold);outline-offset:-2px}
+.qs-sc.path .qs-op:not(.way){opacity:.6}
+.qs-path{display:flex;flex-direction:column;gap:4px}
+.qs-pathstep{font:12px BMmini,monospace;color:var(--dim);padding-left:16px}
+.qs-own{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.qs-own h4{margin:6px 0 0}
+.qs-tochat{align-self:flex-start;margin-top:2px}
+.qs-addquest{border-color:var(--gold);color:var(--gold)}
+.qs-linkq{min-height:32px}
+@media (max-width: 760px){
+  .qs-qbranch{padding:4px 4px;border-left-width:4px}
+  .qs-qbranch>summary{min-height:44px}
+  .qs-sc-add>*{min-height:44px}
+  .qs-act{max-width:100%}
+}
+.qs-own h4{display:block}
+@media (max-width: 760px){ .qs-widen{display:none} }

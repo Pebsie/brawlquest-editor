@@ -207,6 +207,7 @@ const BQCheck = (() => {
       const re = /\[\s*['"](.*?)['"]\s*,\s*['"]([^'"]*)['"]\s*\]/g;
       let m;
       while ((m = re.exec(String(r.Options || "")))) if (m[2] !== "1" && !m[2].startsWith("@") && !nodeIds.has(m[2])) add("error", "conversation", w, `answer "${m[1]}" leads to node "${m[2]}", which doesn't exist`, route);
+        else if (/^@quest:/i.test(m[2]) && questIds && !questIds.has(+m[2].slice(7))) add("warning", "conversation", w, `answer "${m[1]}" brings up quest ${m[2].slice(7)}, which doesn't exist: the game hides it`, route);
       if (String(r.ItemsGiven || "").trim()) {
         const g = goList(r.ItemsGiven, T.invItem, "ItemsGiven");
         g.errs.forEach(e => add("error", "conversation", w, e + " (the API gives nothing)", route));

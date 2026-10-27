@@ -116,10 +116,9 @@ const FLOW = "#qs-drawer .qs-flow";
 { // ---- the greeting: top of the NPC sheet, quest-first playtest
   const m = await open(1400, 1000, NEW, "#studio/npc/15");
   await m.waitForSelector("#qs-greeting");
-  ok(/GREETING \(SHOWN WHEN THEY HAVE NOTHING FOR YOU\)/.test(await m.$eval("#qs-greeting .qs-wtitle", e => e.textContent)), "NPC sheet: greeting window at the top, labelled");
-  const first = await m.$eval(".qs-sheetpage", e => e.firstElementChild.id);
-  ok(first === "qs-greeting", "the greeting is the first thing on the sheet");
-  ok(await m.$eval("#qs-greeting", e => /Hellooooo again/.test(e.textContent) && /shared/i.test(e.textContent)), "shows their greeting and flags it as shared");
+  ok(/CONVERSATION/.test(await m.$eval("#qs-greeting .qs-wtitle", e => e.textContent)), "NPC sheet: one CONVERSATION window (greeting, chat, quests)");
+  ok(await m.$eval("#qs-greeting .qs-convo", e => e.firstElementChild.nextElementSibling.matches(".qs-sc.greeting, .qs-nodewrap")), "the greeting is the first line of the conversation");
+  ok(await m.$eval("#qs-greeting", e => /Hellooooo again/.test(e.textContent)), "shows their greeting");
   await edit(m, "#qs-greeting .qs-sc-say .qs-ed", "Nothing for you, mate.");
   ok((await node(m, "ql-dancing-man")).Title === "Nothing for you, mate.", "the greeting edits in place");
   await m.evaluate(() => document.querySelectorAll("*").forEach(e => { if (e.scrollTop) e.scrollTop = 0; })); await m.waitForTimeout(300);
@@ -133,9 +132,9 @@ const FLOW = "#qs-drawer .qs-flow";
   ok(/Nothing for you, mate\./.test(await m.$eval(".qs-win.sticky .qs-speech", e => e.textContent)), "in game: 'Not right now.' goes to the menu and the greeting");
   ok(await m.$$eval(".qs-win.sticky .qs-gopt", e => e.some(x => /\[Quest\] Rise and Shine/.test(x.textContent))), "...with the quest as a menu row (no loop back into the offer)");
   // the quest's sequence in the NPC's quest lines
-  await m.click(".qs-dlg details.qs-qthread >> nth=0 >> summary"); await m.waitForTimeout(600);
-  ok(await m.$(".qs-dlg details[open] .qs-flow .qs-stage") !== null, "the NPC sheet lists each quest's sequence too");
-  ok(await m.$$eval(".qs-dlg details[open] .qs-flow .qs-greet", e => e.length) === 0, "...without repeating the greeting (it is at the top)");
+  await m.click("#qs-greeting details.qs-qbranch >> nth=0 >> summary"); await m.waitForTimeout(600);
+  ok(await m.$("#qs-greeting details[open] .qs-flow .qs-stage") !== null, "the NPC's conversation unfolds each quest's sequence in place");
+  ok(await m.$$eval("#qs-greeting details[open] .qs-flow .qs-greet", e => e.length) === 0, "...without repeating the greeting (it is at the top)");
   // playtest
   await m.evaluate(() => { location.hash = "#studio/play"; }); await m.waitForTimeout(800);
   await m.evaluate(() => { QS.playNpc = 15; qsRerender(); }); await m.waitForTimeout(500);
