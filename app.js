@@ -665,7 +665,10 @@ function worldGroups(layer) {
 const enemyGroups = () => [{ id: "enemies", label: "Enemies", entries: S.c.enemies.map(e => ({ value: e.Name, img: e.Image || "assets/error.png", label: e.Name, note: `HP ${e.HP} · XP ${e.XP}` })) }];
 const npcSpriteGroups = () => {
   const used = [...new Set(S.c.npcs.map(n => n.ImgPath).filter(Boolean))].sort().map(v => ({ value: v, note: S.c.npcs.filter(n => n.ImgPath === v).length + " NPCs" }));
-  return [{ id: "npc", label: "NPC art", entries: folderEntries("assets/npc/") }, { id: "used", label: "Used by NPCs", entries: used },
+  // a chip per NPC art folder (Townsfolk, Mages, Warriors, ...)
+  const folders = [...new Set(assetPaths().filter(p => p.startsWith("assets/npc/")).map(p => p.slice(11).split("/")).filter(a => a.length > 1).map(a => a[0]))].sort()
+    .map(f => ({ id: "npc:" + f, label: f, entries: folderEntries(`assets/npc/${f}/`) }));
+  return [{ id: "npc", label: "NPC art", entries: folderEntries("assets/npc/") }, { id: "used", label: "Used by NPCs", entries: used }, ...folders,
     { id: "monsters", label: "Monsters", entries: folderEntries("assets/monsters/") }, { id: "player", label: "Player", entries: folderEntries("assets/player/base/", "assets/player/gen/") }];
 };
 const itemSpriteGroups = () => [{ id: "items", label: "Items", entries: folderEntries("assets/items/") }, { id: "gear", label: "Gear", entries: folderEntries("assets/player/gear/") },
