@@ -10,6 +10,8 @@
 //   add [Plot] rows. A quest is available when not started, every prereq is
 //   done and the player's level >= MinLevel. Objectives all count at once
 //   unless Sequential ("in order") is ticked.
+// Daily quests (quest_def.Daily, quest_daily_pool; the API's dailyquests.go)
+// are rolled with BQDaily (daily.js), the server's own roll.
 const QS = {
   view: "journey", arg: null, sel: null, undo: [], redo: [], cam: null, layout: "story", filter: "",
   play: { level: 1, done: new Set(), state: {}, follow: true, log: [] }, preview: null, notes: null,
@@ -27,15 +29,16 @@ const qRw = q => parseJSON(q.Rewards, []);
 const enemyByName = () => (QS._eb && QS._eb.v === S.c ? QS._eb.m : (QS._eb = { v: S.c, m: Object.fromEntries(S.c.enemies.map(e => [e.Name.toLowerCase(), e])) }).m);
 const itemByName = () => (QS._ib && QS._ib.v === S.c ? QS._ib.m : (QS._ib = { v: S.c, m: Object.fromEntries(S.c.items.map(e => [e.Name.toLowerCase(), e])) }).m);
 const stepNames = s => [s.Target, ...stepExtras(s)].map(x => String(x || "").trim()).filter(Boolean);
-function stepIcon(s) {
-  const n = stepNames(s)[0] || "";
+function stepIcon(s, q) {
+  let n = stepNames(s)[0] || "";
+  if (q && qsIsDaily(q) && BQDaily.placeholder(n)) { const v = qsRoll(q, qsToday()).Vals[BQDaily.placeholder(n)]; n = (v && v.Names && v.Names[0]) || ""; }
   if ((s.Type === "kill" || s.Type === "boss") && enemyByName()[n.toLowerCase()]) return enemyByName()[n.toLowerCase()].Image;
   if (["collect", "craft", "equip"].includes(s.Type) && itemByName()[n.toLowerCase()]) return itemByName()[n.toLowerCase()].ImgPath;
   if (s.Type === "talk" && S.npcBy[s.NPC]) return S.npcBy[s.NPC].ImgPath;
   return QS_ICON[s.Type] || "assets/error.png";
 }
 function stepLabel(s) {
-  const names = stepNames(s), c = +s.Count || 1;
+  const names = stepNames(s), sc = BQDaily.stepCount(s.Count), c = sc.v || sc.n || 1;
   if (s.Type === "kill") return `Kill ${c} ${names.join(" or ") || "?"}`;
   if (s.Type === "boss") return `Defeat ${names.join(" or ") || "?"}`;
   if (s.Type === "collect") return `Collect ${c} ${names.join(" or ") || "?"}`;
@@ -104,18 +107,20 @@ function qsAnalyse() {
     } else if (q.Level > 1 && !ps.length) add(q.id, "info", "root", "Starts a new line: no prerequisites");
     if (q.MinLevel > q.Level) add(q.id, "warn", "level", `Min level ${q.MinLevel} is above the quest level ${q.Level}`);
     if (!(+q.XP) && !(+q.Gold) && !qRw(q).length) add(q.id, "warn", "reward", "No reward: no XP, gold or items");
-    const steps = qSteps(q);
+    const steps = qSteps(q), daily = qsIsDaily(q), isPh = n => daily && BQDaily.placeholder(n);
     if (!steps.length) add(q.id, "err", "steps", "No objectives");
     steps.forEach((s, i) => {
-      const names = stepNames(s);
-      if ((s.Type === "kill" || s.Type === "boss")) { const bad = names.filter(n => !enemyByName()[n.toLowerCase()]); if (!names.length || bad.length) add(q.id, "err", "target", `Objective ${i + 1}: no enemy called ${bad.join(", ") || "(blank)"}`); }
-      if (s.Type === "collect" || s.Type === "craft") { const bad = names.filter(n => !itemByName()[n.toLowerCase()]); if (!names.length || bad.length) add(q.id, "warn", "target", `Objective ${i + 1}: no item called ${bad.join(", ") || "(blank)"}`); }
+      // a daily's "{mob}" / "{item}" target is filled from its pool (checked below)
+      const all = stepNames(s), names = all.filter(n => !isPh(n)), ph = all.length > names.length;
+      if ((s.Type === "kill" || s.Type === "boss")) { const bad = names.filter(n => !enemyByName()[n.toLowerCase()]); if ((!names.length && !ph) || bad.length) add(q.id, "err", "target", `Objective ${i + 1}: no enemy called ${bad.join(", ") || "(blank)"}`); }
+      if (s.Type === "collect" || s.Type === "craft") { const bad = names.filter(n => !itemByName()[n.toLowerCase()]); if ((!names.length && !ph) || bad.length) add(q.id, "warn", "target", `Objective ${i + 1}: no item called ${bad.join(", ") || "(blank)"}`); }
       if (s.Type === "talk" && !S.npcBy[s.NPC]) add(q.id, "err", "target", `Objective ${i + 1}: talk to a missing NPC`);
       if (s.Type === "talk" && !String(s.Line || "").trim()) add(q.id, "warn", "line", `Objective ${i + 1}: the NPC has nothing to say`);
       if (!String(s.Text || "").trim()) add(q.id, "warn", "text", `Objective ${i + 1} has no tracker text`);
     });
     if (steps.length > 1 && !+q.Sequential && steps.slice(1).some(s => s.Type === "talk" || s.Type === "reach")) add(q.id, "info", "order", "Objectives all count at once. Tick \"in order\" if it's a story sequence");
     for (const k of ["Offer", "Complete"]) if (!String(q[k] || "").trim()) add(q.id, "warn", "line", `No ${k.toLowerCase()} line`);
+    if (daily) for (const x of BQDaily.check(q, qsPool(q.id), qsNameSets())) add(q.id, x.sev, "daily", "Daily: " + x.msg);
   }
   // questlines: connected groups of prerequisite links
   const line = new Map(); let nLines = 0;
@@ -146,7 +151,7 @@ const worstSev = list => (list || []).reduce((a, x) => (sevRank[x.sev] > sevRank
 // Every studio edit goes through commit(): stored in the working db at once
 // (History autosaves it), with an undo record.
 async function qsCommit(table, row, label) {
-  const list = { quest_def: S.c.quests, npc: S.c.npcs, conversation: S.c.conversations }[table];
+  const list = qsList(table);
   const before = row.id ? list.find(r => r.id === row.id) : null;
   const id = await save(table, row);
   QS.undo.push({ table, before: before ? { ...before } : null, after: { ...row, id }, label });
@@ -156,10 +161,31 @@ async function qsCommit(table, row, label) {
   qsBar();
   return id;
 }
-async function qsApplyRec(rec, dir) {
+const qsList = table => ({ quest_def: S.c.quests, npc: S.c.npcs, conversation: S.c.conversations, quest_daily_pool: S.c.dailyPools || [] }[table]);
+// Several saves and deletes as one change and one undo step:
+// [{ table, row } | { table, id, delete: true }].
+async function qsCommitMany(list, label) {
+  const recs = list.map(it => { const id = it.delete ? it.id : it.row.id; const b = id ? qsList(it.table).find(r => r.id === id) : null; return { table: it.table, before: b ? { ...b } : null }; });
+  let out;
+  try { out = await api("saveMany", list.map(it => (it.delete ? { table: it.table, id: it.id, delete: true } : { table: it.table, row: { ...it.row } }))); }
+  catch (e) { await loadAll(); qsToast(e.message); status(e.message, true); throw e; }
+  await loadAll();
+  recs.forEach((r, i) => { r.after = list[i].delete ? null : { ...list[i].row, id: out.ids[i] }; });
+  QS.undo.push({ multi: recs, label });
+  if (QS.undo.length > 200) QS.undo.shift();
+  QS.redo = [];
+  qsToast(`${label}. Saved in the working db (autosaved to History).`);
+  qsBar();
+  return out.ids;
+}
+async function qsApplyOne(rec, dir) {
   const target = dir === "undo" ? rec.before : rec.after;
   if (target) await api("save", { table: rec.table, row: { ...target } });
-  else await api("delete", { table: rec.table, id: rec.after.id });
+  else await api("delete", { table: rec.table, id: (dir === "undo" ? rec.after : rec.before).id });
+}
+async function qsApplyRec(rec, dir) {
+  const list = rec.multi ? (dir === "undo" ? [...rec.multi].reverse() : rec.multi) : [rec];
+  for (const r of list) await qsApplyOne(r, dir);
   await loadAll();
 }
 async function qsUndo() {
@@ -325,22 +351,25 @@ function qsCard(q, an, p) {
   const giver = S.npcBy[q.Giver], turn = S.npcBy[q.TurnIn];
   const ps = QS.play.overlay ? qsPlayStatus(q) : "";
   const hit = QS.filter && !(`${q.Title} ${q.Zone} ${q.id} ${npcName(q.Giver)} ${npcName(q.TurnIn)}`.toLowerCase().includes(QS.filter.toLowerCase()));
-  const card = h("div", { class: `qs-card ${sev ? "sev-" + sev : ""} ${QS.sel === q.id ? "sel" : ""} ${ps ? "ps-" + ps : ""} ${hit ? "dim" : ""}`, "data-id": q.id,
+  const daily = qsIsDaily(q);
+  const card = h("div", { class: `qs-card ${sev ? "sev-" + sev : ""} ${QS.sel === q.id ? "sel" : ""} ${ps ? "ps-" + ps : ""} ${hit ? "dim" : ""} ${daily ? "daily" : ""}`, "data-id": q.id,
     style: `left:${p.x}px;top:${p.y}px;--lc:${p.colour}`, tabindex: 0,
     onclick: () => qsSelect(q.id), onkeydown: e => { if (e.key === "Enter") qsSelect(q.id); } },
-    h("div", { class: "qc-top" }, h("span", { class: "qc-lv", title: `Level ${q.Level}, min level ${q.MinLevel}` }, q.Level), h("span", { class: "qc-t", title: q.Title }, q.Title),
+    h("div", { class: "qc-top" }, h("span", { class: "qc-lv", title: `Level ${q.Level}, min level ${q.MinLevel}` }, q.Level),
+      daily ? qsDailyBadge() : null,
+      h("span", { class: "qc-t", title: daily ? `Daily: ${q.Title}\nToday: ${qsDayDef(q).Title}` : q.Title }, daily ? qsPh(q.Title) : q.Title),
       iss.length ? h("span", { class: "qc-iss " + sev, title: iss.map(x => x.msg).join("\n") }, sev === "info" ? "i" : "!") : null),
     h("div", { class: "qc-mid" },
       h("span", { class: "qc-who", title: `Given by ${giver ? giver.Name : "nobody"}` }, giver ? pix(giver.ImgPath, "pt") : h("span", { class: "pt none" }, "?")),
       h("span", { class: "qc-arrow" }, ">"),
       h("span", { class: "qc-steps " + (seq ? "seq" : "par"), title: (seq ? "In order:\n" : "All at once:\n") + steps.map(stepLabel).join("\n") },
-        steps.slice(0, 4).map((s, i) => [i && seq ? h("i", { class: "qc-then" }) : null, pix(stepIcon(s), "si " + s.Type)]), steps.length > 4 ? h("b", {}, "+" + (steps.length - 4)) : null),
+        steps.slice(0, 4).map((s, i) => [i && seq ? h("i", { class: "qc-then" }) : null, pix(stepIcon(s, q), "si " + s.Type)]), steps.length > 4 ? h("b", {}, "+" + (steps.length - 4)) : null),
       h("span", { class: "qc-arrow" }, ">"),
       h("span", { class: "qc-who", title: `Hand in to ${turn ? turn.Name : "nobody"}` }, turn ? pix(turn.ImgPath, "pt") : h("span", { class: "pt none" }, "?"))),
     h("div", { class: "qc-bot" }, h("span", { class: "qc-zone" }, q.Zone || "no zone"),
       h("span", { class: "qc-rw" }, +q.XP ? [pix("assets/ui/studio/xp.png", "mi"), q.XP] : null, " ", +q.Gold ? [pix("assets/ui/studio/gold.png", "mi"), q.Gold] : null,
         qRw(q).slice(0, 2).map(r => S.itemBy[r.ItemID] ? pix(S.itemBy[r.ItemID].ImgPath, "mi", S.itemBy[r.ItemID].Name) : null))),
-    ps === "done" ? h("span", { class: "qc-stamp" }, pix("assets/ui/studio/complete.png", "mi")) : null,
+    ps === "done" ? h("span", { class: "qc-stamp" }, pix("assets/ui/studio/complete.png", "mi")) : ps === "claimed" ? h("span", { class: "qc-stamp", title: "Claimed today: back after the reset" }, pix("assets/ui/studio/daily-complete.png", "mi")) : null,
     h("button", { class: "qs-port", title: "Drag onto another quest: it then needs this one first. Click: add a quest after this one.", "data-id": q.id }, "+"));
   return card;
 }
@@ -399,6 +428,7 @@ function qsJourney(body) {
     h("button", { class: "qs-btn" + (QS.showProbs ? " on" : ""), onclick: () => { QS.showProbs = !QS.showProbs; qsRerender(); } }, `Problems (${probList.count})`));
   const legend = h("div", { class: "qs-legend" },
     h("span", {}, h("i", { class: "lg err" }), "broken"), h("span", {}, h("i", { class: "lg warn" }), "check"), h("span", {}, h("i", { class: "lg info" }), "note"),
+    S.c.quests.some(qsIsDaily) ? h("span", {}, qsDailyBadge(), " daily") : null,
     h("span", {}, pix("assets/ui/studio/target.png", "mi"), "→", pix("assets/ui/studio/loot.png", "mi"), " in order"), h("span", {}, pix("assets/ui/studio/target.png", "mi"), pix("assets/ui/studio/loot.png", "mi"), " all at once"),
     h("span", { class: "hint" }, "Drag to pan, pinch or Ctrl+scroll to zoom. Drag a card's + onto another quest to link them."));
   const wrap = h("div", { class: "qs-jwrap" }, tools, view, legend, QS.showProbs ? probList.el : null, h("div", { class: "qs-drawer", id: "qs-drawer" }));
@@ -523,9 +553,20 @@ function qsInline(value, onSave, o = {}) {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
       else if (e.key === "Enter" && !(o.multi && e.shiftKey)) { e.preventDefault(); finish(true); }
     });
-    el.addEventListener("blur", () => finish(true));
+    el.addEventListener("blur", e => { if (e.relatedTarget && span.contains(e.relatedTarget)) return; finish(true); });
     el.addEventListener("input", grow);
-    span.replaceChildren(el); el.focus(); el.select && !o.multi && el.select(); grow();
+    // A daily's placeholders: tap one to write it where the cursor is.
+    const keys = typeof o.chips === "function" ? o.chips() : o.chips;
+    let bar = null;
+    if (keys && keys.length) {
+      const put = k => { const a = el.selectionStart ?? el.value.length, b = el.selectionEnd ?? a; el.setRangeText("{" + k + "}", a, b, "end"); el.focus(); grow(); };
+      let viaPointer = 0;
+      bar = h("div", { class: "qs-phbar" }, h("small", {}, "tap to add:"), keys.map(({ k, ok }) => h("button", { class: "qs-phchip" + (ok ? "" : " off"), type: "button", tabindex: -1, "data-k": k,
+        title: ok ? `{${k}}: filled from the daily's list` : `{${k}}: nothing in the list yet, so it shows as written`,
+        onpointerdown: e => { e.preventDefault(); viaPointer = Date.now(); put(k); }, onmousedown: e => e.preventDefault(),
+        onclick: e => { e.preventDefault(); e.stopPropagation(); if (Date.now() - viaPointer > 600) put(k); } }, "{" + k + "}")));
+    }
+    span.replaceChildren(el, ...(bar ? [bar] : [])); el.focus(); el.select && !o.multi && !bar && el.select(); grow();
   };
   span.addEventListener("click", e => { e.stopPropagation(); open(); });
   span.addEventListener("keydown", e => { if (e.key === "Enter" && e.target === span) { e.preventDefault(); open(); } });
@@ -550,7 +591,9 @@ function qsPickModal(title, entries, onPick, o = {}) {
   const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } },
     h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, title.toUpperCase()), h("button", { class: "qs-x", onclick: close }, "x")),
       h("div", { class: "qs-wbody" }, q, grid,
-        o.multi ? h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot", onclick: () => { close(); onPick([...sel]); } }, "Use these"), h("span", { class: "hint" }, "Pick every enemy that should count")) : null)));
+        o.multi && o.group ? h("div", { class: "qs-row wrap" }, h("button", { class: "qs-btn hot", id: "qs-pick-each", onclick: () => { if (!sel.size) return; close(); onPick([...sel], false); } }, "Add each (one a day)"),
+          h("button", { class: "qs-btn", id: "qs-pick-group", onclick: () => { if (!sel.size) return; close(); onPick([...sel], true); } }, "Add as one group (any counts)")) :
+        o.multi ? h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot", onclick: () => { close(); onPick([...sel]); } }, "Use these"), h("span", { class: "hint" }, o.hint || "Pick every enemy that should count")) : null)));
   document.body.append(ov); document.addEventListener("keydown", esc, true);
   draw(); q.focus();
 }
@@ -587,24 +630,41 @@ function qsQuestSheet(id) {
   const addPre = h("select", { class: "qs-sel" }, h("option", { value: "" }, "+ needs..."), S.c.quests.filter(x => x.id !== id && !pre.includes(x.id) && !qsAncestors(x.id).has(id)).map(x => h("option", { value: x.id }, `Lv ${x.Level} - ${x.Title}`)));
   addPre.onchange = () => addPre.value && qsLink(+addPre.value, id);
   // objectives
+  const daily = qsIsDaily(q), chips = () => qsChipKeys(qById(id));
+  const today = daily ? qsRoll(q, qsToday()) : null, gives = daily ? BQDaily.gives(qsPool(id)) : new Set();
+  // A daily's variable as a chip: "{mob} today: Trees".
+  const phChip = n => { const k = BQDaily.placeholder(n), v = today && today.Vals[k]; return h("span", { class: "qs-chip daily" + (v ? "" : " bad"), title: v ? "Filled from the daily's list: today's pick" : "Nothing in the daily's list for this yet" }, h("span", { class: "qs-var" }, n), v ? [" today: ", (v.Names || []).slice(0, 2).map(x => pix(stepIcon({ Type: "kill", Target: x }), "mi")), v.Text] : " (empty list)"); };
+  const varBtns = (kind, onUse) => daily ? [...new Set([kind, ...[...gives].filter(k => qsKeyParts(k).kind === kind)])].sort(qsKeySort).map(k => h("button", { class: "qs-mini daily", title: `Use the daily's {${k}}: a new one every day`, onclick: () => onUse(k) }, "{" + k + "}")) : null;
   const stepRow = (s, i) => {
     const ss = () => qSteps(qById(id));
     const upd = (fn, label) => { const a = ss(); fn(a[i]); setSteps(a, label); };
     const names = stepNames(s);
+    const isPh = n => daily && BQDaily.placeholder(n);
     let targets = null;
-    if (s.Type === "kill" || s.Type === "boss") targets = h("span", { class: "qs-targets" }, names.map(n => h("span", { class: "qs-chip" + (enemyByName()[n.toLowerCase()] ? "" : " bad") }, pix(enemyByName()[n.toLowerCase()] ? enemyByName()[n.toLowerCase()].Image : "assets/error.png", "mi"), n)),
-      h("button", { class: "qs-mini", title: "Pick the enemies that count", onclick: () => qsPickModal("Which enemies count?", enemyEntries(), list => upd(x => { x.Target = list[0] || ""; setStepExtras(x, list.slice(1)); }, `Objective ${i + 1}: ${list.join(" or ")}`), { multi: true, selected: names }) }, names.length ? "change" : "+ enemy"));
-    else if (s.Type === "collect" || s.Type === "craft" || s.Type === "equip") targets = h("span", { class: "qs-targets" }, names.map(n => h("span", { class: "qs-chip" + (itemByName()[n.toLowerCase()] || s.Type === "equip" ? "" : " bad") }, itemByName()[n.toLowerCase()] ? pix(itemByName()[n.toLowerCase()].ImgPath, "mi") : null, n)),
-      h("button", { class: "qs-mini", onclick: () => qsPickModal("Which item?", itemEntries(), v => upd(x => { x.Target = S.itemBy[v].Name; delete x.Targets; }, `Objective ${i + 1}: ${S.itemBy[v].Name}`)) }, names.length ? "change" : "+ item"));
+    if (s.Type === "kill" || s.Type === "boss") targets = h("span", { class: "qs-targets" }, names.map(n => isPh(n) ? phChip(n) : h("span", { class: "qs-chip" + (enemyByName()[n.toLowerCase()] ? "" : " bad") }, pix(enemyByName()[n.toLowerCase()] ? enemyByName()[n.toLowerCase()].Image : "assets/error.png", "mi"), n)),
+      h("button", { class: "qs-mini", title: "Pick the enemies that count", onclick: () => qsPickModal("Which enemies count?", enemyEntries(), list => upd(x => { x.Target = list[0] || ""; setStepExtras(x, list.slice(1)); }, `Objective ${i + 1}: ${list.join(" or ")}`), { multi: true, selected: names.filter(n => !isPh(n)) }) }, names.length ? "change" : "+ enemy"),
+      names.some(isPh) ? null : varBtns("mob", k => upd(x => { x.Target = "{" + k + "}"; delete x.Targets; }, `Objective ${i + 1}: the daily's {${k}}`)));
+    else if (s.Type === "collect" || s.Type === "craft" || s.Type === "equip") targets = h("span", { class: "qs-targets" }, names.map(n => isPh(n) ? phChip(n) : h("span", { class: "qs-chip" + (itemByName()[n.toLowerCase()] || s.Type === "equip" ? "" : " bad") }, itemByName()[n.toLowerCase()] ? pix(itemByName()[n.toLowerCase()].ImgPath, "mi") : null, n)),
+      h("button", { class: "qs-mini", onclick: () => qsPickModal("Which item?", itemEntries(), v => upd(x => { x.Target = S.itemBy[v].Name; delete x.Targets; }, `Objective ${i + 1}: ${S.itemBy[v].Name}`)) }, names.length ? "change" : "+ item"),
+      s.Type === "collect" && !names.some(isPh) ? varBtns("item", k => upd(x => { x.Target = "{" + k + "}"; delete x.Targets; }, `Objective ${i + 1}: the daily's {${k}}`)) : null);
     else if (s.Type === "talk") targets = h("span", { class: "qs-targets" }, h("button", { class: "qs-chip", onclick: () => qsPickModal("Talk to whom?", npcEntries(), v => upd(x => (x.NPC = +v), `Objective ${i + 1}: talk to ${npcName(+v)}`)) }, S.npcBy[s.NPC] ? [pix(S.npcBy[s.NPC].ImgPath, "mi"), S.npcBy[s.NPC].Name] : "pick an NPC"));
     else if (s.Type === "use") { const sel = h("select", { class: "qs-sel" }, USE_ACTIONS.map(a => h("option", { value: a }, a))); sel.value = s.Target; sel.onchange = () => upd(x => (x.Target = sel.value), `Objective ${i + 1}: ${sel.value}`); targets = sel; }
-    const count = ["kill", "collect", "use", "craft", "level"].includes(s.Type) ? h("span", { class: "qs-count" }, "x", qsInline(String(+s.Count || 1), v => upd(x => (x.Count = Math.max(1, +v || 1)), `Objective ${i + 1}: count ${v}`), { num: true })) : null;
+    const sc = BQDaily.stepCount(s.Count);
+    const count = !["kill", "collect", "use", "craft", "level"].includes(s.Type) ? null
+      : daily && sc.v ? h("span", { class: "qs-count" }, "x", phChip(sc.v), h("button", { class: "qs-mini", title: "Back to a fixed number", onclick: () => upd(x => (x.Count = 5), `Objective ${i + 1}: count 5`) }, "fixed"))
+      : h("span", { class: "qs-count" }, "x", qsInline(String(sc.n || 1), v => upd(x => (x.Count = Math.max(1, +v || 1)), `Objective ${i + 1}: count ${v}`), { num: true }),
+        s.Type !== "level" ? varBtns("count", k => upd(x => (x.Count = "{" + k + "}"), `Objective ${i + 1}: the daily's {${k}}`)) : null);
     const row = h("div", { class: "qs-step t-" + s.Type },
-      h("div", { class: "qs-step-h" }, h("b", { class: "qs-n" }, i + 1), pix(stepIcon(s), "si"), h("span", { class: "qs-type" }, s.Type), targets, count, h("span", { class: "qs-sp" }),
+      h("div", { class: "qs-step-h" }, h("b", { class: "qs-n" }, i + 1), pix(stepIcon(s, q), "si"), h("span", { class: "qs-type" }, s.Type), targets, count, h("span", { class: "qs-sp" }),
         i ? h("button", { class: "qs-mini", title: "Move up", onclick: () => { const a = ss(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; setSteps(a, `Moved objective ${i + 1} up`); } }, "^") : null,
         h("button", { class: "qs-mini", title: "Remove", onclick: () => { const a = ss(); if (a.length < 2) { qsToast("A quest needs at least one objective"); return; } a.splice(i, 1); setSteps(a, `Removed objective ${i + 1}`); } }, "x")),
-      h("div", { class: "qs-step-t" }, qsInline(s.Text, v => upd(x => (x.Text = v), `Objective ${i + 1} text`), { ph: "What the quest tracker says" })),
-      s.Type === "talk" ? h("div", { class: "qs-say" }, pix(S.npcBy[s.NPC] ? S.npcBy[s.NPC].ImgPath : "", "mi"), qsInline(s.Line, v => upd(x => (x.Line = v), `${npcName(s.NPC)}'s line`), { multi: true, ph: "What they say when you get there", cls: "rh" })) : null);
+      h("div", { class: "qs-step-t" }, qsInline(s.Text, v => upd(x => (x.Text = v), `Objective ${i + 1} text`), { ph: "What the quest tracker says", chips }),
+        daily && /\{/.test(s.Text || "") ? h("div", { class: "qs-today" }, "today: ", BQDaily.fill(today, s.Text)) : null),
+      s.Type === "talk" ? h("div", { class: "qs-say" }, pix(S.npcBy[s.NPC] ? S.npcBy[s.NPC].ImgPath : "", "mi"), qsInline(s.Line, v => upd(x => (x.Line = v), `${npcName(s.NPC)}'s line`), { multi: true, ph: "What they say when you get there", cls: "rh", chips })) : null);
+    if (s.Type === "reach" && daily && BQDaily.placeholder(s.At)) {
+      row.append(h("div", { class: "qs-reach" }, phChip(s.At), " ", h("button", { class: "qs-mini", title: "Back to one fixed spot", onclick: () => upd(x => { delete x.At; }, `Objective ${i + 1}: a fixed spot`) }, "fixed spot"),
+        h("div", { class: "hint" }, "Goes wherever today's {place} is; X, Y below are only used if the list is empty.")));
+    } else if (s.Type === "reach" && daily) row.append(h("div", { class: "qs-reach" }, varBtns("place", k => upd(x => { x.At = "{" + k + "}"; }, `Objective ${i + 1}: goes to the daily's {${k}}`))));
     if (s.Type === "reach") {
       const tmp = { ...s };
       const mini = reachMap(tmp, () => upd(x => { x.X = tmp.X; x.Y = tmp.Y; }, `Objective ${i + 1}: reach ${tmp.X},${tmp.Y}`));
@@ -630,7 +690,8 @@ function qsQuestSheet(id) {
     h("div", { class: "qs-wtitle" }, h("span", {}, `QUEST ${q.id}`), h("span", { class: "qs-sp" }), h("a", { href: "#quest/" + q.id, class: "qs-link", title: "The full form in the Quests tab" }, "form"), h("button", { class: "qs-x", title: "Close", onclick: () => { QS.sel = null; d.classList.remove("open"); syncHash("#studio/journey"); document.querySelectorAll(".qs-card.sel").forEach(c => c.classList.remove("sel")); } }, "x")),
     h("div", { class: "qs-sheet" },
       h("div", { class: "qs-title" }, h("span", { class: "qc-lv big", title: "Quest level" }, qsInline(String(q.Level), v => P({ Level: Math.max(1, +v || 1) }, `Level ${v}`), { num: true })),
-        qsInline(q.Title, v => P({ Title: v || q.Title }, `Renamed to ${v}`), { cls: "qs-h", ph: "Quest title" })),
+        qsInline(q.Title, v => P({ Title: v || q.Title }, `Renamed to ${v}`), { cls: "qs-h", ph: "Quest title", chips })),
+      daily ? h("div", { class: "qs-today big" }, qsDailyBadge(), " Daily. Today: ", h("b", {}, qsDayDef(q).Title)) : null,
       h("div", { class: "qs-meta" }, "Zone ", qsInline(q.Zone, v => P({ Zone: v }, `Zone ${v}`), { list: "qs-zones", ph: "zone" }), " - Act ", qsInline(String(q.Act), v => P({ Act: +v || 1 }, `Act ${v}`), { num: true }),
         " - min level ", qsInline(String(q.MinLevel), v => P({ MinLevel: Math.max(1, +v || 1) }, `Min level ${v}`), { num: true })),
       iss.length ? h("div", { class: "qs-iss" }, iss.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))) : null,
@@ -643,6 +704,7 @@ function qsQuestSheet(id) {
         h("span", { class: "hint" }, seq ? "One at a time, top to bottom: only the current one counts." : "Every objective counts from the start; kills of any listed enemy count.")),
       h("div", { class: "qs-steps " + (seq ? "seq" : "par") }, steps.map(stepRow)), addStep,
       qsDailyBox(q, P),
+      daily ? qsRollPreview(q) : null,
       h("h4", {}, "Rewards"), rwBox,
       h("h4", {}, "What they say ", h("button", { class: "qs-mini", onclick: () => qsPreviewQuest(q) }, "play it")),
       qsQuestScript(q, P)));
@@ -665,11 +727,11 @@ function qsQuestScript(q, P) {
   const steps = qSteps(q);
   const npcLine = (n, key, label, extra) => h("div", { class: "qs-bub npc", "data-line": key },
     pix(n ? n.ImgPath : "", "bp"), h("div", {}, h("small", {}, `${n ? n.Name : "Nobody"} - ${label}`),
-      qsInline(q[key], v => P({ [key]: v }, `${label} line`), { multi: true, cls: "rh", ph: "Write what they say" }), extra ? h("div", { class: "qs-auto" }, extra) : null));
+      qsInline(q[key], v => P({ [key]: v }, `${label} line`), { multi: true, cls: "rh", ph: "Write what they say", chips: qsChipKeys(q) }), extra ? h("div", { class: "qs-auto" }, extra) : null));
   const you = (txt, note) => h("div", { class: "qs-bub you" }, h("span", { class: "qs-opt" }, txt), note ? h("small", {}, note) : null);
   const rewards = [+q.XP ? `${q.XP} XP` : "", +q.Gold ? `${q.Gold} Gold` : "", ...qRw(q).map(r => S.itemBy[r.ItemID] ? `${r.Amount}x ${S.itemBy[r.ItemID].Name}` : "")].filter(Boolean);
   return h("div", { class: "qs-script" },
-    you("[Quest] " + q.Title, `on ${g ? g.Name : "the giver"}'s menu once it unlocks`),
+    you((qsIsDaily(q) ? "[Daily] " : "[Quest] ") + q.Title, qsIsDaily(q) ? `on ${g ? g.Name : "the giver"}'s menu, filled in from the day's roll; once a day per giver` : `on ${g ? g.Name : "the giver"}'s menu once it unlocks`),
     npcLine(g, "Offer", "offer", steps.map(s => "- " + (s.Text || stepLabel(s))).join("\n")),
     you("I'll do it.", "or \"Not right now.\" (back to the start)"),
     npcLine(g, "Accept", "accept"),
@@ -680,17 +742,32 @@ function qsQuestScript(q, P) {
     npcLine(t, "Progress", "in progress"),
     you("[Complete] " + q.Title, "when every objective is done"),
     npcLine(t, "Complete", "complete", rewards.length ? "Reward: " + rewards.join(", ") : "No reward"),
-    you("Anything else?", "goes to their next quest on offer, else their greeting"));
+    you("Anything else?", qsIsDaily(q) ? "claimed: hidden until the 21:00 reset; then their next quest on offer, else their greeting" : "goes to their next quest on offer, else their greeting"));
 }
 
 // ------------------------------------------------------------------ the game's dialogue, simulated
 // Same rules as the API's talkTo / questMenuLocked / chatNode, on a pretend
 // player (QS.play or a scratch copy).
 const qsOrder = () => [...S.c.quests].sort((a, b) => a.Level - b.Level || a.id - b.id);
-function qsAvail(P, q) { return !P.done.has(q.id) && !P.state[q.id] && qPre(q).every(p => P.done.has(p)) && P.level >= q.MinLevel; }
+// Dailies (questline.go questAvailableLocked, dailyBlockedLocked): a giver
+// offers one only while the player is on none of its dailies and claimed
+// none of them this loot day; a claimed daily counts as done for Prereqs.
+// P.day is the pretend loot day, P.claims[qid] the day of the last claim,
+// P.variant[qid] the roll taken with the quest.
+const qsPDay = P => (P.day ?? (P.day = qsToday()));
+const qsPreDone = (P, p) => P.done.has(p) || !!(P.claims && p in P.claims);
+function qsDailyBusy(P, q) { const day = qsPDay(P); return S.c.quests.some(d => qsIsDaily(d) && d.Giver === q.Giver && ((P.claims && P.claims[d.id] >= day) || P.state[d.id])); }
+function qsAvail(P, q) {
+  if (P.state[q.id]) return false;
+  if (qsIsDaily(q)) { if (qsDailyBusy(P, q)) return false; } else if (P.done.has(q.id)) return false;
+  return qPre(q).every(p => qsPreDone(P, p)) && P.level >= q.MinLevel;
+}
+// The quest as this player meets it: a daily filled with the variant they
+// took, or the day's roll.
+function qsPDef(P, q) { return qsIsDaily(q) ? qsDayDef(q, qsPDay(P), P.state[q.id] && P.variant ? P.variant[q.id] : null) : q; }
 function qsTalkStep(P, q, npcId) {
   if (P.state[q.id] !== "active") return -1;
-  const ss = qSteps(q), talked = (P.talked && P.talked[q.id]) || new Set();
+  const ss = qSteps(qsPDef(P, q)), talked = (P.talked && P.talked[q.id]) || new Set();
   for (let i = 0; i < ss.length; i++) {
     if (ss[i].Type === "talk" && ss[i].NPC === npcId && !talked.has(i)) return i;
     if (+q.Sequential && !(ss[i].Type === "talk" && talked.has(i))) return -1;
@@ -700,11 +777,11 @@ function qsTalkStep(P, q, npcId) {
 function qsMenu(P, npcId) {
   const t = [], k = [], o = [], w = [];
   for (const q of qsOrder()) {
-    const st = P.state[q.id];
-    if (!st && !P.done.has(q.id)) { if (q.Giver === npcId && qsAvail(P, q)) o.push({ t: "[Quest] " + q.Title, k: "offer:" + q.id }); }
-    else if (st === "ready" && q.TurnIn === npcId) t.push({ t: "[Complete] " + q.Title, k: "turnin:" + q.id });
-    else if (st === "active" && qsTalkStep(P, q, npcId) >= 0) k.push({ t: `[${q.Title}] ${qSteps(q)[qsTalkStep(P, q, npcId)].Text}`, k: "talk:" + q.id });
-    else if (st === "active" && (q.TurnIn === npcId || q.Giver === npcId)) w.push({ t: "[In progress] " + q.Title, k: "progress:" + q.id });
+    const st = P.state[q.id], d = qsPDef(P, q);
+    if (!st && !P.done.has(q.id)) { if (q.Giver === npcId && qsAvail(P, q)) o.push({ t: (qsIsDaily(q) ? "[Daily] " : "[Quest] ") + d.Title, k: "offer:" + q.id }); }
+    else if (st === "ready" && q.TurnIn === npcId) t.push({ t: "[Complete] " + d.Title, k: "turnin:" + q.id });
+    else if (st === "active" && qsTalkStep(P, q, npcId) >= 0) k.push({ t: `[${d.Title}] ${qSteps(d)[qsTalkStep(P, q, npcId)].Text}`, k: "talk:" + q.id });
+    else if (st === "active" && (q.TurnIn === npcId || q.Giver === npcId)) w.push({ t: "[In progress] " + d.Title, k: "progress:" + q.id });
   }
   return [...t, ...k, ...o, ...w];
 }
@@ -717,16 +794,26 @@ function qsTalk(P, n, key) {
   if (key.startsWith("chat:")) return qsChat(P, n, key.slice(5), v);
   if (key === "more") { const nq = qsNextOffer(P, n.id); key = nq ? "offer:" + nq.id : ""; }
   const id = +(key.split(":")[1] || 0), q = qById(id), kind = key.split(":")[0];
+  const d = q && qsPDef(P, q);
   let handled = true;
-  if (kind === "offer" && q && q.Giver === n.id && qsAvail(P, q)) { v.text = q.Offer + "\n\n" + qSteps(q).map(s => "- " + s.Text).join("\n"); v.options = [{ t: "I'll do it.", k: "accept:" + id }, { t: "Not right now.", k: "" }]; v.quest = id; v.line = "Offer"; }
-  else if (kind === "accept" && q && q.Giver === n.id && qsAvail(P, q)) { P.state[id] = "active"; P.log && P.log.push({ t: "took", q: id }); v.text = q.Accept; v.options = [{ t: "On it.", k: "close" }]; v.quest = id; v.line = "Accept"; }
-  else if (kind === "talk" && q && qsTalkStep(P, q, n.id) >= 0) { const i = qsTalkStep(P, q, n.id); P.talked = P.talked || {}; (P.talked[id] = P.talked[id] || new Set()).add(i); v.text = qSteps(q)[i].Line || ""; v.options = [{ t: "Right.", k: "" }]; v.quest = id; v.line = "step:" + i; }
-  else if (kind === "turnin" && q && P.state[id] === "ready" && q.TurnIn === n.id) {
-    delete P.state[id]; P.done.add(id); if (P.follow) P.level = Math.max(P.level, q.Level); P.log && P.log.push({ t: "done", q: id });
-    const rw = [+q.XP ? q.XP + " XP" : "", +q.Gold ? q.Gold + " Gold" : "", ...qRw(q).map(r => (S.itemBy[r.ItemID] ? `${r.Amount}x ${S.itemBy[r.ItemID].Name}` : ""))].filter(Boolean);
-    v.text = q.Complete + (rw.length ? "\n\nReward: " + rw.join(", ") : ""); v.options = [{ t: "Anything else?", k: "more" }]; v.quest = id; v.line = "Complete";
+  if (kind === "offer" && q && q.Giver === n.id && qsAvail(P, q)) { v.text = d.Offer + "\n\n" + qSteps(d).map(s => "- " + s.Text).join("\n"); v.options = [{ t: "I'll do it.", k: "accept:" + id }, { t: "Not right now.", k: "" }]; v.quest = id; v.line = "Offer"; }
+  else if (kind === "accept" && q && q.Giver === n.id && qsAvail(P, q)) {
+    P.state[id] = "active"; P.log && P.log.push({ t: "took", q: id, title: d.Title });
+    if (qsIsDaily(q)) (P.variant = P.variant || {})[id] = qsRoll(q, qsPDay(P)); // the variant stays with the player past the reset
+    v.text = d.Accept; v.options = [{ t: "On it.", k: "close" }]; v.quest = id; v.line = "Accept";
   }
-  else if (kind === "progress" && q) { v.text = q.Progress; v.options = [{ t: "Back.", k: "" }]; v.quest = id; v.line = "Progress"; }
+  else if (kind === "talk" && q && qsTalkStep(P, q, n.id) >= 0) { const i = qsTalkStep(P, q, n.id); P.talked = P.talked || {}; (P.talked[id] = P.talked[id] || new Set()).add(i); v.text = qSteps(d)[i].Line || ""; v.options = [{ t: "Right.", k: "" }]; v.quest = id; v.line = "step:" + i; }
+  else if (kind === "turnin" && q && P.state[id] === "ready" && q.TurnIn === n.id) {
+    delete P.state[id]; if (P.follow) P.level = Math.max(P.level, q.Level);
+    if (qsIsDaily(q)) {
+      // the claim, dated the loot day of the hand-in; the progress goes
+      (P.claims = P.claims || {})[id] = qsPDay(P); if (P.variant) delete P.variant[id]; if (P.talked) delete P.talked[id];
+      P.log && P.log.push({ t: "claimed", q: id, title: d.Title });
+    } else { P.done.add(id); P.log && P.log.push({ t: "done", q: id }); }
+    const rw = [+q.XP ? q.XP + " XP" : "", +q.Gold ? q.Gold + " Gold" : "", ...qRw(q).map(r => (S.itemBy[r.ItemID] ? `${r.Amount}x ${S.itemBy[r.ItemID].Name}` : ""))].filter(Boolean);
+    v.text = d.Complete + (rw.length ? "\n\nReward: " + rw.join(", ") : ""); v.options = [{ t: "Anything else?", k: "more" }]; v.quest = id; v.line = "Complete";
+  }
+  else if (kind === "progress" && q) { v.text = d.Progress; v.options = [{ t: "Back.", k: "" }]; v.quest = id; v.line = "Progress"; }
   else handled = false;
   if (handled) { if (!v.options.some(o => o.k === "close")) v.options.push(close); return v; }
   const items = qsMenu(P, n.id);
@@ -794,7 +881,7 @@ function qsGamePanel(n, o = {}) {
   draw();
   return el;
 }
-function qsScratch() { const p = QS.play; return { level: p.level, done: new Set(p.done), state: { ...p.state }, follow: p.follow, talked: {} }; }
+function qsScratch() { const p = QS.play; return { level: p.level, done: new Set(p.done), state: { ...p.state }, follow: p.follow, talked: {}, day: qsPDay(p), claims: { ...(p.claims || {}) }, variant: { ...(p.variant || {}) } }; }
 function qsPreviewQuest(q) {
   const n = S.npcBy[q.Giver]; if (!n) { qsToast("Give the quest a giver first"); return; }
   const P = { level: Math.max(q.MinLevel, q.Level), done: new Set(qsAncestors(q.id)), state: {}, follow: false, talked: {} };
@@ -839,7 +926,8 @@ function qsCast(body) {
       h("div", { class: "qs-nname" }, n.Name),
       h("div", { class: "qs-nsub" }, n.Faction || "no faction", " - ", zoneAt(n.SpawnX, n.SpawnY) || `${n.SpawnX},${n.SpawnY}`),
       h("div", { class: "qs-nstats" },
-        r.gives.length ? h("span", { title: "Gives" }, pix("assets/ui/studio/alert.png", "mi"), r.gives.length) : null,
+        r.gives.filter(q => !qsIsDaily(q)).length ? h("span", { title: "Gives" }, pix("assets/ui/studio/alert.png", "mi"), r.gives.filter(q => !qsIsDaily(q)).length) : null,
+        r.gives.some(qsIsDaily) ? h("span", { class: "daily", title: "Gives daily quests" }, qsDailyBadge(), r.gives.filter(qsIsDaily).length) : null,
         r.takes.length ? h("span", { title: "Takes hand-ins" }, pix("assets/ui/studio/complete.png", "mi"), r.takes.length) : null,
         r.talks.length ? h("span", { title: "Talk objectives" }, pix("assets/ui/studio/alert-item.png", "mi"), r.talks.length) : null,
         r.all.length ? h("span", { class: "lv" }, `Lv ${r.all[0].Level}${r.all.length > 1 ? "-" + r.all[r.all.length - 1].Level : ""}`) : h("span", { class: "hint" }, "no quests"),
@@ -921,7 +1009,7 @@ function qsNpcSheet(body, id) {
   const factions = [...new Set(S.c.npcs.map(x => x.Faction).filter(Boolean))].sort();
   if (!$("#qs-factions")) document.body.append(h("datalist", { id: "qs-factions" }));
   $("#qs-factions").replaceChildren(...factions.map(z => h("option", { value: z })));
-  const roleTag = q => [q.Giver === n.id ? "gives" : null, q.TurnIn === n.id ? "takes it in" : null, qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk objective" : null].filter(Boolean).join(" - ");
+  const roleTag = q => [qsIsDaily(q) ? "daily" : null, q.Giver === n.id ? "gives" : null, q.TurnIn === n.id ? "takes it in" : null, qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk objective" : null].filter(Boolean).join(" - ");
   const preview = qsGamePanel(n, { P: qsScratch() });
   const notes = qsInline(qsNotesGet(id), v => qsNotesSet(id, v).then(qsRerender), { multi: true, cls: "rh qs-notes", ph: "Who are they? How do they talk? What do they want? (Your notes: not shown in game.)", tag: "div" });
   body.append(h("div", { class: "qs-sheetpage" },
@@ -939,7 +1027,8 @@ function qsNpcSheet(body, id) {
           h("h4", {}, "Where they stand ", h("span", { class: "hint" }, "click the map to move them, drag to look around")), map,
           h("div", {}, h("a", { class: "qs-link", href: `#map/${n.SpawnX},${n.SpawnY}` }, "open on the big map")))),
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "THEIR QUESTS")),
-        h("div", { class: "qs-wbody" }, r.all.length ? h("div", { class: "qs-qlist" }, r.all.map(q => h("a", { class: "qs-qrow", href: "#studio/journey/" + q.id }, h("span", { class: "qc-lv" }, q.Level), h("b", {}, q.Title), h("small", {}, roleTag(q))))) : h("p", { class: "hint" }, "None yet."),
+        h("div", { class: "qs-wbody" }, r.all.length ? h("div", { class: "qs-qlist" }, r.all.map(q => h("a", { class: "qs-qrow" + (qsIsDaily(q) ? " daily" : ""), href: "#studio/journey/" + q.id, title: qsIsDaily(q) ? "Daily. Today: " + qsDayDef(q).Title : null }, h("span", { class: "qc-lv" }, q.Level), qsIsDaily(q) ? qsDailyBadge() : null, h("b", {}, qsIsDaily(q) ? qsPh(q.Title) : q.Title), h("small", {}, roleTag(q))))) : h("p", { class: "hint" }, "None yet."),
+          r.gives.some(qsIsDaily) ? h("p", { class: "hint" }, qsDailyBadge(), ` Offers one of ${n.Name}'s dailies a day: hidden after the hand-in until the 21:00 reset.`) : null,
           h("button", { class: "qs-btn hot", onclick: () => qsNewQuest(0, n.id) }, `+ A quest from ${n.Name}`))),
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "CONNECTED TO")),
         h("div", { class: "qs-wbody" }, links.length ? h("div", { class: "qs-links" }, links.map(l => h("a", { class: "qs-lnk", href: "#studio/npc/" + l.n.id, title: l.qs.map(q => q.Title).join("\n") }, pix(l.n.ImgPath, "pt"), h("b", {}, l.n.Name), h("small", {}, l.qs.length === 1 ? l.qs[0].Title : `${l.qs.length} quests`)))) : h("p", { class: "hint" }, "Nobody, yet. Give them a quest that sends the player to someone.")))),
@@ -959,7 +1048,7 @@ function qsDialogue(n, preview) {
   const nodeIds = () => (n.Conversation ? treeNodes(n.Conversation) : []).map(c => c.Identifier);
   const r = qsRoles(n);
   box.append(h("div", { class: "qs-rule" }, "When you talk to ", h("b", {}, n.Name), ", quest business comes first: hand-ins, talk objectives, new quests, then quests in progress. Then their own chat below."));
-  if (r.all.length) box.append(h("div", { class: "qs-menu" }, r.takes.map(q => h("span", { class: "qs-opt" }, "[Complete] " + q.Title)), r.talks.map(q => h("span", { class: "qs-opt" }, `[${q.Title}] ...`)), r.gives.map(q => h("span", { class: "qs-opt" }, "[Quest] " + q.Title)), n.Faction === "Land Agent" ? h("span", { class: "qs-opt plot" }, "[Plot] Rent a plot") : null));
+  if (r.all.length) box.append(h("div", { class: "qs-menu" }, r.takes.map(q => h("span", { class: "qs-opt" }, "[Complete] " + q.Title)), r.talks.map(q => h("span", { class: "qs-opt" }, `[${q.Title}] ...`)), r.gives.map(q => h("span", { class: "qs-opt" + (qsIsDaily(q) ? " daily" : "") }, qsIsDaily(q) ? ["[Daily] ", qsPh(q.Title)] : "[Quest] " + q.Title)), n.Faction === "Land Agent" ? h("span", { class: "qs-opt plot" }, "[Plot] Rent a plot") : null));
   const thread = h("div", { class: "qs-thread" });
   if (!n.Conversation || !S.convBy[n.Conversation]) {
     thread.append(h("div", { class: "qs-bub npc" }, pix(n.ImgPath, "bp"), h("div", {}, h("small", {}, n.Conversation ? `greeting node "${n.Conversation}" is missing` : "no chat yet"),
@@ -1014,7 +1103,7 @@ function qsDialogue(n, preview) {
   if (r.all.length) {
     box.append(h("h4", {}, "Their quest lines"));
     for (const q of r.all) {
-      const det = h("details", { class: "qs-qthread" }, h("summary", {}, h("span", { class: "qc-lv" }, q.Level), " ", q.Title, " ", h("small", {}, [q.Giver === n.id ? "gives" : "", q.TurnIn === n.id ? "takes in" : "", qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk" : ""].filter(Boolean).join(" - "))));
+      const det = h("details", { class: "qs-qthread" + (qsIsDaily(q) ? " daily" : "") }, h("summary", {}, h("span", { class: "qc-lv" }, q.Level), " ", qsIsDaily(q) ? [qsDailyBadge(), " ", qsPh(q.Title)] : q.Title, " ", h("small", {}, [q.Giver === n.id ? "gives" : "", q.TurnIn === n.id ? "takes in" : "", qSteps(q).some(s => s.Type === "talk" && s.NPC === n.id) ? "talk" : ""].filter(Boolean).join(" - "))));
       det.addEventListener("toggle", () => { if (det.open && det.children.length === 1) det.append(qsQuestScript(q, (patch, label) => qsPatchQuest(q.id, patch, label))); });
       box.append(det);
     }
@@ -1025,6 +1114,7 @@ function qsDialogue(n, preview) {
 // ------------------------------------------------------------------ playtest
 function qsPlayStatus(q) {
   const P = QS.play;
+  if (qsIsDaily(q) && !P.state[q.id] && P.claims && P.claims[q.id] >= qsPDay(P)) return "claimed";
   if (P.done.has(q.id)) return "done";
   if (P.state[q.id]) return P.state[q.id];
   if (qsAvail(P, q)) return "avail";
@@ -1032,15 +1122,16 @@ function qsPlayStatus(q) {
 }
 function qsWhyLocked(q) {
   const P = QS.play, why = [];
-  const missing = qPre(q).filter(p => !P.done.has(p));
+  const missing = qPre(q).filter(p => !qsPreDone(P, p));
   if (missing.length) why.push("after " + missing.map(p => (qById(p) ? `“${qById(p).Title}”` : `#${p} (missing!)`)).join(" and "));
   if (P.level < q.MinLevel) why.push(`at level ${q.MinLevel}`);
   return why.join(", ");
 }
 function qsSkipTo(level) {
   const P = QS.play; let grew = true;
-  for (const id of Object.keys(P.state)) { const q = qById(+id); if (q && q.Level < level) { P.done.add(q.id); delete P.state[id]; } }
-  while (grew) { grew = false; for (const q of qsOrder()) if (q.Level < level && qsAvail({ ...P, level: Math.max(P.level, q.MinLevel) }, q) && q.MinLevel <= level) { P.done.add(q.id); delete P.state[q.id]; grew = true; } }
+  // dailies repeat, so skipping ahead leaves them as they are
+  for (const id of Object.keys(P.state)) { const q = qById(+id); if (q && q.Level < level && !qsIsDaily(q)) { P.done.add(q.id); delete P.state[id]; } }
+  while (grew) { grew = false; for (const q of qsOrder()) if (!qsIsDaily(q) && q.Level < level && qsAvail({ ...P, level: Math.max(P.level, q.MinLevel) }, q) && q.MinLevel <= level) { P.done.add(q.id); delete P.state[q.id]; grew = true; } }
   P.level = level; P.log.push({ t: "skip", level });
 }
 function qsPlay(body) {
@@ -1048,14 +1139,15 @@ function qsPlay(body) {
   const all = qsOrder();
   const ready = all.filter(q => P.state[q.id] === "ready"), active = all.filter(q => P.state[q.id] === "active");
   const avail = all.filter(q => qsAvail(P, q));
-  const soon = all.filter(q => !P.done.has(q.id) && !P.state[q.id] && !qsAvail(P, q) && qPre(q).filter(p => !P.done.has(p)).length <= 1).slice(0, 12);
+  const soon = all.filter(q => !qsIsDaily(q) && !P.done.has(q.id) && !P.state[q.id] && !qsAvail(P, q) && qPre(q).filter(p => !qsPreDone(P, p)).length <= 1).slice(0, 12);
+  const dailies = all.filter(qsIsDaily);
   const sel = S.npcBy[QS.playNpc] || (ready[0] && S.npcBy[ready[0].TurnIn]) || (avail[0] && S.npcBy[avail[0].Giver]) || null;
   const lvl = h("input", { type: "range", min: 1, max: 40, value: P.level, class: "qs-range" });
   const lvlN = h("b", { class: "qc-lv big" }, P.level);
   lvl.oninput = () => { lvlN.textContent = lvl.value; };
   lvl.onchange = () => { P.level = +lvl.value; qsRerender(); };
   const talkBtn = (nid, label) => S.npcBy[nid] ? h("button", { class: "qs-chip talk", onclick: () => { QS.playNpc = nid; qsRerender(); } }, pix(S.npcBy[nid].ImgPath, "mi"), label || S.npcBy[nid].Name) : h("span", { class: "qs-chip bad" }, "nobody");
-  const qrow = (q, extra) => h("div", { class: "qs-prow" }, h("span", { class: "qc-lv" }, q.Level), h("a", { href: "#studio/journey/" + q.id, title: "Show on the journey" }, q.Title), h("small", {}, q.Zone), h("span", { class: "qs-sp" }), extra);
+  const qrow = (q, extra) => h("div", { class: "qs-prow" + (qsIsDaily(q) ? " daily" : "") }, h("span", { class: "qc-lv" }, q.Level), qsIsDaily(q) ? qsDailyBadge() : null, h("a", { href: "#studio/journey/" + q.id, title: "Show on the journey" }, qsPDef(P, q).Title), h("small", {}, q.Zone), h("span", { class: "qs-sp" }), extra);
   const byGiver = new Map(); for (const q of avail) { if (!byGiver.has(q.Giver)) byGiver.set(q.Giver, []); byGiver.get(q.Giver).push(q); }
   const panel = sel ? qsGamePanel(sel, { P, onChange: v => { if (!v || /^(accept|turnin|talk):/.test(v.key || "") || v.key === "more") setTimeout(qsRerender, 400); } }) : h("p", { class: "hint" }, "Pick someone to talk to.");
   body.append(h("div", { class: "qs-play" },
@@ -1065,11 +1157,11 @@ function qsPlay(body) {
           h("div", { class: "qs-row" }, pix("assets/npc/Adventurer.png", "big"), h("div", {}, "Level ", lvlN, h("br"), h("small", {}, `${P.done.size} of ${all.length} quests done`))), lvl,
           h("label", { class: "qs-chk" }, h("input", { type: "checkbox", checked: P.follow, onchange: e => { P.follow = e.target.checked; } }), " level up with the story (to each quest's level)"),
           h("div", { class: "qs-row wrap" },
-            h("button", { class: "qs-btn", onclick: () => { QS.play = { level: 1, done: new Set(), state: {}, follow: P.follow, log: [], overlay: P.overlay, talked: {} }; QS.playNpc = null; qsRerender(); } }, "New character"),
+            h("button", { class: "qs-btn", onclick: () => { QS.play = { level: 1, done: new Set(), state: {}, follow: P.follow, log: [], overlay: P.overlay, talked: {}, day: qsToday(), claims: {}, variant: {} }; QS.playNpc = null; qsRerender(); } }, "New character"),
             h("button", { class: "qs-btn", title: "Do every quest below this level that can be done", onclick: () => { qsSkipTo(+lvl.value); qsRerender(); } }, `Skip to Lv ${P.level}`),
             h("button", { class: "qs-btn hot", onclick: () => { P.overlay = true; qsGo("journey"); } }, "See it on the journey")))),
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "JOURNAL")),
-        h("div", { class: "qs-wbody qs-log" }, P.log.length ? [...P.log].reverse().slice(0, 40).map(l => h("div", {}, l.t === "skip" ? `Skipped ahead to level ${l.level}` : `${l.t === "done" ? "Finished" : l.t === "took" ? "Took" : "Objectives done:"} ${qById(l.q) ? qById(l.q).Title : "#" + l.q}`)) : h("p", { class: "hint" }, "Nothing yet. Talk to someone with a ! quest.")))),
+        h("div", { class: "qs-wbody qs-log" }, P.log.length ? [...P.log].reverse().slice(0, 40).map(l => h("div", { class: l.t === "claimed" || l.t === "reset" ? "daily" : "" }, l.t === "skip" ? `Skipped ahead to level ${l.level}` : l.t === "reset" ? `The 21:00 reset: loot day ${l.day}` : `${l.t === "done" ? "Finished" : l.t === "claimed" ? "Claimed the daily" : l.t === "took" ? "Took" : "Objectives done:"} ${l.title || (qById(l.q) ? qById(l.q).Title : "#" + l.q)}`)) : h("p", { class: "hint" }, "Nothing yet. Talk to someone with a ! quest.")))),
     h("div", { class: "qs-col wide" },
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "WHAT YOU CAN DO NOW")),
         h("div", { class: "qs-wbody" },
@@ -1079,7 +1171,8 @@ function qsPlay(body) {
           h("h4", {}, pix("assets/ui/studio/alert.png", "mi"), ` Quests on offer (${avail.length})`),
           avail.length ? [...byGiver.entries()].map(([gid, qs]) => h("div", { class: "qs-pgiver" }, talkBtn(gid), h("small", {}, S.npcBy[gid] ? zoneAt(S.npcBy[gid].SpawnX, S.npcBy[gid].SpawnY) : ""), h("div", {}, qs.map(q => qrow(q))))) : h("p", { class: "hint" }, active.length || ready.length ? "Nothing new: finish what you have." : "Nothing on offer at this level. Dead end! Check the journey for broken links."),
           h("h4", {}, "Coming up"),
-          soon.length ? soon.map(q => qrow(q, h("small", { class: "hint" }, qsWhyLocked(q)))) : h("p", { class: "hint" }, "That's the lot.")))),
+          soon.length ? soon.map(q => qrow(q, h("small", { class: "hint" }, qsWhyLocked(q)))) : h("p", { class: "hint" }, "That's the lot."))),
+      dailies.length ? qsPlayDailies(P, dailies, talkBtn) : null),
     h("div", { class: "qs-col" },
       h("div", { class: "qs-win sticky" }, h("div", { class: "qs-wtitle" }, h("span", {}, sel ? "TALKING TO " + sel.Name.toUpperCase() : "TALK"), h("span", { class: "qs-sp" }), sel ? h("a", { class: "qs-link", href: "#studio/npc/" + sel.id }, "edit") : null),
         h("div", { class: "qs-wbody" }, panel, h("p", { class: "hint" }, "Taking, talking and handing in here change your pretend character."))))));
@@ -1095,7 +1188,7 @@ function qsNewQuest(afterId, giverId) {
   const after = afterId ? qById(afterId) : null;
   const level = after ? after.Level + 1 : 1;
   const sug = qsSuggest(level);
-  const st = { Giver: giverId || (after ? after.TurnIn : 0), TurnIn: 0, type: "kill", targets: [], item: "", count: 5, x: 0, y: 0, npc: 0, use: "swing",
+  const st = { Giver: giverId || (after ? after.TurnIn : 0), TurnIn: 0, type: "kill", targets: [], item: "", count: 5, x: 0, y: 0, npc: 0, use: "swing", daily: false,
     Title: "", Offer: "", Level: level, MinLevel: Math.max(1, level - 2), XP: sug.XP, Gold: sug.Gold, Zone: after ? after.Zone : "", Act: after ? after.Act : 1 };
   const g0 = S.npcBy[st.Giver]; if (g0) { st.x = g0.SpawnX + 5; st.y = g0.SpawnY; if (!st.Zone) st.Zone = zoneAt(g0.SpawnX, g0.SpawnY); }
   const close = () => { ov.remove(); document.removeEventListener("keydown", esc, true); };
@@ -1124,6 +1217,10 @@ function qsNewQuest(afterId, giverId) {
       h("div", { class: "qs-types" }, types.map(([k, l, ic]) => h("button", { class: "qs-type" + (st.type === k ? " on" : ""), onclick: () => { st.type = k; if (k === "boss") st.count = 1; draw(); } }, pix(ic, "ti"), l))), cfg,
       h("h4", {}, "3. In your words"),
       h("div", { class: "qs-grid2" }, h("label", {}, "Title"), txtIn("Title", "e.g. Pelt Me, Please"), h("label", {}, "Offer"), areaIn("Offer", `What does ${g ? g.Name : "the giver"} say when they ask?`)),
+      S.c.hasDaily ? [h("h4", {}, "4. Once or every day?"),
+        h("div", { class: "qs-seg" }, h("button", { class: st.daily ? "" : "on", onclick: () => { st.daily = false; draw(); } }, "Once"),
+          h("button", { class: "daily" + (st.daily ? " on" : ""), id: "qs-new-daily", onclick: () => { st.daily = true; draw(); } }, qsDailyBadge(), "Daily"),
+          h("span", { class: "hint" }, st.daily ? (st.type === "kill" || st.type === "boss" ? "Each enemy you picked is one possible pick: a different one each day, with {mob} and {count} in the text." : st.type === "collect" ? "The item becomes the {item} list: add more in the quest sheet." : st.type === "reach" ? "The spot becomes the {place} list: add more in the quest sheet." : "Repeatable once a day; add variables in the quest sheet.") : "Done once per character."))] : null,
       h("details", { class: "qs-more" }, h("summary", {}, `Level ${st.Level} (min ${st.MinLevel}) - ${st.XP} XP - ${st.Gold} gold - ${st.Zone || "no zone"} `, h("small", {}, "suggested from nearby quests")),
         h("div", { class: "qs-grid2" }, h("label", {}, "Level"), numIn("Level"), h("label", {}, "Min level"), numIn("MinLevel"), h("label", {}, "XP"), numIn("XP"), h("label", {}, "Gold"), numIn("Gold"), h("label", {}, "Zone"), txtIn("Zone", "zone", "qs-zones"))),
       h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot big", onclick: create }, "Make the quest"), h("span", { class: "hint" }, after ? `It unlocks when “${after.Title}” is done.` : "No prerequisite: it's on offer from the start (link it on the map).")));
@@ -1140,10 +1237,29 @@ function qsNewQuest(afterId, giverId) {
     else if (st.type === "talk") { if (!S.npcBy[st.npc]) { qsToast("Pick who to talk to"); return; } step = { Type: "talk", NPC: st.npc, Count: 1, Text: `Talk to ${npcName(st.npc)}`, Line: "" }; }
     else if (st.type === "use") step = { Type: "use", Target: st.use, Count: Math.max(1, st.count), Text: `${st.use} x${st.count}` };
     else step = { Type: "use", Target: "build", Count: 1, Text: "Build something" };
-    const row = { id: 0, Act: +st.Act || 1, Zone: st.Zone || "", Title: st.Title.trim() || "Untitled quest", Summary: "", Level: Math.max(1, st.Level), MinLevel: Math.max(1, st.MinLevel), Giver: st.Giver, TurnIn: st.TurnIn || st.Giver,
-      Prereqs: JSON.stringify(after ? [after.id] : []), Offer: st.Offer, Accept: "", Progress: "", Complete: "", XP: Math.max(0, st.XP), Gold: Math.max(0, st.Gold), Rewards: "[]", Steps: JSON.stringify([step]), Sequential: 0 };
+    // A daily: the picks become its pool, the step and title use the variables.
+    const pool = [];
+    const daily = st.daily && S.c.hasDaily;
+    if (daily) {
+      const blank = { id: 0, QuestID: 0, Slot: 1, RefID: 0, Name: "", Label: "", Min: 0, Max: 0, X: 0, Y: 0, Radius: 0, Weight: 1 };
+      if (st.type === "kill" || st.type === "boss") {
+        const lo = Math.max(1, st.count), hi = lo + 2;
+        for (const t of st.targets) pool.push({ ...blank, Kind: "mob", Name: t, ...(st.type === "kill" ? { Min: lo, Max: hi } : {}) });
+        step = st.type === "kill" ? { Type: "kill", Target: "{mob}", Count: "{count}", Text: "Kill {count} {mob}" } : { Type: "boss", Target: "{mob}", Count: 1, Text: "Defeat {mob}" };
+      } else if (st.type === "collect") {
+        pool.push({ ...blank, Kind: "item", Name: st.item, Min: Math.max(1, st.count), Max: Math.max(1, st.count) + 2 });
+        step = { Type: "collect", Target: "{item}", Count: "{count}", Text: "Collect {count} {item}" };
+      } else if (st.type === "reach") {
+        pool.push({ ...blank, Kind: "place", X: st.x, Y: st.y, Label: zoneAt(st.x, st.y) || "" });
+        step = { ...step, At: "{place}", Text: "Go to {place}" };
+      }
+    }
+    const key = pool.length ? (pool[0].Kind === "place" ? "{place}" : pool[0].Kind === "item" ? "{item}" : "{mob}") : "";
+    const row = { id: 0, Act: +st.Act || 1, Zone: st.Zone || "", Title: st.Title.trim() || (daily ? `Daily: ${key || "a job"}`.trim() : "Untitled quest"), Summary: "", Level: Math.max(1, st.Level), MinLevel: Math.max(1, st.MinLevel), Giver: st.Giver, TurnIn: st.TurnIn || st.Giver,
+      Prereqs: JSON.stringify(after ? [after.id] : []), Offer: st.Offer, Accept: "", Progress: "", Complete: "", XP: Math.max(0, st.XP), Gold: Math.max(0, st.Gold), Rewards: "[]", Steps: JSON.stringify([step]), Sequential: 0, ...(S.c.hasDaily ? { Daily: daily ? 1 : 0 } : {}) };
     try {
-      const id = await qsCommit("quest_def", row, `New quest: ${row.Title}`);
+      const id = await qsCommit("quest_def", row, `New ${daily ? "daily" : "quest"}: ${row.Title}`);
+      if (pool.length) await qsCommitMany(pool.map(r => ({ table: "quest_daily_pool", row: { ...r, QuestID: id } })), `${row.Title}: ${pool.length} to pick from`);
       close(); QS.sel = id; QS.view = "journey"; QS.arg = id; go("#studio/journey/" + id);
     } catch (e) { qsToast(e.message); }
   }
@@ -1179,13 +1295,254 @@ function qsNewNpc() {
   document.body.append(ov); name.focus();
 }
 
-// Daily quests slot in here: a daily flag and pools of candidate mobs/items
-// are being added to the API (schema note: /workspace/dailyquests/SCHEMA.md).
-// Until quest_def has that column this shows nothing; once it does, the
-// toggle works on it and the pool picker reuses qsPickModal({ multi: true }).
+// ------------------------------------------------------------------ daily quests
+// quest_def.Daily = 1 makes a quest a daily: its text and objectives are a
+// template, filled each loot day (21:00 server time to 21:00) from one pick per
+// list in quest_daily_pool: {mob} {item} {count} {place}, and {mob2} ... for
+// more lists. The API's dailyquests.go rolls it; BQDaily (daily.js) is a port
+// of that roll, so every preview here is what players get.
+const qsIsDaily = q => !!(q && +q.Daily);
+const qsPool = id => (S.c.dailyPools || []).filter(r => r.QuestID === id);
+const QS_TZS = ["Europe/London", "UTC"];
+const qsTz = () => { try { return localStorage.getItem("bq-daily-tz") || "Europe/London"; } catch { return "Europe/London"; } };
+const qsToday = () => BQDaily.day(Date.now(), qsTz());
+const qsRefName = (kind, id) => (kind === "mob" ? (S.enemyBy[id] || {}).Name : (S.itemBy[id] || {}).Name) || "";
+function qsRoll(q, day) {
+  const c = QS._rolls && QS._rolls.v === S.c && QS._rolls.tz === qsTz() ? QS._rolls : (QS._rolls = { v: S.c, tz: qsTz(), m: new Map() });
+  const k = q.id + ":" + day;
+  if (!c.m.has(k)) c.m.set(k, BQDaily.roll(q.id, qsPool(q.id), day, qsRefName));
+  return c.m.get(k);
+}
+// q as players meet it on loot day `day` (today if left out), or with a
+// stored roll; anything but a daily as it is.
+function qsDayDef(q, day, roll) {
+  if (!qsIsDaily(q)) return q;
+  const d = BQDaily.resolve(q, roll || qsRoll(q, day ?? qsToday()));
+  return { ...d, Steps: JSON.stringify(d.Steps) };
+}
+function qsNameSets() {
+  if (QS._ns && QS._ns.v === S.c) return QS._ns.m;
+  const m = { enemy: new Set(S.c.enemies.map(e => e.Name.toLowerCase())), item: new Set(S.c.items.map(i => i.Name.toLowerCase())),
+    enemyId: new Map(S.c.enemies.map(e => [e.id, e.Name])), itemId: new Map(S.c.items.map(i => [i.id, i.Name])) };
+  QS._ns = { v: S.c, m };
+  return m;
+}
+// Text with its {placeholders} drawn as blue chips.
+function qsPh(text) {
+  const out = [], s = String(text || ""); let last = 0;
+  for (const m of s.matchAll(BQDaily.TOKEN)) { if (m.index > last) out.push(s.slice(last, m.index)); out.push(h("span", { class: "qs-var" }, m[0])); last = m.index + m[0].length; }
+  if (last < s.length) out.push(s.slice(last));
+  return out;
+}
+const qsDailyBadge = title => pix("assets/ui/studio/daily-alert.png", "mi qs-dbadge", title || "Daily quest: a new variant at every reset (21:00 server time)");
+const QS_KIND = { mob: 0, item: 1, count: 2, place: 3 };
+const qsKeyParts = k => { const m = /^([a-z]+)(\d*)$/.exec(k) || [k, k, ""]; return { kind: m[1], slot: m[2] ? +m[2] : 1 }; };
+const qsKeySort = (a, b) => { const x = qsKeyParts(a), y = qsKeyParts(b); return (QS_KIND[x.kind] ?? 9) - (QS_KIND[y.kind] ?? 9) || x.slot - y.slot; };
+const qsKindIcon = { mob: "assets/ui/studio/target.png", item: "assets/ui/studio/loot.png", count: "assets/ui/studio/xp.png", place: "assets/ui/studio/arrow.png" };
+const qsKindName = { mob: "Enemies", item: "Items", count: "How many", place: "Places" };
+// Chips for a daily's text fields: what its lists fill, then the four basics.
+function qsChipKeys(q) {
+  if (!qsIsDaily(q)) return null;
+  const have = BQDaily.gives(qsPool(q.id));
+  return [...[...have].sort(qsKeySort).map(k => ({ k, ok: true })), ...BQDaily.KINDS.filter(k => !have.has(k)).map(k => ({ k, ok: false }))];
+}
+const qsResetWords = ms => { const m = Math.max(0, Math.floor(ms / 60000)), hh = Math.floor(m / 60); return hh ? `${hh}h ${m % 60}m` : m ? `${m}m` : "under a minute"; };
+const qsFmt = (ms, tz, o) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, ...o }).format(new Date(ms));
+function qsSpanText(day, tz) {
+  const [a, b] = BQDaily.span(day, tz);
+  const d = ms => qsFmt(ms, tz, { weekday: "short", day: "numeric", month: "short" }), t = ms => qsFmt(ms, tz, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  return `${d(a)} ${t(a)} to ${d(b)} ${t(b)}`;
+}
+function qsDayName(day, today, tz) {
+  if (day === today) return "Today";
+  if (day === today + 1) return "Tomorrow";
+  if (day === today - 1) return "Yesterday";
+  return qsFmt(BQDaily.span(day, tz)[1] - 3 * 3600e3, tz, { weekday: "long" }); // the day it mostly covers
+}
+async function qsDailyEnable() {
+  try {
+    await api("dailyEnable");
+    await loadAll();
+    QS._an = null;
+    qsToast("Daily quests are on in this db (the API's 2026-10-26-daily-quests.sql). Every quest stays Once; the example daily 9001 is in.");
+    status("Added quest_def.Daily, quest_daily_pool and the example daily 9001 (content/migrations/2026-10-26-daily-quests.sql). Save .db or Export SQL to keep it.");
+  } catch (e) { qsToast(e.message); status(e.message, true); }
+  qsRerender();
+}
+// The Once / Daily switch and, for a daily, its lists.
 function qsDailyBox(q, P) {
-  if (!("Daily" in q)) return null;
-  const on = !!+q.Daily;
-  return h("div", { class: "qs-seg" }, h("button", { class: on ? "" : "on", onclick: () => on && P({ Daily: 0 }, "Not a daily") }, "Once"), h("button", { class: on ? "on" : "", onclick: () => !on && P({ Daily: 1 }, "Daily quest") }, "Daily"),
-    h("span", { class: "hint" }, on ? "Rolls a new variant at each daily reset; {mob} {item} {count} in the text are filled in." : "Done once per character."));
+  if (!S.c.hasDaily) return h("div", { class: "qs-dailybox off" }, h("h4", {}, qsDailyBadge(), "Every day?"),
+    h("p", { class: "hint" }, "This db has no daily quests yet (no quest_def.Daily column and quest_daily_pool table)."),
+    h("button", { class: "qs-btn daily big", id: "qs-daily-enable", onclick: qsDailyEnable }, qsDailyBadge(), "Enable daily quests in this db"),
+    h("p", { class: "hint" }, "One tap runs the API's content/migrations/2026-10-26-daily-quests.sql on this copy: the Daily column (every quest stays Once), the list table and the example daily 9001. Safe to run twice; Save .db and Export SQL carry it."));
+  const on = qsIsDaily(q);
+  const seg = h("div", { class: "qs-seg" }, h("button", { class: on ? "" : "on", onclick: () => on && P({ Daily: 0 }, `${q.Title}: done once`) }, "Once"),
+    h("button", { class: "daily" + (on ? " on" : ""), id: "qs-daily-on", onclick: () => !on && P({ Daily: 1 }, `${q.Title} is a daily`) }, qsDailyBadge(), "Daily"),
+    h("span", { class: "hint" }, on ? "A new variant every day at the 21:00 reset; each giver offers one daily a day." : "Done once per character."));
+  if (!on) return h("div", { class: "qs-dailybox" }, h("h4", {}, "Once or every day?"), seg);
+  return h("div", { class: "qs-dailybox on", id: "qs-daily" }, h("h4", {}, qsDailyBadge(), "Daily: what changes each day"), seg, qsPoolEditor(q));
+}
+function qsPoolEditor(q) {
+  const pool = qsPool(q.id), used = BQDaily.uses(q), today = qsRoll(q, qsToday());
+  const keyOf = r => { const c = BQDaily.clean(r); return BQDaily.KINDS.includes(c.Kind) ? BQDaily.key(c.Kind, c.Slot) : ""; };
+  const keys = [...new Set([...pool.map(keyOf).filter(Boolean), ...[...used].filter(k => !/^[a-z]+1$/.test(k))])].sort(qsKeySort);
+  const blank = (kind, slot) => ({ id: 0, QuestID: q.id, Kind: kind, Slot: slot, RefID: 0, Name: "", Label: "", Min: 0, Max: 0, X: 0, Y: 0, Radius: 0, Weight: 1 });
+  const addRows = (rows, label) => qsCommitMany(rows.map(row => ({ table: "quest_daily_pool", row })), label).then(qsRerender).catch(() => {});
+  const pickNames = (kind, slot, k) => {
+    const rows = pool.filter(r => keyOf(r) === k), first = rows.find(r => +r.Min || +r.Max);
+    const range = first ? { Min: +first.Min, Max: +first.Max } : used.has(BQDaily.key("count", slot)) && !BQDaily.gives(pool).has(BQDaily.key("count", slot)) ? { Min: 3, Max: 6 } : {};
+    const entries = kind === "mob" ? enemyEntries() : itemEntries().map(e => ({ ...e, value: S.itemBy[e.value].Name }));
+    qsPickModal(kind === "mob" ? `Enemies for {${k}}` : `Items for {${k}}`, entries, (list, group) => {
+      if (!list.length) return;
+      const rows2 = group ? [{ ...blank(kind, slot), Name: list.join("|"), ...range }] : list.map(n => ({ ...blank(kind, slot), Name: n, ...range }));
+      addRows(rows2, group ? `{${k}} can be any of ${list.join(", ")}` : `{${k}}: ${list.length} more to pick from`);
+    }, { multi: true, group: true });
+  };
+  const addPlace = (slot, k) => {
+    const g = S.npcBy[q.Giver];
+    qsPlaceModal({ X: g ? g.SpawnX + 4 : 0, Y: g ? g.SpawnY : 0, Label: "", Radius: 0 }, v => addRows([{ ...blank("place", slot), ...v }], `{${k}}: ${v.Label || v.X + ", " + v.Y}`));
+  };
+  const adder = (kind, slot, k) => kind === "count" ? h("button", { class: "qs-mini add2", "data-add": k, onclick: () => addRows([{ ...blank("count", slot), Min: 3, Max: 6 }], `{${k}}: 3 to 6`) }, "+ a range")
+    : kind === "place" ? h("button", { class: "qs-mini add2", "data-add": k, onclick: () => addPlace(slot, k) }, "+ a place on the map")
+    : h("button", { class: "qs-mini add2", "data-add": k, onclick: () => pickNames(kind, slot, k) }, kind === "mob" ? "+ enemies" : "+ items");
+  const card = k => {
+    const { kind, slot } = qsKeyParts(k);
+    const rows = pool.filter(r => keyOf(r) === k).sort((a, b) => a.id - b.id);
+    const total = rows.reduce((t, r) => t + Math.max(1, +r.Weight || 1), 0);
+    const v = today.Vals[k];
+    const fromMob = kind === "count" && !rows.length && v && v.fromRow;
+    return h("div", { class: "qs-slot", "data-key": k },
+      h("div", { class: "qs-slot-h" }, pix(qsKindIcon[kind], "mi"), h("span", { class: "qs-var big" }, "{" + k + "}"), h("b", {}, qsKindName[kind] + (slot > 1 ? ` (list ${slot})` : "")), h("span", { class: "qs-sp" }),
+        v ? h("small", { class: "qs-todayv" }, "today: ", h("b", {}, v.Text)) : null),
+      used.has(k) ? null : h("div", { class: "hint warn" }, `Nothing uses {${k}} yet: tap a line to edit it and tap the {${k}} chip.`),
+      rows.length ? h("div", { class: "qs-cands" }, rows.map(r => qsPoolRow(q, r, total, k))) : h("div", { class: "hint" }, fromMob ? `Rolled from the picked ${BQDaily.key("mob", slot)}'s own range (or its item's). Add a range to set it here instead.` : "Empty: add something to pick from."),
+      h("div", { class: "qs-row wrap" }, adder(kind, slot, k), rows.length > 1 ? h("small", { class: "hint" }, `one of ${rows.length} each day, by the odds`) : null));
+  };
+  const next = kind => { let m = 0; for (const r of pool) { const c = BQDaily.clean(r); if (c.Kind === kind) m = Math.max(m, Math.max(1, c.Slot)); } for (const k of used) { const p = qsKeyParts(k); if (p.kind === kind) m = Math.max(m, p.slot); } return m + 1; };
+  const issues = BQDaily.check(q, pool, qsNameSets());
+  const steps = qSteps(q), conv = steps.findIndex(s => ["kill", "boss", "collect", "reach"].includes(s.Type) && !BQDaily.placeholder(s.Type === "reach" ? s.At : s.Target));
+  return h("div", { class: "qs-pool" },
+    !pool.length && conv >= 0 ? h("div", { class: "qs-quick" }, h("button", { class: "qs-btn daily", id: "qs-daily-convert", onclick: () => qsDailyFromStep(q, conv) }, `Quick start: let objective ${conv + 1} change each day`),
+      h("small", { class: "hint" }, steps[conv].Type === "reach" ? " its spot becomes the {place} list" : steps[conv].Type === "collect" ? " its item becomes the {item} list, its count {count}" : " its enemies become the {mob} list, its count {count}")) : null,
+    keys.map(card),
+    h("div", { class: "qs-row wrap qs-addlist" }, h("small", { class: "hint" }, "Another list:"),
+      BQDaily.KINDS.map(kind => { const sl = keys.some(k => qsKeyParts(k).kind === kind) ? next(kind) : 1, k = BQDaily.key(kind, sl);
+        return h("button", { class: "qs-mini", "data-newlist": k, title: `A new list: {${k}}`, onclick: () => kind === "count" ? addRows([{ ...blank("count", sl), Min: 3, Max: 6 }], `{${k}}: 3 to 6`) : kind === "place" ? addPlace(sl, k) : pickNames(kind, sl, k) }, pix(qsKindIcon[kind], "mi"), "{" + k + "}"); })),
+    issues.length ? h("div", { class: "qs-iss" }, issues.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))) : null);
+}
+// One candidate in a list: its look, how it reads, its range and its odds.
+function qsPoolRow(q, r, total, k) {
+  const c = BQDaily.clean(r), kind = c.Kind;
+  const save = (patch, label) => qsCommit("quest_daily_pool", { ...r, ...patch }, label).then(qsRerender);
+  const w = Math.max(1, c.Weight), pct = Math.round((100 * w) / total);
+  const odds = h("span", { class: "qs-odds", title: "How likely this one is against the others in the list" },
+    h("button", { class: "qs-mini", "data-act": "less", disabled: w <= 1, onclick: () => w > 1 && save({ Weight: w - 1 }, `{${k}}: less likely`) }, "-"),
+    h("b", { class: "qs-pct" }, pct + "%"),
+    h("button", { class: "qs-mini", "data-act": "more", onclick: () => save({ Weight: w + 1 }, `{${k}}: more likely`) }, "+"));
+  const rm = h("button", { class: "qs-mini", "data-act": "remove", title: "Take it off the list", onclick: () => qsCommitMany([{ table: "quest_daily_pool", id: r.id, delete: true }], `Removed one from {${k}}`).then(qsRerender).catch(() => {}) }, "x");
+  const rangeText = (lo, hi) => (lo || hi ? `${lo}-${Math.max(lo, hi)}` : "");
+  const parseRange = v => { const m = String(v).match(/(\d+)\s*(?:-|to|\.\.)?\s*(\d+)?/); return m ? { Min: +m[1], Max: +(m[2] || m[1]) } : { Min: 0, Max: 0 }; };
+  let main;
+  if (kind === "mob" || kind === "item") {
+    let nm = c.Name.trim(); if (!nm && c.RefID) nm = qsRefName(kind, c.RefID);
+    const names = nm.split("|").map(x => x.trim()).filter(Boolean);
+    const by = kind === "mob" ? enemyByName() : itemByName();
+    const img = n => (by[n.toLowerCase()] ? (kind === "mob" ? by[n.toLowerCase()].Image : by[n.toLowerCase()].ImgPath) : "assets/error.png");
+    const entries = kind === "mob" ? enemyEntries() : itemEntries().map(e => ({ ...e, value: S.itemBy[e.value].Name }));
+    const ck = BQDaily.key("count", c.Slot);
+    main = [h("button", { class: "qs-cpic", title: names.length > 1 ? "A group: any of these counts. Tap to change it." : "Tap to change it (pick several for a group: any of them counts)",
+        onclick: () => qsPickModal(kind === "mob" ? "Which enemies? Several = a group, any counts" : "Which items? Several = a group", entries, list => list.length && save({ Name: list.join("|"), RefID: 0 }, `{${k}}: ${list.join(" or ")}`), { multi: true, selected: names, hint: "Several make one group: any of them counts" }) },
+        names.length ? names.slice(0, 4).map(n => pix(img(n), "pc2" + (by[n.toLowerCase()] ? "" : " bad"), n)) : h("span", { class: "big none" }, "?")),
+      h("div", { class: "qs-ct" }, h("b", { class: names.some(n => !by[n.toLowerCase()]) || !names.length ? "bad" : "" }, names.join(" or ") || "nothing picked", names.length > 1 ? h("small", { class: "hint" }, " (group)") : null),
+        h("div", {}, h("small", {}, "reads "), qsInline(c.Label, v => save({ Label: v }, `{${k}} reads "${v || names.join(" or ")}"`), { ph: names.join(" or ") || "-", title: `What {${k}} says in the text (empty: the name)` })),
+        h("div", {}, h("small", {}, `{${ck}} `), qsInline(rangeText(c.Min, c.Max), v => save(parseRange(v), `{${k}}: {${ck}} ${v}`), { ph: "no range", title: `When this is picked it also rolls {${ck}}, if that has no list of its own. e.g. 4-6` })))];
+  } else if (kind === "count") {
+    main = [h("span", { class: "qs-cpic" }, pix("assets/ui/studio/xp.png", "pc2")),
+      h("div", { class: "qs-ct" }, h("b", {}, "from "), qsInline(String(c.Min), v => save({ Min: Math.max(0, +v || 0) }, `{${k}} from ${v}`), { num: true }), h("b", {}, " to "), qsInline(String(Math.max(c.Min, c.Max)), v => save({ Max: Math.max(0, +v || 0) }, `{${k}} to ${v}`), { num: true }))];
+  } else {
+    const thumb = qsWorldCanvas({ cx: c.X, cy: c.Y, w: 96, h: 64, sc: 8, pin: { x: c.X, y: c.Y } });
+    main = [h("button", { class: "qs-cpic map", title: "Move it on the map", onclick: () => qsPlaceModal(c, v => save(v, `{${k}}: ${v.Label || v.X + ", " + v.Y}`)) }, thumb),
+      h("div", { class: "qs-ct" }, h("b", {}, c.Label || c.Name || `${c.X}, ${c.Y}`),
+        h("div", {}, h("small", {}, "reads "), qsInline(c.Label, v => save({ Label: v }, `{${k}} reads "${v}"`), { ph: c.Name || `${c.X}, ${c.Y}` })),
+        h("div", {}, h("small", {}, `at ${c.X},${c.Y}${zoneAt(c.X, c.Y) ? " - " + zoneAt(c.X, c.Y) : ""}, radius `), qsInline(String(c.Radius || 0), v => save({ Radius: Math.max(0, +v || 0) }, `{${k}} radius ${v}`), { num: true, title: "0 keeps the step's own (3)" })))];
+  }
+  return h("div", { class: "qs-cand", "data-row": r.id }, main, h("div", { class: "qs-cr" }, odds, rm));
+}
+// Pick a spot for a {place}: click the map, name it, set a radius.
+function qsPlaceModal(c, onSave) {
+  const st = { X: c.X, Y: c.Y, Label: c.Label || "", Radius: +c.Radius || 0 };
+  const close = () => { ov.remove(); document.removeEventListener("keydown", esc, true); };
+  const esc = e => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  const pin = { x: st.X, y: st.Y };
+  const where = h("b", {}, `${st.X},${st.Y} ${zoneAt(st.X, st.Y)}`);
+  const lab = h("input", { class: "qs-in", placeholder: "how it reads, e.g. the old well", value: st.Label, oninput: () => (st.Label = lab.value) });
+  const rad = h("input", { class: "qs-in num", type: "number", min: 0, value: st.Radius, oninput: () => (st.Radius = +rad.value || 0) });
+  const map = qsWorldCanvas({ cx: st.X, cy: st.Y, w: 460, h: 260, sc: 12, pin, onPick: (x, y) => { st.X = pin.x = x; st.Y = pin.y = y; where.textContent = `${x},${y} ${zoneAt(x, y)}`; if (!lab.value && zoneAt(x, y)) { lab.placeholder = zoneAt(x, y); } } });
+  const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } },
+    h("div", { class: "qs-win qs-newwin" }, h("div", { class: "qs-wtitle" }, h("span", {}, "A PLACE FOR {PLACE}"), h("button", { class: "qs-x", onclick: close }, "x")),
+      h("div", { class: "qs-wbody" }, h("div", { class: "hint" }, "Tap the map where they should go. Drag to look around."), map, h("div", {}, "Spot: ", where),
+        h("div", { class: "qs-grid2" }, h("label", {}, "Reads as"), lab, h("label", {}, "Radius"), h("span", {}, rad, h("small", { class: "hint" }, " tiles; 0 keeps the step's own (3)"))),
+        h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot big", id: "qs-place-ok", onclick: () => { close(); onSave({ X: st.X, Y: st.Y, Label: st.Label.trim() || zoneAt(st.X, st.Y) || "", Radius: st.Radius }); } }, "Use this place")))));
+  document.body.append(ov); document.addEventListener("keydown", esc, true);
+}
+// One tap from a plain objective to a varying one: its targets become the
+// list and the objective (and its text) use the variables.
+async function qsDailyFromStep(q, i) {
+  const steps = qSteps(q), s = { ...steps[i] }, names = stepNames(s), sc = BQDaily.stepCount(s.Count), n = sc.n || 1;
+  const blank = kind => ({ id: 0, QuestID: q.id, Kind: kind, Slot: 1, RefID: 0, Name: "", Label: "", Min: 0, Max: 0, X: 0, Y: 0, Radius: 0, Weight: 1 });
+  const rows = [];
+  if (s.Type === "kill" || s.Type === "boss") {
+    names.forEach(nm => rows.push({ ...blank("mob"), Name: nm, ...(s.Type === "kill" ? { Min: n, Max: n + 2 } : {}) }));
+    s.Target = "{mob}"; delete s.Targets; if (s.Type === "kill") s.Count = "{count}";
+    s.Text = s.Type === "kill" ? "Kill {count} {mob}" : "Defeat {mob}";
+  } else if (s.Type === "collect") {
+    names.slice(0, 1).forEach(nm => rows.push({ ...blank("item"), Name: nm, Min: n, Max: n + 2 }));
+    s.Target = "{item}"; delete s.Targets; s.Count = "{count}"; s.Text = "Collect {count} {item}";
+  } else {
+    rows.push({ ...blank("place"), X: +s.X || 0, Y: +s.Y || 0, Label: zoneAt(+s.X, +s.Y) || "" });
+    s.At = "{place}"; s.Text = "Go to {place}";
+  }
+  steps[i] = s;
+  const list = [{ table: "quest_def", row: { ...q, Steps: JSON.stringify(steps) } }, ...rows.map(row => ({ table: "quest_daily_pool", row }))];
+  await qsCommitMany(list, `${q.Title}: objective ${i + 1} changes each day`).catch(() => {});
+  qsRerender();
+}
+// Today, tomorrow and the days after, as the server rolls them.
+function qsRollPreview(q) {
+  const tz = qsTz(), today = qsToday(), now = Date.now(), end = BQDaily.span(today, tz)[1];
+  const tzSel = h("select", { class: "qs-sel", title: "The server's clock: the reset is 21:00 there", id: "qs-daily-tz" },
+    [...new Set([tz, ...QS_TZS, Intl.DateTimeFormat().resolvedOptions().timeZone])].map(z => h("option", { value: z }, z)));
+  tzSel.value = tz;
+  tzSel.onchange = () => { try { localStorage.setItem("bq-daily-tz", tzSel.value); } catch {} QS._rolls = null; qsRerender(); };
+  const day = d => {
+    const r = qsRoll(q, d), def = qsDayDef(q, d, r), steps = qSteps(def);
+    return h("div", { class: "qs-rollday" + (d === today ? " today" : ""), "data-day": d },
+      h("div", { class: "qs-rd-h" }, h("b", {}, qsDayName(d, today, tz)), h("small", {}, qsSpanText(d, tz))),
+      h("div", { class: "qs-rd-t" }, def.Title),
+      steps.map(s => h("div", { class: "qs-rd-s" }, pix(stepIcon(s), "mi"), " ", s.Text || stepLabel(s))),
+      h("div", { class: "qs-rd-v" }, Object.keys(r.Vals).sort(qsKeySort).map(k => h("span", { class: "qs-chip" }, h("span", { class: "qs-var" }, "{" + k + "}"), " ", r.Vals[k].Text))));
+  };
+  return h("div", { class: "qs-rollbox", id: "qs-roll" },
+    h("h4", {}, "Roll preview"),
+    h("p", { class: "hint" }, "The server's own roll (the same seed per day, quest and list), so this is what players get. Next reset in ", h("b", {}, qsResetWords(end - now)), ", at 21:00 ", tzSel),
+    h("div", { class: "qs-rolls" }, [...Array(7)].map((_, i) => day(today + i))));
+}
+// The playtest's dailies: what each one is doing for this character today.
+function qsPlayDailies(P, dailies, talkBtn) {
+  const day = qsPDay(P), tz = qsTz(), today = qsToday();
+  const row = q => {
+    const st = P.state[q.id], d = qsPDef(P, q), claimed = P.claims && P.claims[q.id] >= day;
+    let what, act = null;
+    if (st === "ready") { what = "ready to hand in"; act = talkBtn(q.TurnIn, "hand in to " + npcName(q.TurnIn)); }
+    else if (st === "active") { what = `taken: ${d.Title}`; act = h("button", { class: "qs-mini", onclick: () => { P.state[q.id] = "ready"; P.log.push({ t: "obj", q: q.id, title: d.Title }); qsRerender(); } }, "do objectives"); }
+    else if (claimed) what = "claimed today: hidden until the 21:00 reset";
+    else if (qsAvail(P, q)) { what = "on offer today"; act = talkBtn(q.Giver); }
+    else if (qsDailyBusy(P, q)) what = `${npcName(q.Giver)} has given today's daily`;
+    else what = "locked: " + qsWhyLocked(q);
+    return h("div", { class: "qs-prow daily", "data-daily": q.id, "data-state": st || (claimed ? "claimed" : qsAvail(P, q) ? "offer" : "wait") }, qsDailyBadge(), h("a", { href: "#studio/journey/" + q.id }, d.Title), h("small", {}, what), h("span", { class: "qs-sp" }), act);
+  };
+  return h("div", { class: "qs-win daily", id: "qs-play-daily" }, h("div", { class: "qs-wtitle" }, qsDailyBadge(), h("span", {}, "DAILY QUESTS"), h("span", { class: "qs-sp" }),
+      h("button", { class: "qs-mini", id: "qs-next-reset", title: "Jump to the next 21:00 reset: claimed dailies come back with a new roll", onclick: () => { P.day = day + 1; P.log.push({ t: "reset", day: P.day }); qsRerender(); } }, "next reset >"),
+      day !== today ? h("button", { class: "qs-mini", onclick: () => { P.day = today; qsRerender(); } }, "today") : null),
+    h("div", { class: "qs-wbody" }, h("p", { class: "hint" }, `${qsDayName(day, today, tz)}: ${qsSpanText(day, tz)} (${tz}). A taken daily keeps its variant past the reset.`), dailies.map(row)));
 }

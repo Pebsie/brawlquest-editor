@@ -1,0 +1,2108 @@
+{
+ "cases": [
+  {
+   "id": 9001,
+   "pool": [
+    {
+     "ID": 1,
+     "Kind": "mob",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": "Spider",
+     "Label": "Spiders",
+     "Min": 4,
+     "Max": 6,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 1
+    },
+    {
+     "ID": 2,
+     "Kind": "mob",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": "Spider|Cave Spider",
+     "Label": "spiders of any kind",
+     "Min": 6,
+     "Max": 8,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 1
+    },
+    {
+     "ID": 3,
+     "Kind": "mob",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": "Tree",
+     "Label": "Trees",
+     "Min": 2,
+     "Max": 3,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 1
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "pool": [
+    {
+     "ID": 1,
+     "Kind": "mob",
+     "Slot": 0,
+     "RefID": 0,
+     "Name": "Spider|Cave Spider",
+     "Label": "spiders",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 2,
+     "Kind": "mob",
+     "Slot": 0,
+     "RefID": 0,
+     "Name": "Wolf",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 3,
+     "Kind": "mob",
+     "Slot": 0,
+     "RefID": 0,
+     "Name": "Bandit",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 3
+    },
+    {
+     "ID": 4,
+     "Kind": "count",
+     "Slot": 0,
+     "RefID": 0,
+     "Name": "",
+     "Label": "",
+     "Min": 3,
+     "Max": 6,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    }
+   ]
+  },
+  {
+   "id": 1777,
+   "pool": [
+    {
+     "ID": 10,
+     "Kind": "item",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": "Wolf Pelt",
+     "Label": "",
+     "Min": 2,
+     "Max": 9,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 2
+    },
+    {
+     "ID": 11,
+     "Kind": "item",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": " Bone | Skull ",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 12,
+     "Kind": "mob",
+     "Slot": 2,
+     "RefID": 0,
+     "Name": "Bandit",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 5
+    },
+    {
+     "ID": 13,
+     "Kind": "mob",
+     "Slot": 2,
+     "RefID": 0,
+     "Name": "Rat|Big Rat",
+     "Label": "",
+     "Min": 10,
+     "Max": 20,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 14,
+     "Kind": "count",
+     "Slot": 2,
+     "RefID": 0,
+     "Name": "",
+     "Label": "",
+     "Min": 1,
+     "Max": 2,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 15,
+     "Kind": "place",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": "",
+     "Label": "the old well",
+     "Min": 0,
+     "Max": 0,
+     "X": 10,
+     "Y": -4,
+     "Radius": 2.5,
+     "Weight": 0
+    },
+    {
+     "ID": 16,
+     "Kind": "place",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": "Farm",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 3,
+     "Y": 7,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 17,
+     "Kind": "place",
+     "Slot": 1,
+     "RefID": 0,
+     "Name": "",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": -2,
+     "Y": 1,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 18,
+     "Kind": "count",
+     "Slot": 3,
+     "RefID": 0,
+     "Name": "",
+     "Label": "",
+     "Min": 5,
+     "Max": 2,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 19,
+     "Kind": "mob",
+     "Slot": 4,
+     "RefID": 0,
+     "Name": "Tree",
+     "Label": "",
+     "Min": 1,
+     "Max": 1,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 20,
+     "Kind": "item",
+     "Slot": 4,
+     "RefID": 0,
+     "Name": "Log",
+     "Label": "",
+     "Min": 7,
+     "Max": 8,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 21,
+     "Kind": "mob",
+     "Slot": 1,
+     "RefID": 5,
+     "Name": "",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    }
+   ]
+  },
+  {
+   "id": 2147483000,
+   "pool": [
+    {
+     "ID": 1,
+     "Kind": "count",
+     "Slot": 0,
+     "RefID": 0,
+     "Name": "",
+     "Label": "",
+     "Min": 0,
+     "Max": 1000000,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 0
+    },
+    {
+     "ID": 2,
+     "Kind": "mob",
+     "Slot": 0,
+     "RefID": 0,
+     "Name": "A",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 1000
+    },
+    {
+     "ID": 3,
+     "Kind": "mob",
+     "Slot": 0,
+     "RefID": 0,
+     "Name": "B",
+     "Label": "",
+     "Min": 0,
+     "Max": 0,
+     "X": 0,
+     "Y": 0,
+     "Radius": 0,
+     "Weight": 1
+    }
+   ]
+  }
+ ],
+ "days": [
+  "2026-10-26T20:59:59=20751",
+  "2026-10-26T21:00:00=20752",
+  "2026-03-29T20:30:00=20540",
+  "2026-03-29T21:00:00=20540",
+  "2026-07-01T23:00:00=20635"
+ ],
+ "raw": [
+  "mob:9561385526387673476:9425919774069002676:12159647185268091146",
+  "count2:6362554129759663121:8927942058850451874:9392263572454152618",
+  "place:12707229815986002999:1190799856876621665:13093337705957291793",
+  ":15227478315307523264:11515120047365109378:3289141188006006681"
+ ],
+ "rolls": [
+  {
+   "day": 0,
+   "id": 9001,
+   "roll": {
+    "Day": 0,
+    "Vals": {
+     "count": {
+      "Text": "3",
+      "Count": 3
+     },
+     "mob": {
+      "Text": "Trees",
+      "Names": [
+       "Tree"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 1,
+   "id": 9001,
+   "roll": {
+    "Day": 1,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "mob": {
+      "Text": "Spiders",
+      "Names": [
+       "Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 2,
+   "id": 9001,
+   "roll": {
+    "Day": 2,
+    "Vals": {
+     "count": {
+      "Text": "2",
+      "Count": 2
+     },
+     "mob": {
+      "Text": "Trees",
+      "Names": [
+       "Tree"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 7,
+   "id": 9001,
+   "roll": {
+    "Day": 7,
+    "Vals": {
+     "count": {
+      "Text": "8",
+      "Count": 8
+     },
+     "mob": {
+      "Text": "spiders of any kind",
+      "Names": [
+       "Spider",
+       "Cave Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20000,
+   "id": 9001,
+   "roll": {
+    "Day": 20000,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "mob": {
+      "Text": "Spiders",
+      "Names": [
+       "Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20386,
+   "id": 9001,
+   "roll": {
+    "Day": 20386,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "mob": {
+      "Text": "Spiders",
+      "Names": [
+       "Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20387,
+   "id": 9001,
+   "roll": {
+    "Day": 20387,
+    "Vals": {
+     "count": {
+      "Text": "2",
+      "Count": 2
+     },
+     "mob": {
+      "Text": "Trees",
+      "Names": [
+       "Tree"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20388,
+   "id": 9001,
+   "roll": {
+    "Day": 20388,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "mob": {
+      "Text": "Spiders",
+      "Names": [
+       "Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20389,
+   "id": 9001,
+   "roll": {
+    "Day": 20389,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Spiders",
+      "Names": [
+       "Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20390,
+   "id": 9001,
+   "roll": {
+    "Day": 20390,
+    "Vals": {
+     "count": {
+      "Text": "2",
+      "Count": 2
+     },
+     "mob": {
+      "Text": "Trees",
+      "Names": [
+       "Tree"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20391,
+   "id": 9001,
+   "roll": {
+    "Day": 20391,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Spiders",
+      "Names": [
+       "Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20392,
+   "id": 9001,
+   "roll": {
+    "Day": 20392,
+    "Vals": {
+     "count": {
+      "Text": "3",
+      "Count": 3
+     },
+     "mob": {
+      "Text": "Trees",
+      "Names": [
+       "Tree"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20393,
+   "id": 9001,
+   "roll": {
+    "Day": 20393,
+    "Vals": {
+     "count": {
+      "Text": "3",
+      "Count": 3
+     },
+     "mob": {
+      "Text": "Trees",
+      "Names": [
+       "Tree"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 99999,
+   "id": 9001,
+   "roll": {
+    "Day": 99999,
+    "Vals": {
+     "count": {
+      "Text": "5",
+      "Count": 5
+     },
+     "mob": {
+      "Text": "Spiders",
+      "Names": [
+       "Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 2000000,
+   "id": 9001,
+   "roll": {
+    "Day": 2000000,
+    "Vals": {
+     "count": {
+      "Text": "7",
+      "Count": 7
+     },
+     "mob": {
+      "Text": "spiders of any kind",
+      "Names": [
+       "Spider",
+       "Cave Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 0,
+   "id": 1,
+   "roll": {
+    "Day": 0,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "spiders",
+      "Names": [
+       "Spider",
+       "Cave Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 1,
+   "id": 1,
+   "roll": {
+    "Day": 1,
+    "Vals": {
+     "count": {
+      "Text": "3",
+      "Count": 3
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 2,
+   "id": 1,
+   "roll": {
+    "Day": 2,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 7,
+   "id": 1,
+   "roll": {
+    "Day": 7,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Wolf",
+      "Names": [
+       "Wolf"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20000,
+   "id": 1,
+   "roll": {
+    "Day": 20000,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "spiders",
+      "Names": [
+       "Spider",
+       "Cave Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20386,
+   "id": 1,
+   "roll": {
+    "Day": 20386,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20387,
+   "id": 1,
+   "roll": {
+    "Day": 20387,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20388,
+   "id": 1,
+   "roll": {
+    "Day": 20388,
+    "Vals": {
+     "count": {
+      "Text": "3",
+      "Count": 3
+     },
+     "mob": {
+      "Text": "spiders",
+      "Names": [
+       "Spider",
+       "Cave Spider"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20389,
+   "id": 1,
+   "roll": {
+    "Day": 20389,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20390,
+   "id": 1,
+   "roll": {
+    "Day": 20390,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20391,
+   "id": 1,
+   "roll": {
+    "Day": 20391,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "mob": {
+      "Text": "Wolf",
+      "Names": [
+       "Wolf"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20392,
+   "id": 1,
+   "roll": {
+    "Day": 20392,
+    "Vals": {
+     "count": {
+      "Text": "3",
+      "Count": 3
+     },
+     "mob": {
+      "Text": "Wolf",
+      "Names": [
+       "Wolf"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20393,
+   "id": 1,
+   "roll": {
+    "Day": 20393,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 99999,
+   "id": 1,
+   "roll": {
+    "Day": 99999,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 2000000,
+   "id": 1,
+   "roll": {
+    "Day": 2000000,
+    "Vals": {
+     "count": {
+      "Text": "5",
+      "Count": 5
+     },
+     "mob": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 0,
+   "id": 1777,
+   "roll": {
+    "Day": 0,
+    "Vals": {
+     "count": {
+      "Text": "8",
+      "Count": 8
+     },
+     "count2": {
+      "Text": "1",
+      "Count": 1
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "7",
+      "Count": 7
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "the old well",
+      "X": 10,
+      "Y": -4,
+      "Radius": 2.5
+     }
+    }
+   }
+  },
+  {
+   "day": 1,
+   "id": 1777,
+   "roll": {
+    "Day": 1,
+    "Vals": {
+     "count2": {
+      "Text": "1",
+      "Count": 1
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "7",
+      "Count": 7
+     },
+     "item": {
+      "Text": "Bone or Skull",
+      "Names": [
+       "Bone",
+       "Skull"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "the old well",
+      "X": 10,
+      "Y": -4,
+      "Radius": 2.5
+     }
+    }
+   }
+  },
+  {
+   "day": 2,
+   "id": 1777,
+   "roll": {
+    "Day": 2,
+    "Vals": {
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Bone or Skull",
+      "Names": [
+       "Bone",
+       "Skull"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Rat or Big Rat",
+      "Names": [
+       "Rat",
+       "Big Rat"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "the old well",
+      "X": 10,
+      "Y": -4,
+      "Radius": 2.5
+     }
+    }
+   }
+  },
+  {
+   "day": 7,
+   "id": 1777,
+   "roll": {
+    "Day": 7,
+    "Vals": {
+     "count": {
+      "Text": "8",
+      "Count": 8
+     },
+     "count2": {
+      "Text": "1",
+      "Count": 1
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "Farm",
+      "X": 3,
+      "Y": 7
+     }
+    }
+   }
+  },
+  {
+   "day": 20000,
+   "id": 1777,
+   "roll": {
+    "Day": 20000,
+    "Vals": {
+     "count": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "7",
+      "Count": 7
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "the old well",
+      "X": 10,
+      "Y": -4,
+      "Radius": 2.5
+     }
+    }
+   }
+  },
+  {
+   "day": 20386,
+   "id": 1777,
+   "roll": {
+    "Day": 20386,
+    "Vals": {
+     "count": {
+      "Text": "8",
+      "Count": 8
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "7",
+      "Count": 7
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "Farm",
+      "X": 3,
+      "Y": 7
+     }
+    }
+   }
+  },
+  {
+   "day": 20387,
+   "id": 1777,
+   "roll": {
+    "Day": 20387,
+    "Vals": {
+     "count": {
+      "Text": "8",
+      "Count": 8
+     },
+     "count2": {
+      "Text": "1",
+      "Count": 1
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "7",
+      "Count": 7
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "Farm",
+      "X": 3,
+      "Y": 7
+     }
+    }
+   }
+  },
+  {
+   "day": 20388,
+   "id": 1777,
+   "roll": {
+    "Day": 20388,
+    "Vals": {
+     "count": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "Farm",
+      "X": 3,
+      "Y": 7
+     }
+    }
+   }
+  },
+  {
+   "day": 20389,
+   "id": 1777,
+   "roll": {
+    "Day": 20389,
+    "Vals": {
+     "count": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "7",
+      "Count": 7
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "Farm",
+      "X": 3,
+      "Y": 7
+     }
+    }
+   }
+  },
+  {
+   "day": 20390,
+   "id": 1777,
+   "roll": {
+    "Day": 20390,
+    "Vals": {
+     "count": {
+      "Text": "6",
+      "Count": 6
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "Farm",
+      "X": 3,
+      "Y": 7
+     }
+    }
+   }
+  },
+  {
+   "day": 20391,
+   "id": 1777,
+   "roll": {
+    "Day": 20391,
+    "Vals": {
+     "count": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "7",
+      "Count": 7
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "-2, 1",
+      "X": -2,
+      "Y": 1
+     }
+    }
+   }
+  },
+  {
+   "day": 20392,
+   "id": 1777,
+   "roll": {
+    "Day": 20392,
+    "Vals": {
+     "count": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count2": {
+      "Text": "1",
+      "Count": 1
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "the old well",
+      "X": 10,
+      "Y": -4,
+      "Radius": 2.5
+     }
+    }
+   }
+  },
+  {
+   "day": 20393,
+   "id": 1777,
+   "roll": {
+    "Day": 20393,
+    "Vals": {
+     "count": {
+      "Text": "3",
+      "Count": 3
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "Farm",
+      "X": 3,
+      "Y": 7
+     }
+    }
+   }
+  },
+  {
+   "day": 99999,
+   "id": 1777,
+   "roll": {
+    "Day": 99999,
+    "Vals": {
+     "count": {
+      "Text": "4",
+      "Count": 4
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "-2, 1",
+      "X": -2,
+      "Y": 1
+     }
+    }
+   }
+  },
+  {
+   "day": 2000000,
+   "id": 1777,
+   "roll": {
+    "Day": 2000000,
+    "Vals": {
+     "count": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count2": {
+      "Text": "2",
+      "Count": 2
+     },
+     "count3": {
+      "Text": "5",
+      "Count": 5
+     },
+     "count4": {
+      "Text": "8",
+      "Count": 8
+     },
+     "item": {
+      "Text": "Wolf Pelt",
+      "Names": [
+       "Wolf Pelt"
+      ]
+     },
+     "item4": {
+      "Text": "Log",
+      "Names": [
+       "Log"
+      ]
+     },
+     "mob": {
+      "Text": "mob#5",
+      "Names": [
+       "mob#5"
+      ]
+     },
+     "mob2": {
+      "Text": "Bandit",
+      "Names": [
+       "Bandit"
+      ]
+     },
+     "mob4": {
+      "Text": "Tree",
+      "Names": [
+       "Tree"
+      ]
+     },
+     "place": {
+      "Text": "the old well",
+      "X": 10,
+      "Y": -4,
+      "Radius": 2.5
+     }
+    }
+   }
+  },
+  {
+   "day": 0,
+   "id": 2147483000,
+   "roll": {
+    "Day": 0,
+    "Vals": {
+     "count": {
+      "Text": "439891",
+      "Count": 439891
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 1,
+   "id": 2147483000,
+   "roll": {
+    "Day": 1,
+    "Vals": {
+     "count": {
+      "Text": "471249",
+      "Count": 471249
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 2,
+   "id": 2147483000,
+   "roll": {
+    "Day": 2,
+    "Vals": {
+     "count": {
+      "Text": "231468",
+      "Count": 231468
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 7,
+   "id": 2147483000,
+   "roll": {
+    "Day": 7,
+    "Vals": {
+     "count": {
+      "Text": "792562",
+      "Count": 792562
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20000,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20000,
+    "Vals": {
+     "count": {
+      "Text": "467468",
+      "Count": 467468
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20386,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20386,
+    "Vals": {
+     "count": {
+      "Text": "494750",
+      "Count": 494750
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20387,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20387,
+    "Vals": {
+     "count": {
+      "Text": "940421",
+      "Count": 940421
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20388,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20388,
+    "Vals": {
+     "count": {
+      "Text": "691292",
+      "Count": 691292
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20389,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20389,
+    "Vals": {
+     "count": {
+      "Text": "287542",
+      "Count": 287542
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20390,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20390,
+    "Vals": {
+     "count": {
+      "Text": "80345",
+      "Count": 80345
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20391,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20391,
+    "Vals": {
+     "count": {
+      "Text": "243809",
+      "Count": 243809
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20392,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20392,
+    "Vals": {
+     "count": {
+      "Text": "62908",
+      "Count": 62908
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 20393,
+   "id": 2147483000,
+   "roll": {
+    "Day": 20393,
+    "Vals": {
+     "count": {
+      "Text": "335182",
+      "Count": 335182
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 99999,
+   "id": 2147483000,
+   "roll": {
+    "Day": 99999,
+    "Vals": {
+     "count": {
+      "Text": "29327",
+      "Count": 29327
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "day": 2000000,
+   "id": 2147483000,
+   "roll": {
+    "Day": 2000000,
+    "Vals": {
+     "count": {
+      "Text": "431894",
+      "Count": 431894
+     },
+     "mob": {
+      "Text": "A",
+      "Names": [
+       "A"
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

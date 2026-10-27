@@ -1,0 +1,975 @@
+{
+ "out": [
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P Tree",
+   "Steps": [
+    {
+     "Count": 3,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Tree",
+     "Targets": [
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 3 Tree and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Wolf Pelt",
+     "Targets": null,
+     "Text": "Bring {count2} Wolf Pelt",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About Tree...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell Tree",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 3",
+   "Title": "Tree and Wolf Pelt at the well",
+   "day": 20750
+  },
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P Tree",
+   "Steps": [
+    {
+     "Count": 3,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Tree",
+     "Targets": [
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 3 Tree and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Wolf Pelt",
+     "Targets": null,
+     "Text": "Bring {count2} Wolf Pelt",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About Tree...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell Tree",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 3",
+   "Title": "Tree and Wolf Pelt at the well",
+   "day": 20751
+  },
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P Tree",
+   "Steps": [
+    {
+     "Count": 4,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Tree",
+     "Targets": [
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 4 Tree and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Wolf Pelt",
+     "Targets": null,
+     "Text": "Bring {count2} Wolf Pelt",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About Tree...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell Tree",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 4",
+   "Title": "Tree and Wolf Pelt at the well",
+   "day": 20752
+  },
+  {
+   "Accept": "A",
+   "Complete": "C -3, 2",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P Tree",
+   "Steps": [
+    {
+     "Count": 3,
+     "Hint": "-3, 2 {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Tree",
+     "Targets": [
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 3 Tree and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Bone",
+     "Targets": null,
+     "Text": "Bring {count2} Bone",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 3,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout -3, 2",
+     "Type": "reach",
+     "X": -3,
+     "Y": 2
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About Tree...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell Tree",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 3",
+   "Title": "Tree and Bone at -3, 2",
+   "day": 20753
+  },
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P spiders",
+   "Steps": [
+    {
+     "Count": 4,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Spider",
+     "Targets": [
+      "Cave Spider",
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 4 spiders and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Wolf Pelt",
+     "Targets": null,
+     "Text": "Bring {count2} Wolf Pelt",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About spiders...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell spiders",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 4",
+   "Title": "spiders and Wolf Pelt at the well",
+   "day": 20754
+  },
+  {
+   "Accept": "A",
+   "Complete": "C -3, 2",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P spiders",
+   "Steps": [
+    {
+     "Count": 3,
+     "Hint": "-3, 2 {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Spider",
+     "Targets": [
+      "Cave Spider",
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 3 spiders and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Bone",
+     "Targets": null,
+     "Text": "Bring {count2} Bone",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 3,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout -3, 2",
+     "Type": "reach",
+     "X": -3,
+     "Y": 2
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About spiders...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell spiders",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 3",
+   "Title": "spiders and Bone at -3, 2",
+   "day": 20755
+  },
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P spiders",
+   "Steps": [
+    {
+     "Count": 3,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Spider",
+     "Targets": [
+      "Cave Spider",
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 3 spiders and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Bone",
+     "Targets": null,
+     "Text": "Bring {count2} Bone",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About spiders...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell spiders",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 3",
+   "Title": "spiders and Bone at the well",
+   "day": 20756
+  },
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P Tree",
+   "Steps": [
+    {
+     "Count": 2,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Tree",
+     "Targets": [
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 2 Tree and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Bone",
+     "Targets": null,
+     "Text": "Bring {count2} Bone",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About Tree...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell Tree",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 2",
+   "Title": "Tree and Bone at the well",
+   "day": 20757
+  },
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P Tree",
+   "Steps": [
+    {
+     "Count": 2,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Tree",
+     "Targets": [
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 2 Tree and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Wolf Pelt",
+     "Targets": null,
+     "Text": "Bring {count2} Wolf Pelt",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About Tree...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell Tree",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 2",
+   "Title": "Tree and Wolf Pelt at the well",
+   "day": 20758
+  },
+  {
+   "Accept": "A",
+   "Complete": "C the well",
+   "Offer": "O Bandit or Thief {count2}",
+   "Progress": "P Tree",
+   "Steps": [
+    {
+     "Count": 4,
+     "Hint": "the well {unknown}",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Tree",
+     "Targets": [
+      "Bandit",
+      "Thief",
+      "Wolf"
+     ],
+     "Text": "Kill 4 Tree and Bandit or Thief",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "Bone",
+     "Targets": null,
+     "Text": "Bring {count2} Bone",
+     "Type": "collect",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 2.5,
+     "Target": "",
+     "Targets": null,
+     "Text": "Scout the well",
+     "Type": "reach",
+     "X": 4,
+     "Y": 9
+    },
+    {
+     "Count": 2,
+     "Hint": "",
+     "Line": "About Tree...",
+     "NPC": 5,
+     "Radius": 0,
+     "Target": "",
+     "Targets": null,
+     "Text": "Tell Tree",
+     "Type": "talk",
+     "X": 0,
+     "Y": 0
+    },
+    {
+     "Count": 1,
+     "Hint": "",
+     "Line": "",
+     "NPC": 0,
+     "Radius": 0,
+     "Target": "",
+     "Targets": [
+      "Log",
+      "Plank"
+     ],
+     "Text": "x",
+     "Type": "kill",
+     "X": 0,
+     "Y": 0
+    }
+   ],
+   "Summary": "S 4",
+   "Title": "Tree and Bone at the well",
+   "day": 20759
+  }
+ ],
+ "pool": [
+  {
+   "ID": 1,
+   "Kind": "mob",
+   "Slot": 1,
+   "RefID": 0,
+   "Name": "Spider|Cave Spider",
+   "Label": "spiders",
+   "Min": 3,
+   "Max": 9,
+   "X": 0,
+   "Y": 0,
+   "Radius": 0,
+   "Weight": 0
+  },
+  {
+   "ID": 2,
+   "Kind": "mob",
+   "Slot": 1,
+   "RefID": 0,
+   "Name": "Tree",
+   "Label": "",
+   "Min": 0,
+   "Max": 0,
+   "X": 0,
+   "Y": 0,
+   "Radius": 0,
+   "Weight": 2
+  },
+  {
+   "ID": 3,
+   "Kind": "count",
+   "Slot": 1,
+   "RefID": 0,
+   "Name": "",
+   "Label": "",
+   "Min": 2,
+   "Max": 4,
+   "X": 0,
+   "Y": 0,
+   "Radius": 0,
+   "Weight": 0
+  },
+  {
+   "ID": 4,
+   "Kind": "mob",
+   "Slot": 2,
+   "RefID": 0,
+   "Name": "Bandit|Thief",
+   "Label": "",
+   "Min": 0,
+   "Max": 0,
+   "X": 0,
+   "Y": 0,
+   "Radius": 0,
+   "Weight": 0
+  },
+  {
+   "ID": 5,
+   "Kind": "item",
+   "Slot": 1,
+   "RefID": 0,
+   "Name": "Wolf Pelt",
+   "Label": "",
+   "Min": 1,
+   "Max": 3,
+   "X": 0,
+   "Y": 0,
+   "Radius": 0,
+   "Weight": 0
+  },
+  {
+   "ID": 6,
+   "Kind": "item",
+   "Slot": 1,
+   "RefID": 0,
+   "Name": "Bone",
+   "Label": "",
+   "Min": 0,
+   "Max": 0,
+   "X": 0,
+   "Y": 0,
+   "Radius": 0,
+   "Weight": 0
+  },
+  {
+   "ID": 7,
+   "Kind": "place",
+   "Slot": 1,
+   "RefID": 0,
+   "Name": "",
+   "Label": "the well",
+   "Min": 0,
+   "Max": 0,
+   "X": 4,
+   "Y": 9,
+   "Radius": 2.5,
+   "Weight": 0
+  },
+  {
+   "ID": 8,
+   "Kind": "place",
+   "Slot": 1,
+   "RefID": 0,
+   "Name": "",
+   "Label": "",
+   "Min": 0,
+   "Max": 0,
+   "X": -3,
+   "Y": 2,
+   "Radius": 0,
+   "Weight": 0
+  },
+  {
+   "ID": 9,
+   "Kind": "item",
+   "Slot": 2,
+   "RefID": 0,
+   "Name": "Log|Plank",
+   "Label": "",
+   "Min": 0,
+   "Max": 0,
+   "X": 0,
+   "Y": 0,
+   "Radius": 0,
+   "Weight": 0
+  }
+ ],
+ "quest": {
+  "Accept": "A",
+  "Complete": "C {place}",
+  "Offer": "O {mob2} {count2}",
+  "Progress": "P {mob}",
+  "Summary": "S {count}",
+  "Title": "{mob} and {item} at {place}",
+  "id": 4242
+ },
+ "steps": "[{\"Type\":\"kill\",\"Target\":\"{mob}\",\"Targets\":[\"{mob2}\",\"Wolf\"],\"Count\":\"{count}\",\"Text\":\"Kill {count} {mob} and {mob2}\",\"Hint\":\"{place} {unknown}\"},\n {\"Type\":\"collect\",\"Target\":\"{item}\",\"Count\":\"{count2}\",\"Consume\":true,\"Text\":\"Bring {count2} {item}\"},\n {\"Type\":\"reach\",\"At\":\"{place}\",\"Radius\":3,\"Text\":\"Scout {place}\"},\n {\"Type\":\"talk\",\"NPC\":5,\"Count\":\" 2 \",\"Line\":\"About {mob}...\",\"Text\":\"Tell {mob}\"},\n {\"Type\":\"kill\",\"Target\":\"\",\"Targets\":[\"{item2}\"],\"Count\":\"{count9}\",\"Text\":\"x\"}]"
+}
