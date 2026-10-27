@@ -46,6 +46,9 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
        place). `npc.SpawnX`/`SpawnY` follow each NPC's first place. On a
        phone the map sits above the panel: one finger taps and drags,
        two fingers pan and pinch-zoom.
+       Each place has a **Routine** button (with its count of walks): it
+       opens that place's routine in Quest Studio, and the picked place's
+       walks are drawn on the map.
      * **Place mobs**: pick the enemy from a thumbnail grid, click to place.
      * **Select**: drag NPCs and mobs; "Change sprite..." / "Change..." open a
        sprite picker for the NPC or the mob on that tile.
@@ -180,6 +183,16 @@ In the classic form the four plain text boxes are replaced by this view for save
 **Daily quests.** A quest's **Once / Daily** switch. A daily keeps pools (`quest_daily_pool`): `{mob}`, `{item}`, `{count}`, `{place}` lists with sprite pickers, groups ("any of these counts"), ranges, odds and places picked on the map. Tap a placeholder chip while editing text to write it in. The roll preview is a port of the server's own roll (same seed per day, quest and list) for today and the next six resets (21:00 server time). Dailies carry a blue ! on the journey, in the Cast and in Playtest, where claimed ones hide until **next reset**. **Enable daily quests in this db** adds the `Daily` column and pool table (the API's `2026-10-26-daily-quests.sql`).
 
 Tests: `tests/headless-quest-talk.mjs`, `tests/headless-daily-quests.mjs` (serve on 127.0.0.1:8977), `tests/qtalk.mjs`, `tests/daily-roll.mjs`, `tests/dialogue-migration.mjs`, `tests/daily-migration.mjs`.
+
+## NPC routines
+
+Quest Studio's NPC sheet has a **Daily routine** window (also from the Map's NPCs tool: **Routine** beside each place, or `#studio/npc/ID/routine/X,Y`). Each place an NPC stands has its own routine; a new place has none (they stand still), and the first place keeps the routines NPCs had before placements.
+* **The day**: 24 hour blocks, night (18:00-06:00) dark. A gold block is a walk starting then, striped blocks the hours it is still going. Tap an empty hour to start a walk then. A day is 30 minutes; an hour is 75 seconds.
+* **The path**: tap the map to add a point at the end; drag a point to move it; tap a point to give it a wait (seconds standing there) or remove it, and while it's open taps add points right after it. Numbered gold squares are the points; small dots are the tiles they actually step on.
+* **Once** (walk it, stay at the end until their next walk), **Round and round** (start again from the first point all hour) or **There and back** (back and forth all hour). **Pace**: Stroll (half a tile a second), Walk (1), Hurry (2).
+* **Watch this walk** plays it on the map as the server walks it (a port of the API's `tickRoutine`, at 4x); **Watch their day** plays the whole day from 06:00 (30x), clock and all. A walk still going when the next hour comes, and a step through a wall (they go in straight lines, diagonals first, no path finding), are flagged.
+
+Every change is one undo step. The first routine saved upgrades the db with the same statements as the API's `content/migrations/2026-10-27-routine-placements.sql` (`routine.Spawn`, `routine.Speed`, `routineNode.Wait`; Loop 2 is new); schema and behaviour: BrawlQuest-API `docs/NPC_ROUTINES.md`. Needs the API from ff9d6ce for pace, waits, there and back and routines on other places; older servers ignore the new columns (every routine walks the first place, at 1 tile a second, no waits). Removing a place removes its routines. Test: `tests/headless-routine.mjs`.
 
 ## Plots
 

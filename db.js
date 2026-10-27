@@ -17,6 +17,24 @@ const BQ = (() => {
     "CREATE INDEX IF NOT EXISTS npc_spawn_npc ON npc_spawn(NPC);",
     "INSERT INTO npc_spawn (NPC, X, Y)\n  SELECT n.id, n.SpawnX, n.SpawnY FROM npc n\n  WHERE n.SpawnX > -999 AND NOT EXISTS (SELECT 1 FROM npc_spawn s WHERE s.NPC = n.id)\n  ORDER BY n.id;"];
   const mirrorSpawn = id => `UPDATE npc SET SpawnX = IFNULL((SELECT X FROM npc_spawn WHERE NPC = ${+id} ORDER BY id LIMIT 1), -999), SpawnY = IFNULL((SELECT Y FROM npc_spawn WHERE NPC = ${+id} ORDER BY id LIMIT 1), -999) WHERE id = ${+id};`;
+  // NPC routines per placement, with a pace and waits (the API's
+  // content/migrations/2026-10-27-routine-placements.sql, docs/NPC_ROUTINES.md):
+  // routine.Spawn (0: the NPC's first placement), routine.Speed (tiles a
+  // second), Loop 2 (there and back), routineNode.Wait (seconds). Same
+  // statements as the migration; run by itself on the first routine saved.
+  const ROUTINE_MIGRATION = [
+    "CREATE TABLE IF NOT EXISTS routine (id INTEGER PRIMARY KEY, NPC INTEGER, TriggerHour INTEGER, Loop INTEGER);",
+    "CREATE TABLE IF NOT EXISTS routineNode (id INTEGER PRIMARY KEY, Routine INTEGER, X INTEGER, Y INTEGER, Position INTEGER);",
+    "DROP TABLE IF EXISTS routine_upgrade;",
+    "CREATE TABLE routine_upgrade (\n  id INTEGER PRIMARY KEY,\n  NPC INTEGER,\n  TriggerHour INTEGER,\n  Loop INTEGER,\n  Spawn INTEGER NOT NULL DEFAULT 0,\n  Speed REAL NOT NULL DEFAULT 1\n);",
+    "INSERT INTO routine_upgrade (id, NPC, TriggerHour, Loop, Spawn, Speed)\n  SELECT e.id, e.NPC, e.TriggerHour, e.Loop,\n    IFNULL((SELECT Spawn FROM routine r WHERE r.id = e.id), 0),\n    IFNULL((SELECT Speed FROM routine r WHERE r.id = e.id), 1)\n  FROM routine e, (SELECT 0 AS Spawn, 1 AS Speed) d;",
+    "DROP TABLE routine;",
+    "ALTER TABLE routine_upgrade RENAME TO routine;",
+    "DROP TABLE IF EXISTS routineNode_upgrade;",
+    "CREATE TABLE routineNode_upgrade (\n  id INTEGER PRIMARY KEY,\n  Routine INTEGER,\n  X INTEGER,\n  Y INTEGER,\n  Position INTEGER,\n  Wait INTEGER NOT NULL DEFAULT 0\n);",
+    "INSERT INTO routineNode_upgrade (id, Routine, X, Y, Position, Wait)\n  SELECT e.id, e.Routine, e.X, e.Y, e.Position,\n    IFNULL((SELECT Wait FROM routineNode r WHERE r.id = e.id), 0)\n  FROM routineNode e, (SELECT 0 AS Wait) d;",
+    "DROP TABLE routineNode;",
+    "ALTER TABLE routineNode_upgrade RENAME TO routineNode;"];
   // Quest Studio's personality notes per NPC (content/migrations/2026-10-26-npc-notes.sql
   // in the API). Editor-only: the game never reads it. Created on the first note.
   const NOTES_TABLE = "CREATE TABLE IF NOT EXISTS npc_notes (id INTEGER PRIMARY KEY, NPC INTEGER NOT NULL UNIQUE, Notes TEXT NOT NULL DEFAULT '');";
@@ -172,6 +190,7 @@ const BQ = (() => {
     return st.warnings;
   }
   const has = t => !!q("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t]).length;
+  const hasRoutineCols = () => has("routine") && has("routineNode") && cols("routine").includes("Spawn") && cols("routineNode").includes("Wait");
   function checkSchema() {
     for (const t of ["items", "enemies", "npc", "conversation", "world"])
       if (!has(t)) throw new Error(`This is not a BrawlQuest content database: table "${t}" is missing.`);
@@ -327,6 +346,9 @@ const BQ = (() => {
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
         hasSpawns: has("npc_spawn"),
         npcSpawns: has("npc_spawn") ? q("SELECT id, NPC, X, Y FROM npc_spawn ORDER BY NPC, id") : [],
+        hasRoutineSpawn: hasRoutineCols(),
+        routines: has("routine") ? q(`SELECT id, NPC, TriggerHour, Loop, ${hasRoutineCols() ? "Spawn, Speed" : "0 AS Spawn, 1 AS Speed"} FROM routine ORDER BY NPC, TriggerHour, id`) : [],
+        routineNodes: has("routineNode") ? q(`SELECT id, Routine, X, Y, Position, ${hasRoutineCols() ? "Wait" : "0 AS Wait"} FROM routineNode ORDER BY Routine, Position, id`) : [],
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
         enemies: q("SELECT * FROM enemies ORDER BY Name"),
         enemyCols: cols("enemies"),
@@ -420,7 +442,16 @@ const BQ = (() => {
       const s = [`DELETE FROM ${table} WHERE id = ${+id};`];
       if (table === "npc") s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE NPC = ${+id});`, `DELETE FROM routine WHERE NPC = ${+id};`);
       if (table === "npc" && has("npc_spawn")) s.push(`DELETE FROM npc_spawn WHERE NPC = ${+id};`);
-      if (table === "npc_spawn") { const sp = q("SELECT NPC FROM npc_spawn WHERE id = ?", [+id])[0]; if (sp) s.push(mirrorSpawn(sp.NPC)); }
+      if (table === "npc_spawn") {
+        const sp = q("SELECT NPC FROM npc_spawn WHERE id = ?", [+id])[0];
+        if (sp && hasRoutineCols()) {
+          // its routines go with it (the first placement's are Spawn 0)
+          const first = q("SELECT id FROM npc_spawn WHERE NPC = ? ORDER BY id LIMIT 1", [sp.NPC])[0];
+          const which = `NPC = ${+sp.NPC} AND (Spawn = ${+id}${first && first.id === +id ? " OR Spawn = 0" : ""})`;
+          s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE ${which});`, `DELETE FROM routine WHERE ${which};`);
+        }
+        if (sp) s.push(mirrorSpawn(sp.NPC));
+      }
       if (table === "items") s.push(`DELETE FROM loot WHERE ItemID = ${+id};`);
       if (table === "effects") {
         const users = effectUsers(+id);
@@ -518,6 +549,61 @@ const BQ = (() => {
       if (!hasDialogue()) apply(DIALOGUE_MIGRATION, "quest conversations (as content/migrations/2026-10-26-quest-dialogue.sql)");
       st.dialogueUpgraded = true;
       return { ok: true };
+    },
+    // Routines on this copy (the API's 2026-10-27-routine-placements.sql);
+    // done by itself on the first routine saved.
+    routinesEnable() {
+      if (!hasRoutineCols()) apply(ROUTINE_MIGRATION, "npc routines per placement (as content/migrations/2026-10-27-routine-placements.sql)");
+      return { ok: true };
+    },
+    // Every walk one placement does, replaced in one change:
+    // { npc, spawn (npc_spawn id; 0 = the NPC's first placement), routines:
+    // [{ id?, TriggerHour 1-24, Loop 0|1|2, Speed, nodes: [{ id?, X, Y, Wait }] }] }.
+    // Rows keep their ids where given, so an edit only changes what changed.
+    routineSet({ npc, spawn, routines }) {
+      npc = Math.trunc(+npc); spawn = Math.trunc(+spawn) || 0;
+      if (!q("SELECT 1 FROM npc WHERE id = ?", [npc]).length) throw new Error("no NPC " + npc);
+      const pre = [];
+      if (!has("routine") || !has("routineNode") || !hasRoutineCols()) pre.push(...ROUTINE_MIGRATION);
+      const first = has("npc_spawn") ? q("SELECT id FROM npc_spawn WHERE NPC = ? ORDER BY id LIMIT 1", [npc])[0] : null;
+      if (spawn && has("npc_spawn") && !q("SELECT 1 FROM npc_spawn WHERE id = ? AND NPC = ?", [spawn, npc]).length) throw new Error(`placement ${spawn} isn't one of NPC ${npc}'s`);
+      // the first placement keeps Spawn 0 (as every routine before placements)
+      const isFirst = !spawn || (first && first.id === spawn);
+      const store = isFirst ? 0 : spawn;
+      const which = `NPC = ${npc} AND (Spawn = ${store}${isFirst && first ? " OR Spawn = " + first.id : ""})`;
+      const stmts = [...pre];
+      const curR = pre.length ? (has("routine") ? q(`SELECT id FROM routine WHERE NPC = ? ${spawn && !isFirst ? "AND 0" : ""}`, [npc]) : []) : q(`SELECT id FROM routine WHERE ${which}`);
+      const curIds = new Set(curR.map(r => r.id));
+      stmts.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE ${which});`, `DELETE FROM routine WHERE ${which};`);
+      let nextR = has("routine") ? q("SELECT IFNULL(MAX(id),0) AS n FROM routine")[0].n : 0;
+      let nextN = has("routineNode") ? q("SELECT IFNULL(MAX(id),0) AS n FROM routineNode")[0].n : 0;
+      const usedR = new Set(), usedN = new Set();
+      const taken = (t, id) => has(t) && q(`SELECT 1 FROM ${t} WHERE id = ?`, [id]).length;
+      const nodeOwner = id => (has("routineNode") ? q("SELECT Routine FROM routineNode WHERE id = ?", [id])[0] : null);
+      const ids = [];
+      for (const r of routines || []) {
+        const hour = Math.trunc(+r.TriggerHour);
+        if (!(hour >= 1 && hour <= 24)) throw new Error("a walk starts at an hour from 1 to 24 (24 is midnight)");
+        const loop = Math.trunc(+r.Loop || 0);
+        if (![0, 1, 2].includes(loop)) throw new Error("Loop is 0 (once), 1 (repeat) or 2 (there and back)");
+        const speed = r.Speed === undefined || r.Speed === "" ? 1 : +r.Speed;
+        if (!(speed > 0 && speed <= 4)) throw new Error("speed is more than 0 and at most 4 tiles a second");
+        let rid = Math.trunc(+r.id || 0);
+        if (!(rid > 0) || usedR.has(rid) || (taken("routine", rid) && !curIds.has(rid))) rid = ++nextR;
+        nextR = Math.max(nextR, rid); usedR.add(rid); ids.push(rid);
+        stmts.push(`INSERT INTO routine (id, NPC, TriggerHour, Loop, Spawn, Speed) VALUES (${rid}, ${npc}, ${hour}, ${loop}, ${store}, ${lit(speed)});`);
+        (r.nodes || []).forEach((p, i) => {
+          const x = Math.round(+p.X), y = Math.round(+p.Y), wait = Math.max(0, Math.min(3600, Math.round(+p.Wait || 0)));
+          if (!isFinite(x) || !isFinite(y)) throw new Error("a point needs a whole-tile X and Y");
+          let nid = Math.trunc(+p.id || 0);
+          const own = nid > 0 ? nodeOwner(nid) : null;
+          if (!(nid > 0) || usedN.has(nid) || (own && !curIds.has(own.Routine))) nid = ++nextN;
+          nextN = Math.max(nextN, nid); usedN.add(nid);
+          stmts.push(`INSERT INTO routineNode (id, Routine, X, Y, Position, Wait) VALUES (${nid}, ${rid}, ${x}, ${y}, ${i + 1}, ${wait});`);
+        });
+      }
+      apply(stmts, `routine of NPC ${npc}` + (store ? ` at placement ${store}` : ""));
+      return { ids };
     },
     // NPC placements on this copy (the API's 2026-10-27-npc-spawns.sql);
     // done by itself on the first placement saved.

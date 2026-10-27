@@ -518,3 +518,50 @@ button.qs-tag{font:15px rainyhearts,sans-serif}
   .qs-map{padding-left:12px}
   .qs.qs-embed{padding:4px;margin:8px -4px}
 }
+
+/* NPC routine editor (studio-routine.js): the day as 24 hour blocks, the map
+   with numbered points, the walk played back. */
+.qs-routine .qs-wbody{display:flex;flex-direction:column;gap:6px}
+.qs-rtdayhead{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.qs-rtdayhead small,.qs-rtrow small,.qs-seg small{font:12px BMmini,monospace;color:var(--gold);letter-spacing:1px}
+.qs-rtday{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:2px;background:#000;border:2px solid #000}
+.qs-rth{position:relative;height:34px;border:0;border-radius:0;padding:0;background:#6f8fd8;color:#000;font:12px BMmini,monospace;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.qs-rth.night{background:#1b2149;color:#bfbfbf}
+.qs-rth.runs{background-image:repeating-linear-gradient(45deg,rgba(242,204,89,.55) 0 4px,transparent 4px 8px)}
+.qs-rth.start{outline:2px solid var(--gold);outline-offset:-2px;color:#000;background:var(--gold)}
+.qs-rth.start.night{color:#000}
+.qs-rth.on{outline:3px solid #fff;outline-offset:-3px;background:var(--hot);color:#fff}
+.qs-rth i{position:absolute;right:2px;top:2px;width:5px;height:5px;background:#000}
+.qs-rth.on i{background:#fff}
+.qs-rth:hover{outline:2px solid #fff;outline-offset:-2px}
+.qs-rtwalks{display:flex;flex-wrap:wrap;gap:6px}
+.qs-rtwalk{font:16px/16px rainyhearts,sans-serif;background:#000;color:#fff;border:2px solid var(--line);border-radius:0;padding:5px 8px;cursor:pointer}
+.qs-rtwalk b{font:14px BMmini,monospace;color:var(--gold)}
+.qs-rtwalk small{color:var(--dim)}
+.qs-rtwalk.on{border-color:var(--gold)}
+.qs-rtwalk:hover{background:var(--hot)}
+.qs-rtmapbox{position:relative}
+.qs-rtmap{max-width:none;touch-action:none}
+.qs-rtzoom{position:absolute;right:6px;top:6px;display:flex;flex-direction:column;gap:4px}
+.qs-rtzoom .qs-mini{background:#000;min-width:30px;justify-content:center}
+.qs-rtplay{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.qs-rtclock{font:14px BMmini,monospace;color:#000;background:#6f8fd8;padding:4px 6px;border:2px solid #000}
+.qs-rtclock:empty{display:none}
+.qs-rtclock.night{background:#1b2149;color:#fff}
+.qs-rtpt{border:2px solid var(--gold);background:#000;padding:6px 8px;display:flex;flex-direction:column;gap:4px}
+.qs-rtpt>b{font:14px BMmini,monospace;color:var(--gold)}
+.qs-rtwait{min-width:56px;text-align:center;font:16px BMmini,monospace}
+.qs-rtrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.qs-rtloop,.qs-rtspeed{margin:0}
+.qs-rtpts{display:flex;flex-wrap:wrap;gap:4px}
+.qs-rtpts .qs-chip{cursor:pointer;font:15px rainyhearts,sans-serif}
+.qs-rtpts .qs-chip.on{border-color:var(--gold);color:var(--gold)}
+.qs-routine .qs-prob{cursor:default}
+.qs-routine .qs-prob:hover{background:none}
+@media (max-width: 760px){
+  .qs-rth{height:44px;font-size:12px}
+  .qs-rtwalk,.qs-rtpts .qs-chip{min-height:44px}
+  .qs-rtzoom .qs-mini{min-height:44px;min-width:44px}
+  .qs-rtplay .qs-btn{min-height:44px;flex:1 1 40%;justify-content:center}
+  .qs-routine .qs-sel{min-height:44px;font-size:16px}
+}
