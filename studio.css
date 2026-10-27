@@ -295,3 +295,75 @@ input.qs-edit[type=number]{width:80px}
   .qs-nav .qs-tab .ico{display:none}
   .qs-nav .qs-probs{font-size:16px}
 }
+
+/* Daily quests: the game's daily blue (questDailyColor 0.35,0.68,1). */
+.qs,.qs-modal{--daily:#59adff}
+.qs-dbadge{width:16px;height:16px}
+.qs-var{display:inline-block;color:#0b1a2b;background:var(--daily);padding:0 4px;margin:0 1px;font:15px/18px BMmini,monospace;white-space:nowrap}
+.qs-var.big{font-size:16px;padding:2px 6px}
+.qs-card.daily{border-color:var(--daily)}
+.qs-card.daily::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(89,173,255,.5)}
+.qs-card .qs-var{font-size:13px;line-height:15px;padding:0 2px}
+.qs-chip.daily,.qs-opt.daily{border-color:var(--daily)}
+.qs-opt.daily::before{color:var(--daily)}
+.qs-mini.daily,.qs-btn.daily,.qs-seg button.daily{border-color:var(--daily);color:var(--daily)}
+.qs-seg button.daily.on,.qs-btn.daily:hover,.qs-mini.daily:hover{background:#1d3e63;color:#fff}
+.qs-qrow.daily{box-shadow:inset 3px 0 0 var(--daily)}
+.qs-qthread.daily>summary{color:var(--daily)}
+.qs-today{color:var(--daily);font-size:17px;margin:2px 0 4px}
+.qs-today b{color:#fff}
+.qs-phbar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:4px;white-space:normal}
+.qs-phbar small{color:var(--dim)}
+.qs-phchip{font:15px/18px BMmini,monospace;background:var(--daily);color:#0b1a2b;border:0;padding:3px 7px;cursor:pointer;box-shadow:2px 2px 0 #000}
+.qs-phchip.off{background:#1d3e63;color:#cfe6ff}
+.qs-phchip:active{transform:translate(1px,1px);box-shadow:none}
+.qs-dailybox{border:2px solid #3c5f86;background:rgba(29,62,99,.25);padding:8px;margin:8px 0;display:flex;flex-direction:column;gap:6px}
+.qs-dailybox.on{border-color:var(--daily)}
+.qs-dailybox h4{margin:0;display:flex;gap:6px;align-items:center;color:var(--daily)}
+.qs-dailybox .hint.warn{color:var(--warn)}
+.qs-pool{display:flex;flex-direction:column;gap:8px}
+.qs-quick{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.qs-slot{background:#1f1f1f;border:2px solid #3c5f86;padding:6px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.qs-slot-h{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.qs-todayv{color:var(--dim)}
+.qs-todayv b{color:var(--daily)}
+.qs-cands{display:flex;flex-direction:column;gap:4px}
+.qs-cand{display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.4);padding:4px;min-width:0}
+.qs-cpic{flex:none;display:flex;align-items:center;justify-content:center;gap:2px;min-width:44px;min-height:44px;background:#000;border:1px solid var(--line);padding:2px;cursor:pointer;flex-wrap:wrap;max-width:92px}
+.qs-cpic.map{padding:0;max-width:none}
+.qs-cpic.map canvas{display:block;width:96px;height:64px}
+.qs-cpic:hover{border-color:var(--daily)}
+.qs-cpic .none{color:var(--dim)}
+.pc2{width:32px;height:32px;object-fit:contain}
+.pc2.bad{outline:1px solid var(--err)}
+.qs-ct{flex:1;min-width:0;overflow-wrap:anywhere}
+.qs-ct b.bad{color:var(--err)}
+.qs-ct small{color:var(--dim)}
+.qs-cr{display:flex;gap:4px;align-items:center;flex:none}
+.qs-odds{display:inline-flex;gap:2px;align-items:center}
+.qs-pct{min-width:40px;text-align:center;color:var(--daily);font:15px BMmini,monospace}
+.qs-addlist{border-top:1px dashed #3c5f86;padding-top:6px}
+.qs-rollbox{border:2px solid var(--daily);background:rgba(0,0,0,.35);padding:8px;margin:8px 0}
+.qs-rollbox h4{margin:0 0 4px;color:var(--daily)}
+.qs-rolls{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px;margin-top:6px}
+.qs-rollday{background:#1f1f1f;border:1px solid #3c5f86;padding:6px;min-width:0;overflow-wrap:anywhere}
+.qs-rollday.today{border:2px solid var(--daily);background:#16283c}
+.qs-rd-h{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.qs-rd-h b{font:15px BMmini,monospace;color:var(--daily)}
+.qs-rd-h small{color:var(--dim)}
+.qs-rd-t{font-size:20px;color:#fff;margin:2px 0}
+.qs-rd-s{font-size:17px}
+.qs-rd-v{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.qs-rd-v .qs-chip{font-size:15px}
+.qs-prow.daily{box-shadow:inset 3px 0 0 var(--daily)}
+.qs-win.daily{border-color:var(--daily)}
+.qs-win.daily .qs-wtitle{gap:6px}
+.qs-card.ps-claimed{filter:saturate(.5) brightness(.75);border-color:var(--daily)}
+@media (max-width: 760px){
+  .qs-phchip{min-height:44px;min-width:44px;font-size:16px}
+  .qs-cand{flex-wrap:wrap}
+  .qs-ct{flex-basis:calc(100% - 60px)}
+  .qs-cr{margin-left:auto}
+  .qs-rolls{grid-template-columns:1fr}
+  .qs-dailybox .qs-btn.big{white-space:normal;text-align:left}
+}

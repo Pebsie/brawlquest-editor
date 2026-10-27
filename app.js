@@ -25,7 +25,8 @@ async function api(path, body) {
     delete: () => BQ.api.delete(body), tiles: () => BQ.api.tiles(body), patterns: () => BQ.api.patterns(body),
     export: () => (body === undefined ? BQ.api.export() : BQ.api.clearExport()), portraits: () => BQ.api.portraits(body),
     areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
-    areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body) }[path];
+    areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body),
+    dailyEnable: () => BQ.api.dailyEnable(), saveMany: () => BQ.api.saveMany(body) }[path];
   const v = BQ.st.version;
   const out = fn();
   syncFile();
@@ -300,7 +301,9 @@ function questForm(form, q) {
     Offer: area(q.Offer), Accept: area(q.Accept), Progress: area(q.Progress), Complete: area(q.Complete),
     XP: num(q.XP), Gold: num(q.Gold),
     Sequential: h("input", { type: "checkbox", id: "q-sequential" }),
+    Daily: "Daily" in q ? h("input", { type: "checkbox", id: "q-daily" }) : null,
   };
+  if (f.Daily) f.Daily.checked = !!+q.Daily;
   f.Sequential.checked = !!+q.Sequential;
   for (const k of ["Offer", "Accept", "Progress", "Complete", "Summary"]) f[k].id = "qline-" + k;
   for (const k of QUEST_LINES) f[k].addEventListener("input", () => { if (conv) conv.refresh(); });
@@ -378,6 +381,7 @@ function questForm(form, q) {
     Offer: f.Offer.value, Accept: f.Accept.value, Progress: f.Progress.value, Complete: f.Complete.value,
     XP: +f.XP.value, Gold: +f.Gold.value, Rewards: JSON.stringify(rewards), Steps: JSON.stringify(steps),
     Sequential: f.Sequential.checked ? 1 : 0,
+    ...(f.Daily ? { Daily: f.Daily.checked ? 1 : 0 } : {}),
   });
   form.append(
     h("h2", {}, q.id ? `Quest ${q.id}` : "New quest"),
@@ -394,6 +398,8 @@ function questForm(form, q) {
     h("h3", {}, "Steps"),
     h("label", { class: "chk", title: "Off: every objective counts at once (kill 3 Spiders and kill 3 Cave Spiders fill together). On: one objective at a time, in order: only the current one counts." },
       f.Sequential, " Complete objectives in order"),
+    f.Daily ? h("label", { class: "chk", title: "A daily: a new variant at every 21:00 reset, from its pool of mobs, items, counts and places. Edit the pool in Quest Studio." },
+      f.Daily, " Daily quest ", q.id ? h("a", { href: "#studio/journey/" + q.id }, "(pool and roll preview in Quest Studio)") : null) : null,
     h("p", { class: "hint" }, "Unticked (the default): players can work on every objective at once; the quest is ready when all are done."),
     stepBox,
     h("h3", {}, "Item rewards"), rwBox,

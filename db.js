@@ -7,7 +7,7 @@ const BQ = (() => {
   // version counts edits; touched names the tables edited since the history
   // module last looked (null = all of them, after an open).
   const st = { name: "", changes: [], dirty: false, warnings: [], version: 0, touched: null };
-  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects", "npc_notes"];
+  const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects", "npc_notes", "quest_daily_pool"];
   // Quest Studio's personality notes per NPC (content/migrations/2026-10-26-npc-notes.sql
   // in the API). Editor-only: the game never reads it. Created on the first note.
   const NOTES_TABLE = "CREATE TABLE IF NOT EXISTS npc_notes (id INTEGER PRIMARY KEY, NPC INTEGER NOT NULL UNIQUE, Notes TEXT NOT NULL DEFAULT '');";
@@ -86,6 +86,24 @@ const BQ = (() => {
   const QUEST_SEQ_UPGRADE = ["DROP TABLE IF EXISTS quest_def_upgrade;", `CREATE TABLE quest_def_upgrade (${QUEST_COLS});`,
     "INSERT INTO quest_def_upgrade (id, Act, Zone, Title, Summary, Level, MinLevel, Giver, TurnIn, Prereqs, Offer, Accept, Progress, Complete, XP, Gold, Rewards, Steps, Sequential) SELECT e.id, e.Act, e.Zone, e.Title, e.Summary, e.Level, e.MinLevel, e.Giver, e.TurnIn, e.Prereqs, e.Offer, e.Accept, e.Progress, e.Complete, e.XP, e.Gold, e.Rewards, e.Steps, IFNULL((SELECT Sequential FROM quest_def q WHERE q.id = e.id), 0) FROM quest_def e, (SELECT 0 AS Sequential) d;",
     "DROP TABLE quest_def;", "ALTER TABLE quest_def_upgrade RENAME TO quest_def;"];
+  // Daily quests: the API's content/migrations/2026-10-26-daily-quests.sql,
+  // statement for statement (quest_def.Daily, quest_daily_pool and the
+  // example daily 9001 with its three pool rows). Safe to run twice; values
+  // set in between are kept. Same CREATE text, so either path dumps the same.
+  const QUEST_DAILY_COLS = QUEST_COLS.replace("Sequential INTEGER NOT NULL DEFAULT 0\n", "Sequential INTEGER NOT NULL DEFAULT 0,\n  Daily INTEGER NOT NULL DEFAULT 0\n");
+  const DAILY_POOL_TABLE = "CREATE TABLE IF NOT EXISTS quest_daily_pool (\n  id INTEGER PRIMARY KEY,\n  QuestID INTEGER NOT NULL,\n  Kind TEXT NOT NULL,\n  Slot INTEGER NOT NULL DEFAULT 1,\n  RefID INTEGER NOT NULL DEFAULT 0,\n  Name TEXT NOT NULL DEFAULT '',\n  Label TEXT NOT NULL DEFAULT '',\n  Min INTEGER NOT NULL DEFAULT 0,\n  Max INTEGER NOT NULL DEFAULT 0,\n  X INTEGER NOT NULL DEFAULT 0,\n  Y INTEGER NOT NULL DEFAULT 0,\n  Radius REAL NOT NULL DEFAULT 0,\n  Weight INTEGER NOT NULL DEFAULT 1\n);";
+  const DAILY_MIGRATION = ["DROP TABLE IF EXISTS quest_def_upgrade;", `CREATE TABLE quest_def_upgrade (${QUEST_DAILY_COLS});`,
+    "INSERT INTO quest_def_upgrade (id, Act, Zone, Title, Summary, Level, MinLevel, Giver, TurnIn, Prereqs,\n    Offer, Accept, Progress, Complete, XP, Gold, Rewards, Steps, Sequential, Daily)\n  SELECT e.id, e.Act, e.Zone, e.Title, e.Summary, e.Level, e.MinLevel, e.Giver, e.TurnIn, e.Prereqs,\n    e.Offer, e.Accept, e.Progress, e.Complete, e.XP, e.Gold, e.Rewards, e.Steps, e.Sequential,\n    IFNULL((SELECT Daily FROM quest_def q WHERE q.id = e.id), 0)\n  FROM quest_def e, (SELECT 0 AS Daily) d;",
+    "DROP TABLE quest_def;", "ALTER TABLE quest_def_upgrade RENAME TO quest_def;", DAILY_POOL_TABLE,
+    "INSERT OR IGNORE INTO quest_def (id, Act, Zone, Title, Summary, Level, MinLevel, Giver, TurnIn, Prereqs,\n    Offer, Accept, Progress, Complete, XP, Gold, Rewards, Steps, Sequential, Daily)\n  VALUES (9001, 1, 'Squall''s End', 'Daily Drill: {mob}', 'Example daily quest. Crumb wants {count} {mob} gone today.', 3, 3, 1300, 1300, '[1303]',\n    'Daily drill, recruit. Today it''s {mob}. {count} of them. Same time tomorrow, something else.',\n    'Off you go. {count}. I''m counting.',\n    '{count} {mob}. That is the number. Can you count?',\n    'Not bad. Come back after the bell tonight for the next one.',\n    60, 5, '[]',\n    '[{\"Type\":\"kill\",\"Target\":\"{mob}\",\"Count\":\"{count}\",\"Text\":\"Defeat {count} {mob}\",\"Hint\":\"A new drill every day at the reset.\"}]',\n    0, 1);",
+    "INSERT OR IGNORE INTO quest_daily_pool (id, QuestID, Kind, Slot, Name, Label, Min, Max) VALUES\n  (1, 9001, 'mob', 1, 'Spider', 'Spiders', 4, 6),\n  (2, 9001, 'mob', 1, 'Spider|Cave Spider', 'spiders of any kind', 6, 8),\n  (3, 9001, 'mob', 1, 'Tree', 'Trees', 2, 3);"];
+  // For Export SQL once this copy has Daily: the quest_def rebuild that
+  // works on a server db with or without Sequential and Daily (keeping both),
+  // and the pool table. Not the example rows.
+  const QUEST_DAILY_UPGRADE = ["DROP TABLE IF EXISTS quest_def_upgrade;", `CREATE TABLE quest_def_upgrade (${QUEST_DAILY_COLS});`,
+    "INSERT INTO quest_def_upgrade (id, Act, Zone, Title, Summary, Level, MinLevel, Giver, TurnIn, Prereqs, Offer, Accept, Progress, Complete, XP, Gold, Rewards, Steps, Sequential, Daily) SELECT e.id, e.Act, e.Zone, e.Title, e.Summary, e.Level, e.MinLevel, e.Giver, e.TurnIn, e.Prereqs, e.Offer, e.Accept, e.Progress, e.Complete, e.XP, e.Gold, e.Rewards, e.Steps, IFNULL((SELECT Sequential FROM quest_def q WHERE q.id = e.id), 0), IFNULL((SELECT Daily FROM quest_def q WHERE q.id = e.id), 0) FROM quest_def e, (SELECT 0 AS Sequential, 0 AS Daily) d;",
+    "DROP TABLE quest_def;", "ALTER TABLE quest_def_upgrade RENAME TO quest_def;", DAILY_POOL_TABLE];
+  const hasDaily = () => has("quest_def") && cols("quest_def").includes("Daily") && has("quest_daily_pool");
   const WORLD_COLS = { GroundTile: 1, ForegroundTile: 1, Name: 1, Music: 1, Collision: 1, Enemy: 1 };
   const STEP_TYPES = ["kill", "boss", "collect", "talk", "reach", "use", "craft", "equip", "level"];
 
@@ -96,7 +114,7 @@ const BQ = (() => {
     await init();
     if (db) db.close();
     db = new SQL.Database(new Uint8Array(buf));
-    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.questsUpgraded = false; st.touched = null; st.version++;
+    st.name = name; st.changes = []; st.dirty = false; st.plotUpgraded = false; st.enemiesUpgraded = false; st.questsUpgraded = false; st.dailyUpgraded = false; st.touched = null; st.version++;
     st.warnings = checkSchema();
     const ec = cols("enemies");
     if (!ec.includes("KnockbackResist") || !ec.includes("HitEffect")) {
@@ -233,6 +251,17 @@ const BQ = (() => {
       });
       row.Modifiers = JSON.stringify(mods);
       for (const k of ["Description", "Icon", "Visual"]) row[k] = String(row[k] ?? "");
+    } else if (table === "quest_daily_pool") {
+      // editor.go validateEditorRow, plus the types the API scans into.
+      row.Kind = String(row.Kind ?? "").trim().toLowerCase();
+      if (!["mob", "item", "count", "place"].includes(row.Kind)) throw new Error("Kind must be mob, item, count or place");
+      for (const k of ["QuestID", "Slot", "RefID", "Min", "Max", "X", "Y", "Weight"]) if (k in row) row[k] = Math.trunc(+row[k] || 0);
+      if (!(row.QuestID > 0)) throw new Error("QuestID is required");
+      if (!q("SELECT 1 FROM quest_def WHERE id = ?", [row.QuestID]).length) throw new Error("no quest " + row.QuestID);
+      if ("Slot" in row && row.Slot < 1) row.Slot = 1;
+      if ("Weight" in row && row.Weight < 1) row.Weight = 1;
+      if ("Radius" in row) row.Radius = Math.max(0, +row.Radius || 0);
+      for (const k of ["Name", "Label"]) if (k in row) row[k] = String(row[k] ?? "");
     } else if (table === "loot") {
       if (!q("SELECT id FROM enemies WHERE id=?", [row.EnemyID]).length) throw new Error("unknown enemy");
       if (!q("SELECT id FROM items WHERE id=?", [row.ItemID]).length) throw new Error("unknown item");
@@ -259,6 +288,8 @@ const BQ = (() => {
       return {
         quests, hasQuestline: has("quest_def"),
         npcNotes: has("npc_notes") ? q("SELECT * FROM npc_notes") : [],
+        hasDaily: hasDaily(),
+        dailyPools: has("quest_daily_pool") ? q("SELECT * FROM quest_daily_pool ORDER BY QuestID, Kind, Slot, id") : [],
         plots: has("plot") ? q("SELECT * FROM plot ORDER BY Name") : [],
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
@@ -295,12 +326,19 @@ const BQ = (() => {
       if (table === "npc_notes" && !has("npc_notes")) apply([NOTES_TABLE], "create npc_notes table");
       if (table === "plot") row.Agent = +row.Agent || 0;
       if (table === "quest_def" && "Sequential" in row) row.Sequential = row.Sequential ? 1 : 0;
+      if (table === "quest_daily_pool" && !hasDaily()) throw new Error("This db has no daily quests yet: use Enable daily quests in this db first");
+      if (table === "quest_def" && cols("quest_def").includes("Daily")) {
+        // As the API's editor: a save without Daily (the Quests tab form)
+        // keeps the quest's current value instead of resetting it to 0.
+        if (!("Daily" in row)) { const cur = +row.id > 0 ? q("SELECT IFNULL(Daily, 0) AS d FROM quest_def WHERE id = ?", [+row.id])[0] : null; row.Daily = cur ? cur.d : 0; }
+        row.Daily = +row.Daily ? 1 : 0;
+      }
       const allowed = cols(table);
       for (const k of Object.keys(row)) if (!allowed.includes(k)) throw new Error(`${table} has no column ${k}`);
       let id = +row.id || 0;
       if (id <= 0) {
         id = q(`SELECT IFNULL(MAX(id),0)+1 AS n FROM ${table}`)[0].n;
-        if ((table === "quest_def" || table === "npc") && id < 1700) id = 1700;
+        if ((table === "quest_def" || table === "npc" || table === "quest_daily_pool") && id < 1700) id = 1700;
         if (table === "plot") id = q("SELECT IFNULL(MAX(id),0)+1 AS n FROM plot")[0].n;
         row.id = id;
       }
@@ -390,11 +428,28 @@ const BQ = (() => {
         schema += "-- enemies.KnockbackResist, HitEffect, SpawnsDay and SpawnsNight (as content/migrations/2026-10-20-boss-knockback.sql, 2026-10-22-hit-effects.sql and 2026-10-25-day-night-spawns.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
       if (st.changes.some(c => /\bworld_flip\b/.test(c))) schema += "-- world_flip table (as content/migrations/2026-10-25-world-flip.sql)\n" + WORLD_FLIP_TABLE + "\n";
       if (st.changes.some(c => /\barea(_tiles|s)\b/.test(c))) schema += "-- areas tables (as content/migrations/2026-10-24-areas.sql)\n" + AREA_TABLES.join("\n") + "\n";
-      if (st.questsUpgraded || st.changes.some(c => /INTO quest_def\b/.test(c)))
+      const daily = hasDaily();
+      if (daily && (st.dailyUpgraded || st.questsUpgraded || st.changes.some(c => /INTO quest_def\b|\bquest_daily_pool\b/.test(c))))
+        schema += "-- quest_def.Sequential and Daily, and the quest_daily_pool table (as content/migrations/2026-10-24-quest-sequential.sql and 2026-10-26-daily-quests.sql; keeps both columns' values)\n" + QUEST_DAILY_UPGRADE.join("\n") + "\n";
+      else if (st.questsUpgraded || st.changes.some(c => /INTO quest_def\b/.test(c)))
         schema += "-- quest_def.Sequential (as content/migrations/2026-10-24-quest-sequential.sql)\n" + QUEST_SEQ_UPGRADE.join("\n") + "\n";
       return { sql: head + schema + st.changes.join("\n") + (st.changes.length ? "\n" : "") + "COMMIT;\n" };
     },
     clearExport() { st.changes = []; return { ok: true }; },
+    // One tap: the API's daily quests migration on this copy.
+    dailyEnable() {
+      if (!has("quest_def")) throw new Error("This database has no quest_def table. Apply the questline migration first.");
+      if (!cols("quest_def").includes("Sequential")) apply(QUEST_SEQ_UPGRADE, "quest_def.Sequential (as content/migrations/2026-10-24-quest-sequential.sql)");
+      apply(DAILY_MIGRATION, "daily quests (as content/migrations/2026-10-26-daily-quests.sql)");
+      st.dailyUpgraded = true;
+      return { ok: true };
+    },
+    // Several rows in one change (one undo step in Quest Studio).
+    saveMany(list) {
+      const ids = [];
+      for (const it of list) ids.push(it.delete ? api.delete(it).ok && it.id : api.save(it).id);
+      return { ids };
+    },
     // ---- areas
     areas() {
       if (!has("areas") || !has("area_tiles")) return { missing: true, areas: [], tiles: [] };

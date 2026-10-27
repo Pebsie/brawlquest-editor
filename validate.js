@@ -12,7 +12,7 @@ const BQCheck = (() => {
   // null are ignored.
   const PAIR = { list: "pair" };
   const T = {
-    step: { Type: "string", Target: "string", Targets: "names", NPC: "int", Count: "int", X: "int", Y: "int", Radius: "float", Consume: "bool", Text: "string", Line: "string", Hint: "string" },
+    step: { Type: "string", Target: "string", Targets: "names", NPC: "int", Count: "count", At: "string", X: "int", Y: "int", Radius: "float", Consume: "bool", Text: "string", Line: "string", Hint: "string" },
     reward: { ItemID: "int", Amount: "int" },
     invItem: { ID: "int", Amount: "int", ItemID: "int", Enchantment: "string", PlayerID: "int" },
     action: {
@@ -32,6 +32,9 @@ const BQCheck = (() => {
     if (v === null || t === "raw") return;
     const bad = want => out.push(`${path} is ${JSON.stringify(v).slice(0, 40)}, the API needs ${want}`);
     if (t === "int") { if (typeof v !== "number" || !Number.isInteger(v)) bad("a whole number"); }
+    // questStep.UnmarshalJSON: a whole number, or text ("3", or a daily's
+    // "{count}"; any other text loads as 0, then 1).
+    else if (t === "count") { if (!(typeof v === "string" || (typeof v === "number" && Number.isInteger(v)))) bad("a whole number or \"{count}\""); }
     else if (t === "float") { if (typeof v !== "number") bad("a number"); }
     else if (t === "string") { if (typeof v !== "string") bad("text"); }
     else if (t === "bool") { if (typeof v !== "boolean") bad("true or false"); }
@@ -86,13 +89,15 @@ const BQCheck = (() => {
       loot: { why: "initEnemies panics (nil rows) without it", types: { EnemyID: "i", AmountVariance: "i", Chance: "i", ItemID: "i", Amount: "i" } },
       npc: { why: "initNPC loads no NPCs without it", types: { id: "i", Name: "s", ImgPath: "s", SpawnX: "i", SpawnY: "i" }, nullable: ["Faction", "Conversation"] },
       conversation: { why: "initNPC loads no dialogue without it", types: { id: "i", Identifier: "s", Title: "s" }, nullable: ["ImgPath", "Options", "ItemsGiven"] },
-      quest_def: { soft: true, why: "the API runs with no quests (apply content/migrations/2026-10-13-questline.sql)", whole: true, types: { id: "i", Act: "i", Zone: "s", Title: "s", Summary: "s", Level: "i", MinLevel: "i", Giver: "i", TurnIn: "i", Prereqs: "s", Offer: "s", Accept: "s", Progress: "s", Complete: "s", XP: "i", Gold: "i", Rewards: "s", Steps: "s" }, opt: { Sequential: "i" } },
+      quest_def: { soft: true, why: "the API runs with no quests (apply content/migrations/2026-10-13-questline.sql)", whole: true, types: { id: "i", Act: "i", Zone: "s", Title: "s", Summary: "s", Level: "i", MinLevel: "i", Giver: "i", TurnIn: "i", Prereqs: "s", Offer: "s", Accept: "s", Progress: "s", Complete: "s", XP: "i", Gold: "i", Rewards: "s", Steps: "s" }, opt: { Sequential: "i", Daily: "i" } },
       craft: { star: 4, why: "initCraftItems panics (nil rows) without it", types: { id: "i", ItemID: "i", Items: "s", Chance: "i" } },
       forge: { star: 3, why: "initForging panics (nil rows) without it", types: { id: "i", EnterID: "i", ResultID: "i" } },
       world: { star: 9, why: "initWorld panics (nil rows) without it", types: { id: "i", GroundTile: "s", ForegroundTile: "s", Name: "s", X: "i", Y: "i", Music: "s", Collision: "b", Enemy: "s" } },
       effects: { optional: true, types: { id: "i", Name: "s", Description: "s", Icon: "s", Visual: "s", Duration: "n", Stacking: "s", MaxStacks: "i", Modifiers: "s" } },
       boss_patterns: { optional: true, types: { id: "i", EnemyID: "i", Pattern: "s" } },
       plot: { optional: true, types: { id: "i", Name: "s", X: "i", Y: "i", W: "i", H: "i", Rent: "i", MinLevel: "i" } },
+      // dailyquests.go loadDailyPools: a row that doesn't Scan is skipped.
+      quest_daily_pool: { optional: true, types: { id: "i", QuestID: "i", Kind: "s", Slot: "i", RefID: "i", Name: "s", Label: "s", Min: "i", Max: "i", X: "i", Y: "i", Radius: "n", Weight: "i" } },
     };
     const ok = {};
     for (const [t, d] of Object.entries(L)) {
@@ -137,7 +142,14 @@ const BQCheck = (() => {
     const questIds = ok.quest_def ? new Set(q("SELECT id FROM quest_def").map(r => r.id)) : null;
     const item = (id, lvl, t, where, ctx, route) => { if (itemIds && !itemIds.has(+id)) add(lvl, t, where, `${ctx} points at item ${id}, which doesn't exist`, route); };
 
-    if (ok.quest_def) for (const r of q("SELECT id, Title, Giver, TurnIn, Prereqs, Rewards, Steps FROM quest_def ORDER BY id")) {
+    // Daily quests: a step target that is exactly "{mob}" / "{item}" is filled
+    // from the quest's pool (dailyquests.go resolve), so the pool's names are
+    // what must exist; BQDaily.check covers them.
+    const dailyCol = ok.quest_def && colsOf("quest_def").includes("Daily");
+    const pools = ok.quest_daily_pool ? q("SELECT * FROM quest_daily_pool ORDER BY id") : [];
+    const poolOf = new Map(); for (const p of pools) { if (!poolOf.has(p.QuestID)) poolOf.set(p.QuestID, []); poolOf.get(p.QuestID).push(p); }
+    if (ok.quest_def) for (const r of q(`SELECT id, Title, Summary, Offer, Accept, Progress, Complete, Giver, TurnIn, Prereqs, Rewards, Steps${dailyCol ? ", Daily" : ""} FROM quest_def ORDER BY id`)) {
+      const daily = !!+r.Daily, ph = n => daily && typeof BQDaily !== "undefined" && BQDaily.placeholder(n);
       const w = `quest ${r.id} ${r.Title || ""}`.trim(), route = "#quest/" + r.id;
       const lists = {};
       for (const [k, sch] of [["Prereqs", "int"], ["Rewards", T.reward], ["Steps", T.step]]) {
@@ -157,14 +169,15 @@ const BQCheck = (() => {
         // Target plus Targets (more enemies or items counting towards the
         // same step), as questline.go questStep.names reads them.
         const tl = g("Targets"), extra = (Array.isArray(tl) ? tl : typeof tl === "string" ? [tl] : []).filter(x => typeof x === "string" && x.trim());
-        const names = [...new Set([target, ...extra].map(x => x.trim()).filter(Boolean))];
+        const names = [...new Set([target, ...extra].map(x => x.trim()).filter(Boolean))].filter(n => !ph(n));
         if (!STEP_TYPES.includes(type)) add("error", "quest_def", w, `${at}: unknown step type`, sr);
+        const phOnly = daily && [target, ...extra].some(ph);
         if ((type === "kill" || type === "boss") && enemyNames) {
-          if (!names.length) add("error", "quest_def", w, `${at}: no enemy named ""`, sr);
+          if (!names.length && !phOnly) add("error", "quest_def", w, `${at}: no enemy named ""`, sr);
           names.forEach(n => { if (!enemyNames.has(n.toLowerCase())) add("error", "quest_def", w, `${at}: no enemy named "${n}"`, sr); });
         }
         if (type === "collect" && itemNames) {
-          if (!names.length) add("error", "quest_def", w, `${at}: no item named ""`, sr);
+          if (!names.length && !phOnly) add("error", "quest_def", w, `${at}: no item named ""`, sr);
           names.forEach(n => { if (!itemNames.has(n.toLowerCase())) add("error", "quest_def", w, `${at}: no item named "${n}"`, sr); });
         }
         if (extra.length && ["talk", "reach", "equip", "level"].includes(type)) add("warning", "quest_def", w, `${at}: Targets is ignored on ${type} steps`, sr);
@@ -172,8 +185,21 @@ const BQCheck = (() => {
         if (type === "equip" && target && itemNames && !["weapon", "shield", "head", "chest", "legs", "mount"].includes(target.toLowerCase()) && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: "${target}" is not an item or a slot`, sr);
         if (type === "talk" && npcIds && !npcIds.has(+g("NPC"))) add("error", "quest_def", w, `${at}: NPC ${g("NPC") ?? "(none)"} doesn't exist`, sr);
       });
+      if (daily && typeof BQDaily !== "undefined" && itemNames && enemyNames) {
+        const names = { enemy: enemyNames, item: itemNames, enemyId: new Map(q("SELECT id, Name FROM enemies").map(e => [e.id, e.Name])), itemId: new Map(q("SELECT id, Name FROM items").map(e => [e.id, e.Name])) };
+        for (const p of BQDaily.check(r, poolOf.get(r.id) || [], names)) if (p.sev !== "info") add(p.sev === "err" ? "error" : "warning", "quest_def", w, "daily: " + p.msg, route);
+      }
     }
 
+    if (ok.quest_daily_pool) {
+      const daily = new Set(dailyCol ? q("SELECT id FROM quest_def WHERE Daily = 1").map(r => r.id) : []);
+      for (const p of pools) {
+        const w = `daily pool row ${p.id}`;
+        if (questIds && !questIds.has(p.QuestID)) add("warning", "quest_daily_pool", w, `quest ${p.QuestID} doesn't exist: the row is never used`);
+        else if (!daily.has(p.QuestID)) add("warning", "quest_daily_pool", w, `quest ${p.QuestID} is not a daily (Daily = 0): the row is never used`, "#quest/" + p.QuestID);
+        if (!["mob", "item", "count", "place"].includes(String(p.Kind || "").trim().toLowerCase())) add("warning", "quest_daily_pool", w, `Kind "${p.Kind}" is not mob, item, count or place: the API ignores the row`);
+      }
+    }
     if (ok.conversation) for (const r of q("SELECT id, Identifier, Options, ItemsGiven FROM conversation ORDER BY Identifier")) {
       const w = `dialogue ${r.Identifier}`, route = "#dialog/" + encodeURIComponent(r.Identifier || "");
       const re = /\[\s*['"](.*?)['"]\s*,\s*['"]([^'"]*)['"]\s*\]/g;
