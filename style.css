@@ -231,3 +231,14 @@ canvas#map{touch-action:none}
   .side .tools button{flex:1 1 30%;margin:0}
   .npcrow{min-height:48px}
 }
+/* Phones: list-and-form tabs (Quests, NPCs, Items...) stack: a short list on
+   top, the form below at full width. */
+@media (max-width: 760px){
+  body:not(.in-studio) main:has(> .list){flex-direction:column;overflow:auto}
+  main > .list{width:auto;max-height:26vh;max-height:26dvh;flex:none;border-right:0;border-bottom:1px solid #2a2f38}
+  main > .list div.row{min-height:40px;display:flex;align-items:center}
+  main:has(> .list) > .form{flex:none;overflow:visible;padding:10px 8px}
+  .form .grid{grid-template-columns:1fr}
+  .form textarea,.form input[type=text],.form select{max-width:100%}
+  .form .step .top{flex-wrap:wrap}
+}

@@ -7,9 +7,9 @@
 // now."). A quest's offer / accept / in-progress / hand-in lines are each a
 // single text box or a small conversation tree (quest_def.OfferTree ...); the
 // player's own lines are authored (Replies, or the options of tree nodes).
-const QS_ACT = { accept: "Accepts the quest", menu: "Back to the menu", offer: "Back to the offer", more: "Anything else? (next quest, else menu)", close: "Ends the chat", node: "" };
-const QS_ACT_SHORT = { accept: "accepts", menu: "menu", offer: "back to offer", more: "anything else", close: "ends chat" };
-const qsTarget = t => { const k = BQTalk.kindOf(t); return k === "node" ? BQTalk.norm(t) : ({ accept: "@accept", menu: BQTalk.norm(t).toLowerCase() === "@decline" ? "@decline" : "@menu", offer: "@offer", more: "@more", close: "@close" })[k]; };
+const QS_ACT = { accept: "Accepts the quest", menu: "Back to the menu", offer: "Back to the offer", more: "Anything else? (next quest, else menu)", close: "Ends the chat", next: "Carries on (next business here, else the greeting)", node: "" };
+const QS_ACT_SHORT = { accept: "accepts", menu: "menu", offer: "back to offer", more: "anything else", close: "ends chat", next: "carries on" };
+const qsTarget = t => { const k = BQTalk.kindOf(t); return k === "node" ? BQTalk.norm(t) : ({ accept: "@accept", menu: BQTalk.norm(t).toLowerCase() === "@decline" ? "@decline" : "@menu", offer: "@offer", more: "@more", close: "@close", next: "@next" })[k]; };
 const qsActLabel = t => { const k = BQTalk.kindOf(t); if (k === "node") return "-> " + qsShort(qsNodeTitle(t), 36); const a = BQTalk.norm(t).toLowerCase(); return a === "@decline" ? "Declines: back to the menu" : QS_ACT[k]; };
 const qsShort = (t, n = 44) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "..." : t || "(empty)"; };
 const qsNodeTitle = id => { const c = S.convBy[BQTalk.norm(id)]; return c ? c.Title : "(missing " + id + ")"; };
@@ -39,6 +39,13 @@ function qsScreen(spec) {
     h("span", { class: "qs-sc-tag", title: "The field this line is saved in" }, spec.tag),
     spec.shared ? h("span", { class: "qs-shared", title: spec.shared }, "shared") : null, h("span", { class: "qs-sp" }),
     spec.onPlay ? h("button", { class: "qs-mini qs-play-from", title: "Play from here in the game window", onclick: spec.onPlay }, "play") : null);
+  // a conversation node: its portrait, gift and raw fields, in place
+  const node = spec.node && S.convBy[spec.node];
+  if (node) bar.append(h("button", { class: "qs-mini qs-more", title: "Portrait, items given, identifier and raw answers of this line", onclick: e => {
+    const sc = e.currentTarget.closest(".qs-sc"), open = sc.querySelector(":scope > .qs-morebox");
+    if (open) { open.remove(); return; }
+    sc.append(h("div", { class: "qs-morebox" }, nodeEditor(S.convBy[spec.node] || node, false, n || {})));
+  } }, "more"));
   const say = h("div", { class: "qs-sc-say", "data-line": spec.line || "" },
     qsInline(spec.say.value, spec.say.onSave, { multi: true, cls: "rh", ph: spec.say.ph, chips: spec.say.chips, title: "Click to write what they say" }),
     spec.auto ? h("div", { class: "qs-auto" }, spec.auto) : null);
@@ -49,7 +56,7 @@ function qsScreen(spec) {
     r.note ? h("div", { class: "qs-op-note" }, r.note) : null));
   return h("div", { class: "qs-sc" + (spec.cls ? " " + spec.cls : "") + ((spec.issues || []).some(x => x.sev !== "info") ? " warn" : ""), "data-node": spec.node || "" },
     bar,
-    h("div", { class: "qs-sc-body" }, pix(n ? n.ImgPath : "", "bp"), say),
+    h("div", { class: "qs-sc-body" }, pix(node && hasPortrait(node) ? node.ImgPath : n ? n.ImgPath : "", "bp"), say),
     rows.length ? h("div", { class: "qs-sc-opts" }, rows) : null,
     spec.adds && spec.adds.length ? h("div", { class: "qs-sc-add" }, spec.adds) : null,
     (spec.issues || []).length ? h("div", { class: "qs-sc-iss" }, spec.issues.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))) : null);
@@ -78,7 +85,7 @@ function qsFlow(q, o = {}) {
   // the four stages
   for (const [i, st] of BQTalk.STAGES.entries()) {
     const npc = S.npcBy[q[st.who]], root = on ? BQTalk.norm(q[st.tree]) : "", rootNode = root && S.convBy[root];
-    const block = h("div", { class: "qs-stage", "data-stage": st.k }, stageHead(i + 1 + (i > 1 ? 1 : 0), st, npc));
+    const block = h("div", { class: "qs-stage", "data-stage": st.k, id: o.ids ? "qline-" + st.text : null }, stageHead(i + 1 + (i > 1 ? 1 : 0), st, npc));
     const iss = issuesFor(st);
     const play = () => qsPreviewQuest(q, st.k);
     if (rootNode) block.append(qsTreeStage(q, st, iss, chips, play));
@@ -92,25 +99,60 @@ function qsFlow(q, o = {}) {
     if (iss.length && !rootNode) block.append(h("div", { class: "qs-iss" }, iss.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))));
     wrap.append(block);
     // talk objectives sit between accepting and coming back
-    if (st.k === "accept") {
-      const talks = steps.map((s, k) => [s, k]).filter(([s]) => s.Type === "talk");
-      for (const [s, k] of talks) wrap.append(h("div", { class: "qs-stage", "data-stage": "talk" }, h("div", { class: "qs-stage-h" }, h("b", { class: "qs-stage-n" }, 3), h("div", {}, h("b", {}, `Objective ${k + 1}: talk`), h("small", {}, ` the first thing they hear when you get there, ${npcName(s.NPC)}`))),
-        qsScreen({ npc: S.npcBy[s.NPC], tag: `Steps[${k + 1}].Line`, line: "step:" + k, say: { value: s.Line, ph: "What they say when you get there", onSave: v => { const a = qSteps(q); a[k].Line = v; return patch({ Steps: JSON.stringify(a) }, `${npcName(s.NPC)}'s line`); }, chips },
-          rows: [{ value: "", ph: "Right.", kind: "node", auto: true, act: qsActTag("node", "Continues: next business here, else the menu") }] })));
-    }
+    if (st.k === "accept") steps.forEach((s, k) => { if (s.Type === "talk") wrap.append(qsTalkStage(q, s, k, chips, o)); });
   }
-  // the end: shared lines
+  // the end: what comes next
+  const nexts = S.c.quests.filter(x => x.id !== q.id && parseJSON(x.Prereqs, []).includes(q.id)).sort((a, b) => a.Level - b.Level || a.id - b.id);
   const gn = o.npc || t || g;
-  wrap.append(h("div", { class: "qs-stage end" }, h("div", { class: "qs-stage-h" }, h("b", { class: "qs-stage-n" }, "..."), h("div", {}, h("b", {}, "Then"), h("small", {}, " \"" + (BQTalk.reply(q, "AnythingElse")) + "\" opens their next quest on offer, which starts on its own offer; with none left, their menu and greeting"))),
-    gn && !o.noGreeting ? qsGreetingBox(gn, { compact: true }) : null));
+  wrap.append(h("div", { class: "qs-stage end", "data-stage": "next" }, h("div", { class: "qs-stage-h" }, h("b", { class: "qs-stage-n" }, "..."), h("div", {}, h("b", {}, "Then"), h("small", {}, " \"" + (BQTalk.reply(q, "AnythingElse")) + "\" opens their next quest on offer, which starts on its own offer; with none left, their menu and greeting"))),
+    nexts.length ? h("div", { class: "qs-nexts" }, h("small", { class: "hint" }, `Unlocks ${nexts.length === 1 ? "this quest" : "these quests"}: their lines, editable here`), nexts.map(nq => qsNextBranch(nq))) : h("small", { class: "hint" }, "Nothing unlocks after this quest yet."),
+    gn && !o.noGreeting && !o.inConvo ? qsGreetingBox(gn, { compact: true }) : null));
   return wrap;
+}
+// A talk objective at another NPC: their line and the player's answer (Steps[k]
+// Line and Reply, default "Right."), or a small conversation (Steps[k].Tree).
+function qsTalkStage(q, s, k, chips, o = {}) {
+  const npc = S.npcBy[s.NPC];
+  const upd = (fn, label) => { const a = qSteps(qById(q.id)); if (!a[k] || a[k].Type !== "talk") return Promise.resolve(); fn(a[k]); return qsPatchQuest(q.id, { Steps: JSON.stringify(a) }, label); };
+  const who = npc ? npc.Name : "the NPC";
+  const st = { k: "talk", dom: "talk-" + k, label: `Objective ${k + 1}: talk to ${who}`, short: "when you get there", npc, line: "step:" + k, root: BQTalk.norm(s.Tree), back: "@next", backText: String(s.Reply || "").trim() || BQTalk.TALK_REPLY, def: [],
+    unset: () => upd(x => { delete x.Tree; }, `${who}: single text box again`) };
+  const block = h("div", { class: "qs-stage talk", "data-stage": st.dom, id: o.ids ? "qline-step-" + k : null },
+    h("div", { class: "qs-stage-h" }, h("b", { class: "qs-stage-n" }, 3), h("div", {}, h("b", {}, `Objective ${k + 1}: talk`), h("small", {}, " the first thing they hear when they get there, ", npc ? h("a", { href: "#studio/npc/" + npc.id }, npc.Name) : "pick an NPC"))));
+  const play = () => qsPreviewQuest(q, "step:" + k);
+  const rootNode = st.root && S.convBy[st.root];
+  if (rootNode) { block.append(qsTreeStage(q, st, BQTalk.analyse(st.root, qsNodeGet, st, q), chips, play)); return block; }
+  block.append(qsScreen({ npc, tag: `Steps[${k + 1}].Line`, line: "step:" + k, onPlay: play,
+    say: { value: s.Line, ph: "What they say when you get there", onSave: v => upd(x => (x.Line = v), `${who}'s line`), chips },
+    rows: [{ value: s.Reply || "", ph: BQTalk.TALK_REPLY, chips, auto: true, kind: "next", node: "step:" + k,
+      onSave: v => upd(x => { if (String(v || "").trim() && v !== BQTalk.TALK_REPLY) x.Reply = v; else delete x.Reply; }, `Answer to ${who}`),
+      act: qsActTag("next", "Carries on: next business here, else the greeting") }],
+    adds: !qsDlgEnabled() ? [] : [h("button", { class: "qs-btn qs-conv", "data-stage": st.dom, title: "Replace the single text box by a small conversation", onclick: () => qsTalkConvert(q, k) }, "Turn into a conversation")] }));
+  if (st.root && !rootNode) block.append(h("div", { class: "qs-iss" }, h("div", { class: "qs-prob warn" }, h("i", { class: "lg warn" }), `The conversation "${st.root}" doesn't exist: the game shows this line instead`)));
+  return block;
+}
+async function qsTalkConvert(q, k) {
+  q = qById(q.id); const a = qSteps(q), s = a[k]; if (!s) return;
+  const ident = BQTalk.newIdent(q, "talk-" + (k + 1), x => !!S.convBy[x]);
+  a[k] = { ...s, Tree: ident };
+  await qsCommitMany([{ table: "conversation", row: qsNewNodeRow(ident, s.Line || "", [[String(s.Reply || "").trim() || BQTalk.TALK_REPLY, "@next"]]) }, { table: "quest_def", row: { ...q, Steps: JSON.stringify(a) } }], `Objective ${k + 1}: now a conversation`).catch(() => {});
+  qsRerender();
+  setTimeout(() => { const b = document.querySelector(`.qs-stage[data-stage="talk-${k}"] .qs-addq`); if (b) b.scrollIntoView({ block: "center" }); }, 150);
+}
+// A quest that this one unlocks: folded, its own conversation inside.
+function qsNextBranch(nq) {
+  const d = h("details", { class: "qs-qbranch next" + (qsIsDaily(nq) ? " daily" : ""), "data-quest": nq.id },
+    h("summary", {}, h("span", { class: "qs-qtag" }, "NEXT"), h("span", { class: "qc-lv" }, nq.Level), " ", h("b", {}, nq.Title), h("small", {}, ` from ${npcName(nq.Giver)}: "${qsShort(nq.Offer || qsNodeTitle(nq.OfferTree || ""), 60)}"`)),
+    h("div", { class: "qs-qbody" }, h("div", { class: "qs-row wrap" }, h("a", { class: "qs-link", href: "#studio/journey/" + nq.id }, "open its sheet"))));
+  d.addEventListener("toggle", () => { const b = d.querySelector(".qs-qbody"); if (d.open && b.childNodes.length === 1) b.append(qsQuestInConvo(nq, { nested: true })); });
+  return d;
 }
 const qsRewardLine = q => { const r = [+q.XP ? `${q.XP} XP` : "", +q.Gold ? `${q.Gold} Gold` : "", ...qRw(q).map(x => (S.itemBy[x.ItemID] ? `${x.Amount}x ${S.itemBy[x.ItemID].Name}` : ""))].filter(Boolean); return r.length ? "Reward: " + r.join(", ") : "No reward"; };
 
 // ---- a stage as a conversation tree
 function qsActSelect(q, st, curTarget, onChange) {
-  const base = { offer: ["@accept", "@decline", "@offer", "@close"], accept: ["@close", "@menu", "@more"], progress: ["@menu", "@close", "@more"], complete: ["@more", "@menu", "@close"] }[st.k];
-  const root = BQTalk.norm(q[st.tree]), nodes = BQTalk.walk(root, qsNodeGet).order;
+  const base = { offer: ["@accept", "@decline", "@offer", "@close"], accept: ["@close", "@menu", "@more"], progress: ["@menu", "@close", "@more"], complete: ["@more", "@menu", "@close"], talk: ["@next", "@close", "@menu", "@more"] }[st.k];
+  const root = qsStRoot(q, st), nodes = BQTalk.walk(root, qsNodeGet).order;
   const cur = qsTarget(curTarget);
   const sel = h("select", { class: "qs-act act-" + BQTalk.kindOf(curTarget), title: "Where this answer goes" },
     h("optgroup", { label: "Does" }, [...new Set([...base, ...(BQTalk.kindOf(cur) !== "node" ? [cur] : [])])].map(a => h("option", { value: a }, qsActLabel(a)))),
@@ -121,8 +163,11 @@ function qsActSelect(q, st, curTarget, onChange) {
   sel.onchange = () => onChange(sel.value);
   return sel;
 }
+// A stage's root: the quest column, or (talk objectives) the step's Tree.
+const qsStRoot = (q, st) => (st.root != null ? BQTalk.norm(st.root) : BQTalk.norm(q[st.tree]));
+const qsStDom = st => st.dom || st.k;
 function qsTreeStage(q, st, issues, chips, play) {
-  const root = BQTalk.norm(q[st.tree]), npc = S.npcBy[q[st.who]];
+  const root = qsStRoot(q, st), npc = st.npc || S.npcBy[q[st.who]];
   const shown = new Set();
   const patch = (p, label) => qsPatchQuest(q.id, p, label);
   const bad = new Map(); for (const x of issues) { (bad.get(x.node) || bad.set(x.node, []).get(x.node)).push(x); }
@@ -131,7 +176,7 @@ function qsTreeStage(q, st, issues, chips, play) {
   const nodeEl = (ident, depth) => {
     const c = cur(ident);
     if (!c) return h("div", { class: "qs-bub bad" }, `Missing line "${ident}": this answer is a dead end. `, h("button", { class: "qs-mini", onclick: () => qsCommit("conversation", qsNewNodeRow(ident, "", [[st.backText, st.back]]), `Created ${ident}`).then(qsRerender) }, "create it"));
-    if (shown.has(ident)) return h("a", { class: "qs-back", href: "#", onclick: e => { e.preventDefault(); const t = document.querySelector(`.qs-stage[data-stage="${st.k}"] .qs-sc[data-node="${CSS.escape(ident)}"]`); if (t) { t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } } }, "<- back to \"", qsShort(c.Title, 36), "\" (above)");
+    if (shown.has(ident)) return h("a", { class: "qs-back", href: "#", onclick: e => { e.preventDefault(); const t = document.querySelector(`.qs-stage[data-stage="${qsStDom(st)}"] .qs-sc[data-node="${CSS.escape(ident)}"]`); if (t) { t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } } }, "<- back to \"", qsShort(c.Title, 36), "\" (above)");
     shown.add(ident);
     const isRoot = ident === root, opts = parseOptions(c.Options);
     const rows = opts.map(([label, to], i) => ({
@@ -158,7 +203,7 @@ function qsTreeStage(q, st, issues, chips, play) {
     const adds = [h("button", { class: "qs-btn qs-addq", title: "Add something the player can ask, and what they say back", onclick: () => qsAddQuestion(q, st, ident) }, "+ question"),
       ...(st.k === "offer" ? [h("button", { class: "qs-btn qs-adda", "data-do": "@accept", onclick: () => qsAddAnswer(q, st, ident, "@accept", "Fine, I'll do it.") }, "+ accept answer"), h("button", { class: "qs-btn qs-adda", "data-do": "@decline", onclick: () => qsAddAnswer(q, st, ident, "@decline", "Maybe later.") }, "+ decline answer")]
         : [h("button", { class: "qs-btn qs-adda", "data-do": st.back, onclick: () => qsAddAnswer(q, st, ident, st.back, st.backText) }, "+ answer")])];
-    const el = qsScreen({ npc, tag: (isRoot ? "first line " : "line ") + ident, node: ident, line: isRoot ? st.text : "", cls: isRoot ? "root" : "sub",
+    const el = qsScreen({ npc, tag: (isRoot ? "first line " : "line ") + ident, node: ident, line: isRoot ? (st.line || st.text) : "", cls: isRoot ? "root" : "sub",
       say: { value: c.Title, ph: "What they say", chips, onSave: v => qsNodeSave(cur(ident), { Title: v }, `${npc ? npc.Name : "NPC"}: line edited`) },
       auto: isRoot && st.k === "offer" ? qsSum(q) : isRoot && st.k === "complete" ? qsRewardLine(q) : "", rows, adds, issues: bad.get(ident), onPlay: isRoot ? play : () => qsPreviewQuest(q, ident) });
     // the lines the answers lead to, nested under their answer
@@ -171,30 +216,72 @@ function qsTreeStage(q, st, issues, chips, play) {
   const orph = BQTalk.orphans(q, S.c.conversations, qsNodeGet);
   const out = h("div", { class: "qs-tree" },
     h("div", { class: "qs-tree-h" }, h("b", {}, `A conversation (${walked.order.length} line${walked.order.length === 1 ? "" : "s"})`), h("span", { class: "qs-sp" }),
-      h("button", { class: "qs-mini", title: "Go back to one text box (the lines stay in the db)", onclick: () => patch({ [st.tree]: "" }, `${st.label}: single text box again`) }, "one box again")),
+      h("button", { class: "qs-mini", title: "Go back to one text box (the lines stay in the db)", onclick: () => (st.unset ? st.unset() : patch({ [st.tree]: "" }, `${st.label}: single text box again`)) }, "one box again")),
     walked.order.length > 1 ? qsOutline(q, st, root) : null,
     tree);
-  const loose = orph.filter(id => { const k = BQTalk.STAGES.find(s => BQTalk.walk(BQTalk.norm(q[s.tree]), qsNodeGet).seen.has(id)); return !k; });
-  if (loose.length && st.k === "offer") out.append(h("div", { class: "qs-rule" }, "Lines nobody reaches: ", loose.map(id => h("span", { class: "qs-chip" }, id))));
+  const loose = orph.filter(id => !BQTalk.roots(q).some(r => BQTalk.walk(r, qsNodeGet).seen.has(id)));
+  if (loose.length && st.k === "offer") {
+    const more = h("div", {});
+    out.append(h("div", { class: "qs-rule" }, "Lines nobody reaches (tap to edit or remove): ", loose.map(id => h("button", { class: "qs-chip", onclick: () => { const c = S.convBy[id]; more.replaceChildren(c ? h("div", { class: "qs-morebox" }, nodeEditor(c, false, npc || {})) : ""); } }, id))), more);
+  }
   const inTree = new Set(walked.order), top = issues.filter(x => !inTree.has(x.node) || x.nodes);
   if (top.length) out.prepend(h("div", { class: "qs-iss" }, top.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))));
   return out;
 }
 const qsSum = q => qSteps(qsIsDaily(q) ? qsDayDef(q) : q).map(s => "- " + (s.Text || stepLabel(s))).join("\n");
 // The whole tree at a glance: every line with its answers as coloured tags.
-function qsOutline(q, st, root) {
+// dom: the stage's data-stage, for the jump; scope: where to look (default
+// the document).
+function qsOlTree(root, dom, scope) {
   const seen = new Set();
-  const go = (id, depth) => {
+  const go = id => {
     const c = S.convBy[id];
     if (!c) return h("li", { class: "qs-ol bad" }, `${id} (missing)`);
     if (seen.has(id)) return h("li", { class: "qs-ol back" }, "<- " + qsShort(c.Title, 30));
     seen.add(id);
     const opts = parseOptions(c.Options);
-    const li = h("li", { class: "qs-ol" }, h("button", { class: "qs-ol-n", title: "Jump to this line", onclick: () => { const t = document.querySelector(`.qs-stage[data-stage="${st.k}"] .qs-sc[data-node="${CSS.escape(id)}"]`); if (t) { t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } } }, qsShort(c.Title, 46)),
-      h("ul", {}, opts.map(([l, to]) => { const k = BQTalk.kindOf(to); return k === "node" ? h("li", { class: "qs-ol-o" }, h("span", { class: "qs-tag act-node" }, qsShort(l, 30)), go(BQTalk.norm(to), depth + 1)) : h("li", { class: "qs-ol-o" }, h("span", { class: "qs-tag act-" + k }, qsShort(l, 30), h("i", {}, " " + QS_ACT_SHORT[k]))); })));
-    return li;
+    return h("li", { class: "qs-ol" }, h("button", { class: "qs-ol-n", title: "Jump to this line", onclick: e => qsJump((scope ? e.currentTarget.closest(scope) : null) || document, `.qs-stage[data-stage="${dom}"] .qs-sc[data-node="${CSS.escape(id)}"]`) }, qsShort(c.Title, 46)),
+      h("ul", {}, opts.map(([l, to]) => { const k = BQTalk.kindOf(to); return k === "node" ? h("li", { class: "qs-ol-o" }, h("span", { class: "qs-tag act-node" }, qsShort(l, 30)), go(BQTalk.norm(to))) : h("li", { class: "qs-ol-o" }, h("span", { class: "qs-tag act-" + k }, qsShort(l, 30), h("i", {}, " " + QS_ACT_SHORT[k]))); })));
   };
-  return h("details", { class: "qs-outline", open: true }, h("summary", {}, "The whole conversation at a glance"), h("ul", { class: "qs-ol-root" }, go(root, 0)));
+  return h("ul", { class: "qs-ol-root" }, go(root));
+}
+function qsJump(scope, sel) {
+  const t = scope.querySelector(sel) || document.querySelector(sel); if (!t) return;
+  const d = t.closest("details:not([open])"); if (d) d.open = true;
+  t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash");
+}
+function qsOutline(q, st, root) {
+  return h("details", { class: "qs-outline", open: true }, h("summary", {}, "The whole conversation at a glance"), qsOlTree(root, qsStDom(st)));
+}
+// The quest's whole path at a glance, top to bottom: who says what, the
+// player's answers and where each goes; a tap jumps to the line below.
+function qsQuestMap(q) {
+  const g = S.npcBy[q.Giver], scope = ".qs-qconvo";
+  const jump = sel => e => qsJump(e.currentTarget.closest(scope) || document, sel);
+  const tag = (label, to) => { const k = BQTalk.kindOf(to); return h("li", { class: "qs-ol-o" }, h("span", { class: "qs-tag act-" + k }, qsShort(label, 34), h("i", {}, " " + (QS_ACT_SHORT[k] || "")))); };
+  const head = (n, label, sel) => h("button", { class: "qs-beat-h", onclick: jump(sel), title: "Jump to it" }, n ? pix(n.ImgPath, "mi") : null, h("b", {}, n ? n.Name : "(nobody)"), h("small", {}, " " + label));
+  const beat = (cls, n, label, sel, body) => h("li", { class: "qs-beat " + cls }, head(n, label, sel), body);
+  const say = (text, replies) => [h("div", { class: "qs-beat-t" }, "\u201c" + qsShort(text, 110) + "\u201d"), replies.length ? h("ul", { class: "qs-beat-r" }, replies) : null];
+  const out = h("ol", { class: "qs-map" });
+  // 0. the way in
+  const path = g && qsConvoPath(g, q.id);
+  if (path) path.forEach(([id, i], k) => { const c = S.convBy[id], o = parseOptions(c.Options)[i]; out.append(beat("lead", g, k ? "chat" : "greeting", ".qs-stage[data-stage=lead]", say(c.Title, [h("li", { class: "qs-ol-o" }, h("span", { class: "qs-tag act-quest" }, qsShort(o[0], 34), h("i", {}, k === path.length - 1 ? " brings up this quest" : " goes on")))]))); });
+  else out.append(beat("lead", g, "opens on the offer", ".qs-stage[data-stage=lead]", h("div", { class: "qs-beat-t hint" }, "Talking to them opens straight on the offer while it's available")));
+  const on = qsDlgEnabled(), steps = qSteps(q);
+  for (const st of BQTalk.STAGES) {
+    const n = S.npcBy[q[st.who]], root = on ? BQTalk.norm(q[st.tree]) : "";
+    if (root && S.convBy[root]) out.append(beat("st", n, st.label.toLowerCase(), `.qs-stage[data-stage=${st.k}]`, qsOlTree(root, st.k, scope)));
+    else out.append(beat("st", n, st.label.toLowerCase(), `.qs-stage[data-stage=${st.k}]`, say(q[st.text], [...st.def.map(d => tag(BQTalk.reply(q, d.reply), d.to)), ...(st.k === "offer" ? [] : [])])));
+    if (st.k === "accept") steps.forEach((s, k) => {
+      if (s.Type !== "talk") return;
+      const tn = S.npcBy[s.NPC], r = BQTalk.norm(s.Tree), sel = `.qs-stage[data-stage=talk-${k}]`, label = `objective ${k + 1}: talk`;
+      out.append(r && S.convBy[r] ? beat("talk", tn, label, sel, qsOlTree(r, "talk-" + k, scope)) : beat("talk", tn, label, sel, say(s.Line, [tag(String(s.Reply || "").trim() || BQTalk.TALK_REPLY, "@next")])));
+    });
+  }
+  const nexts = S.c.quests.filter(x => x.id !== q.id && parseJSON(x.Prereqs, []).includes(q.id));
+  if (nexts.length) out.append(h("li", { class: "qs-beat next" }, h("button", { class: "qs-beat-h", onclick: jump(".qs-stage[data-stage=next]") }, h("b", {}, "Then"), h("small", {}, " unlocks")),
+    h("ul", { class: "qs-beat-r" }, nexts.map(nq => h("li", { class: "qs-ol-o" }, h("button", { class: "qs-tag act-quest", onclick: e => { const sc = e.currentTarget.closest(scope) || document; const d = sc.querySelector(`.qs-stage[data-stage=next] details[data-quest="${nq.id}"]`); if (d) { d.open = true; d.scrollIntoView({ block: "start", behavior: "smooth" }); } } }, nq.Title, h("i", {}, " from " + npcName(nq.Giver))))))));
+  return h("details", { class: "qs-outline qs-mapbox", open: true }, h("summary", {}, "The whole path at a glance ", h("span", { class: "hint" }, "tap a line to edit it below")), out);
 }
 // ---- tree edits (each one undo step)
 async function qsAddQuestion(q, st, nodeId) {
@@ -219,11 +306,11 @@ async function qsRemoveOption(q, st, nodeId, i) {
   o.splice(i, 1);
   const list = [{ table: "conversation", row: qsNodeRow(c, { Options: formatOptions(o) }) }];
   // lines only reachable through the removed answer
-  const roots = BQTalk.STAGES.map(s => BQTalk.norm(q[s.tree])).filter(Boolean);
+  const roots = BQTalk.roots(q);
   const after = id => (id === nodeId ? { Title: c.Title, Options: o } : qsNodeGet(id));
   const keep = new Set(); for (const r of roots) for (const id of BQTalk.walk(r, after).order) keep.add(id);
   const before = new Set(); for (const r of roots) for (const id of BQTalk.walk(r, qsNodeGet).order) before.add(id);
-  for (const id of before) if (!keep.has(id) && S.convBy[id] && id.startsWith("q" + q.id + "-") && !BQTalk.STAGES.some(s => BQTalk.norm(q[s.tree]) === id)) list.push({ table: "conversation", id: S.convBy[id].id, delete: true });
+  for (const id of before) if (!keep.has(id) && S.convBy[id] && id.startsWith("q" + q.id + "-") && !roots.includes(id)) list.push({ table: "conversation", id: S.convBy[id].id, delete: true });
   await qsCommitMany(list, list.length > 1 ? "Removed an answer and its lines" : "Removed an answer").catch(() => {});
   qsRerender();
 }
@@ -318,7 +405,7 @@ function qsQuestFromLine(n, nodeId) {
 // Where an answer on a chat line goes.
 function qsChatDest(n, curTo, onChange) {
   const nodes = qsChatNodes(n), cur = String(curTo == null ? "" : curTo).trim() || "1";
-  const qs = qsNpcQuests(n), lq = qsLinkOf(cur);
+  const qs = qsOrder().filter(q => q.Giver === n.id || q.TurnIn === n.id), lq = qsLinkOf(cur);
   const sel = h("select", { class: "qs-act act-" + (lq ? "quest" : cur === "1" ? "close" : "node"), title: "Where this answer goes" },
     h("option", { value: "1" }, "Ends the chat"),
     h("optgroup", { label: "Goes to a line" }, nodes.map(id => h("option", { value: id }, "-> " + (qsShort(S.convBy[id].Title || "", 40) || "a new line (not written yet)"))),
@@ -357,7 +444,7 @@ function qsChatLine(n, ident, ctx, o = {}) {
         } else { op[i][1] = val; if (qsLinkOf(val)) QS.convoOpen = qsLinkOf(val); setOpts(op, "Answer re-routed"); }
       }),
       onRemove: () => { const op = parseOptions(cur().Options); op.splice(i, 1); setOpts(op, "Answer removed"); },
-      note: q && !o.path && q.Giver !== n.id ? h("span", { class: "qs-prob warn" }, `${q.Title} is given by ${npcName(q.Giver)}: the game hides this answer here`) : null,
+      note: q && !o.path && q.Giver !== n.id && q.TurnIn !== n.id ? h("span", { class: "qs-prob warn" }, `${q.Title} is given by ${npcName(q.Giver)}: the game hides this answer here`) : q && q.Giver !== n.id && !o.path ? h("span", { class: "hint" }, `shows only when it's ready to hand in here`) : null,
     };
   });
   if (!opts.some(([, t]) => !qsIsChatTarget(t) && !qsLinkOf(t))) rows.push({ value: "", ph: "Goodbye.", kind: "close", auto: true, act: qsActTag("close", "Ends the chat (automatic)") });
@@ -421,21 +508,29 @@ function qsConvo(n, o = {}) {
 // A quest sheet's conversation: where it comes from in the giver's chat
 // (greeting -> the lines on the way -> the answer that brings it up), then
 // its own lines, all editable here.
-function qsQuestInConvo(q) {
-  const g = S.npcBy[q.Giver];
-  const wrap = h("div", { class: "qs-qconvo" });
-  if (g) {
-    const path = qsConvoPath(g, q.id), ctx = { shown: new Set(), root: wrap };
-    if (path) {
-      const lead = h("div", { class: "qs-path" });
-      path.forEach(([id, i], k) => { lead.append(qsChatLine(g, id, ctx, { path: true, pathAt: i })); if (k < path.length - 1) lead.append(h("div", { class: "qs-pathstep" }, "then")); });
-      wrap.append(h("div", { class: "qs-stage", "data-stage": "lead" }, h("div", { class: "qs-stage-h" }, h("b", { class: "qs-stage-n" }, "0"), h("div", {}, h("b", {}, "In the chat"), h("small", {}, ` how ${g.Name} brings it up (`, h("a", { href: "#studio/npc/" + g.id }, "their whole conversation"), ")"))), lead));
-    } else {
-      wrap.append(h("div", { class: "qs-stage", "data-stage": "lead" }, h("div", { class: "qs-stage-h" }, h("b", { class: "qs-stage-n" }, "0"), h("div", {}, h("b", {}, "In the chat"), h("small", {}, " not brought up yet: it opens straight away when it's available"))),
-        g.Conversation && S.convBy[g.Conversation] ? qsChatLine(g, g.Conversation, ctx, { path: true, pathAt: -1 }) : null,
-        h("div", { class: "qs-row wrap" }, g.Conversation && S.convBy[g.Conversation] ? h("button", { class: "qs-btn hot", id: "qs-bring-up", onclick: () => qsLinkQuest(g, q, g.Conversation, "Got any work for me?") }, `Bring it up in ${g.Name}'s chat`) : h("button", { class: "qs-btn", onclick: () => qsGreetingCreate(g) }, `Give ${g.Name} a greeting`))));
+function qsQuestInConvo(q, o = {}) {
+  const g = S.npcBy[q.Giver], t = S.npcBy[q.TurnIn];
+  const wrap = h("div", { class: "qs-qconvo" + (o.nested ? " nested" : "") });
+  if (!o.nested) wrap.append(qsQuestMap(q));
+  const lead = (n, key, title, why, linkTo) => {
+    const path = qsConvoPath(n, q.id), ctx = { shown: new Set(), root: wrap };
+    const has = n.Conversation && S.convBy[n.Conversation];
+    const box = h("div", { class: "qs-stage", "data-stage": key }, h("div", { class: "qs-stage-h" }, h("b", { class: "qs-stage-n" }, "0"), h("div", {}, h("b", {}, title),
+      h("small", {}, path ? [` how ${n.Name} brings it up (`, h("a", { href: "#studio/npc/" + n.id }, "their whole conversation"), ")"] : " " + why))));
+    if (path) path.forEach(([id, i], k) => { box.append(qsChatLine(n, id, ctx, { path: true, pathAt: i })); if (k < path.length - 1) box.append(h("div", { class: "qs-pathstep" }, "then")); });
+    else if (linkTo) box.append(has ? qsChatLine(n, n.Conversation, ctx, { path: true, pathAt: -1 }) : null,
+      h("div", { class: "qs-row wrap" }, has ? h("button", { class: "qs-btn hot", id: key === "lead" ? "qs-bring-up" : null, onclick: () => qsLinkQuest(n, q, n.Conversation, linkTo) }, `Bring it up in ${n.Name}'s chat`) : h("button", { class: "qs-btn", onclick: () => qsGreetingCreate(n) }, `Give ${n.Name} a greeting`)));
+    // the rest of their conversation, here too
+    if (has && !o.nested) {
+      const d = h("details", { class: "qs-rest" }, h("summary", {}, `All of ${n.Name}'s conversation `, h("span", { class: "hint" }, "every line and answer, and their other quests")));
+      d.addEventListener("toggle", () => { if (d.open && d.childNodes.length === 1) d.append(qsConvo(n, { open: -1 })); });
+      box.append(d);
     }
-  }
-  wrap.append(qsFlow(q, { noGreeting: false, inConvo: true }));
+    return box;
+  };
+  if (g) wrap.append(lead(g, "lead", "In the chat", "not brought up yet: it opens straight away when it's available", "Got any work for me?"));
+  // a hand-in somewhere else can come up in that NPC's chat too
+  if (t && t !== g && qsConvoPath(t, q.id)) wrap.append(lead(t, "lead-turnin", `In ${t.Name}'s chat`, "", null));
+  wrap.append(qsFlow(q, { noGreeting: false, inConvo: true, ids: o.ids }));
   return wrap;
 }

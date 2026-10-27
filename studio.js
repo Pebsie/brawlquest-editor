@@ -115,7 +115,7 @@ function qsAnalyse() {
       if ((s.Type === "kill" || s.Type === "boss")) { const bad = names.filter(n => !enemyByName()[n.toLowerCase()]); if ((!names.length && !ph) || bad.length) add(q.id, "err", "target", `Objective ${i + 1}: no enemy called ${bad.join(", ") || "(blank)"}`); }
       if (s.Type === "collect" || s.Type === "craft") { const bad = names.filter(n => !itemByName()[n.toLowerCase()]); if ((!names.length && !ph) || bad.length) add(q.id, "warn", "target", `Objective ${i + 1}: no item called ${bad.join(", ") || "(blank)"}`); }
       if (s.Type === "talk" && !S.npcBy[s.NPC]) add(q.id, "err", "target", `Objective ${i + 1}: talk to a missing NPC`);
-      if (s.Type === "talk" && !String(s.Line || "").trim()) add(q.id, "warn", "line", `Objective ${i + 1}: the NPC has nothing to say`);
+      if (s.Type === "talk" && !String(s.Line || "").trim() && !(s.Tree && S.convBy[s.Tree])) add(q.id, "warn", "line", `Objective ${i + 1}: the NPC has nothing to say`);
       if (!String(s.Text || "").trim()) add(q.id, "warn", "text", `Objective ${i + 1} has no tracker text`);
     });
     if (steps.length > 1 && !+q.Sequential && steps.slice(1).some(s => s.Type === "talk" || s.Type === "reach")) add(q.id, "info", "order", "Objectives all count at once. Tick \"in order\" if it's a story sequence");
@@ -239,6 +239,8 @@ function renderStudio(m) {
 }
 function qsGo(view, arg) { go("#studio/" + view + (arg != null ? "/" + arg : "")); }
 function qsRerender() {
+  // the quest's dialogue embedded in the classic quest form
+  if (QS.embed && QS.embed.el.isConnected && (!QS.root || !QS.root.isConnected)) { QS.embed.draw(); return; }
   const root = QS.root; if (!root || !root.isConnected) return;
   root.replaceChildren(qsNav(), h("div", { class: "qs-body", id: "qs-body" }));
   const body = $("#qs-body");
@@ -749,6 +751,7 @@ function qsPDef(P, q) { return qsIsDaily(q) ? qsDayDef(q, qsPDay(P), P.state[q.i
 function qsTalkStep(P, q, npcId) {
   if (P.state[q.id] !== "active") return -1;
   const ss = qSteps(qsPDef(P, q)), talked = (P.talked && P.talked[q.id]) || new Set();
+  if (P.talkAt && P.talkAt[q.id] != null) { const i = P.talkAt[q.id]; return ss[i] && ss[i].Type === "talk" && ss[i].NPC === npcId && !talked.has(i) ? i : -1; } // a preview of one objective
   for (let i = 0; i < ss.length; i++) {
     if (ss[i].Type === "talk" && ss[i].NPC === npcId && !talked.has(i)) return i;
     if (+q.Sequential && !(ss[i].Type === "talk" && talked.has(i))) return -1;
@@ -813,6 +816,7 @@ function qsTreeKey(qid, target) {
     case "offer": return "offer:" + qid;
     case "more": return "more";
     case "close": return "close";
+    case "next": return ""; // talk trees: the next business here, else the greeting
   }
   return "q:" + qid + ":" + BQTalk.norm(target);
 }
@@ -856,7 +860,12 @@ function qsTalk(P, n, key) {
     if (qsTreeNode(P, q, q.AcceptTree, v)) { if (!v.options.length) v.options = [onIt]; } else { v.text = d.Accept; v.options = [onIt]; }
     v.quest = id; v.line = "Accept";
   }
-  else if (kind === "talk" && q && qsTalkStep(P, q, n.id) >= 0) { const i = qsTalkStep(P, q, n.id); P.talked = P.talked || {}; (P.talked[id] = P.talked[id] || new Set()).add(i); v.text = qSteps(d)[i].Line || ""; v.options = [{ t: "Right.", k: "" }]; v.quest = id; v.line = "step:" + i; }
+  else if (kind === "talk" && q && qsTalkStep(P, q, n.id) >= 0) {
+    const i = qsTalkStep(P, q, n.id), s = qSteps(d)[i]; P.talked = P.talked || {}; (P.talked[id] = P.talked[id] || new Set()).add(i);
+    const reply = { t: String(s.Reply || "").trim() ? s.Reply : BQTalk.TALK_REPLY, k: "" };
+    if (BQTalk.norm(s.Tree) && qsTreeNode(P, q, s.Tree, v, f)) { if (!v.options.length) v.options = [reply]; } else { v.text = s.Line || ""; v.options = [reply]; }
+    v.quest = id; v.line = "step:" + i;
+  }
   else if (kind === "turnin" && q && P.state[id] === "ready" && q.TurnIn === n.id) {
     const ff = qsFiller(P, q);
     delete P.state[id]; if (P.follow) P.level = Math.max(P.level, q.Level);
@@ -874,7 +883,7 @@ function qsTalk(P, n, key) {
     if (!qsTreeNode(P, q, q.ProgressTree, v)) { v.text = d.Progress; v.options = [{ t: f(BQTalk.reply(q, "Back")), k: "menu" }]; }
     v.quest = id; v.line = "Progress";
   }
-  else if (kind === "q" && q && (q.Giver === n.id || q.TurnIn === n.id) && qsTreeNode(P, q, node, v)) { v.quest = id; v.line = "Conversation"; }
+  else if (kind === "q" && q && (q.Giver === n.id || q.TurnIn === n.id || qSteps(q).concat(qSteps(d)).some(s => s.Type === "talk" && s.NPC === n.id)) && qsTreeNode(P, q, node, v)) { v.quest = id; v.line = "Conversation"; }
   else handled = false;
   if (handled) { if (!v.options.some(o => o.k === "close")) v.options.push(close); return v; }
   const items = qsMenu(P, n.id);
@@ -950,6 +959,21 @@ function qsScratch() { const p = QS.play; return { level: p.level, done: new Set
 // Play a quest's conversation in the game's window. from: offer (default),
 // accept, progress, complete, or the Identifier of a node of its trees.
 function qsPreviewQuest(q, from) {
+  // a talk objective ("step:K") or a line of its conversation: at that NPC
+  const tk = /^step:(\d+)$/.exec(from || ""), tr = !tk && from ? BQTalk.talkRoots(q).find(t => BQTalk.walk(t.root, qsNodeGet).seen.has(BQTalk.norm(from))) : null;
+  if (tk || tr) {
+    const st = tk ? qSteps(q)[+tk[1]] : { NPC: tr.npc }, tn = st && S.npcBy[st.NPC];
+    if (!tn) { qsToast("Pick who to talk to first"); return; }
+    const P = { level: Math.max(q.MinLevel, q.Level), done: new Set(qsAncestors(q.id)), state: { [q.id]: "active" }, follow: false, talked: {}, day: QS.play && QS.play.day, talkAt: tk ? { [q.id]: +tk[1] } : null };
+    const start = tk ? "talk:" + q.id : "q:" + q.id + ":" + BQTalk.norm(from);
+    const close = () => { ov.remove(); document.removeEventListener("keydown", esc, true); };
+    const esc = e => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    const panel = qsGamePanel(tn, { P, start });
+    const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } }, h("div", { class: "qs-gwrap" }, panel,
+      h("div", { class: "qs-row" }, h("span", { class: "hint" }, `Reaching ${tn.Name} with the quest taken.`), h("button", { class: "qs-btn", onclick: () => panel.show(start) }, "Again"), h("button", { class: "qs-btn", id: "qs-prev-close", onclick: close }, "Close"))));
+    document.body.append(ov); document.addEventListener("keydown", esc, true);
+    return;
+  }
   const stg = BQTalk.stage(from || "offer"), atTurnIn = stg && (stg.k === "progress" || stg.k === "complete");
   const n = S.npcBy[atTurnIn ? q.TurnIn : q.Giver]; if (!n) { qsToast(`Give the quest ${atTurnIn ? "a hand-in NPC" : "a giver"} first`); return; }
   const P = { level: Math.max(q.MinLevel, q.Level), done: new Set(qsAncestors(q.id)), state: {}, follow: false, talked: {}, day: QS.play && QS.play.day };
