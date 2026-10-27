@@ -77,14 +77,14 @@ await p.screenshot({ path: OUT + "04-cast.png" });
 // NPC sheet: Brother Dan (5) has a chat tree
 await hash("#studio/npc/5"); await wait(900);
 await p.screenshot({ path: OUT + "05-npc-sheet-brother-dan.png", fullPage: false });
-await p.click('.qs-node[data-node="npc-priest-1"] > .qs-bub .qs-ed');
-await p.fill('.qs-node[data-node="npc-priest-1"] > .qs-bub textarea', "Hello, child. Dan sees you. Dan always sees you.");
-await p.press('.qs-node[data-node="npc-priest-1"] > .qs-bub textarea', "Enter"); await wait(600);
+await p.click('.qs-sc[data-node="npc-priest-1"] .qs-sc-say .qs-ed');
+await p.fill('.qs-sc[data-node="npc-priest-1"] .qs-sc-say textarea', "Hello, child. Dan sees you. Dan always sees you.");
+await p.press('.qs-sc[data-node="npc-priest-1"] .qs-sc-say textarea', "Enter"); await wait(600);
 ok((await p.evaluate(() => S.convBy["npc-priest-1"].Title)) === "Hello, child. Dan sees you. Dan always sees you.", "dialogue line edited in conversation");
 // edit an answer label
-await p.click('.qs-node[data-node="npc-priest-1"] .qs-ans >> nth=0 >> .qs-opt .qs-ed');
-await p.fill('.qs-node[data-node="npc-priest-1"] .qs-ans >> nth=0 >> .qs-opt input', "Heard anything juicy?");
-await p.press('.qs-node[data-node="npc-priest-1"] .qs-ans >> nth=0 >> .qs-opt input', "Enter"); await wait(600);
+await p.click('.qs-sc[data-node="npc-priest-1"] .qs-op >> nth=0 >> .qs-ed');
+await p.fill('.qs-sc[data-node="npc-priest-1"] .qs-op >> nth=0 >> input', "Heard anything juicy?");
+await p.press('.qs-sc[data-node="npc-priest-1"] .qs-op >> nth=0 >> input', "Enter"); await wait(600);
 ok((await p.evaluate(() => parseOptions(S.convBy["npc-priest-1"].Options)[0][0])) === "Heard anything juicy?", "answer label edited");
 // notes
 await p.click(".qs-notes"); await p.fill(".qs-notes textarea", "Kindly, a bit smug. Talks about himself in the third person.");
@@ -94,7 +94,7 @@ ok((await p.evaluate(() => qsNotesGet(5))).startsWith("Kindly"), "personality no
 ok((await p.textContent(".qs-game .qs-gtitle")).includes("BROTHER DAN"), "in-game preview shows the speaker");
 await wait(2500);
 await p.screenshot({ path: OUT + "05-npc-sheet-brother-dan.png" });
-await p.evaluate(() => document.querySelector(".qs-dlg").scrollIntoView());
+await p.evaluate(() => document.querySelector(".qs-convo").scrollIntoView());
 await p.screenshot({ path: OUT + "07-dialogue-editor.png" });
 // Save .db, reload it, check edits survived
 const [dl] = await Promise.all([p.waitForEvent("download"), p.click("#btn-save")]);
