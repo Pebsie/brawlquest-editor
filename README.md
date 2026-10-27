@@ -63,6 +63,10 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
      `content/migrations/2026-10-24-quest-sequential.sql` does.
    * **NPCs & dialogue**: name, sprite, position, dialogue nodes and answers,
      and the quest lines each NPC speaks.
+     NPC sprite pickers (this form, a Quest Studio character sheet, the Map's
+     NPCs tool) have a chip per `assets/npc/` folder: Townsfolk, Nobles, Clergy,
+     Mages, Warriors, Rogues, Strangers, Orcs and Ogres, Demons, Undead (Tome
+     tiles by David E. Gervais, CC BY 3.0; see `assets/npc/CREDITS.txt`).
    * **Items**: name, type, Val, image (with preview), description, worth,
      attributes (stat bonuses), subtype, cooldown. Shows what drops it.
    * **Mobs**: list/search, create, edit, duplicate and delete enemies (every
@@ -452,6 +456,7 @@ Local preview: `python3 -m http.server 8080`, then open http://localhost:8080/.
 
 Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
 `tests/headless-*.mjs` (Playwright, see their headers), including
-`headless-history.mjs` (autosave), `headless-validate.mjs` (checks) and
+`headless-history.mjs` (autosave), `headless-validate.mjs` (checks),
+`headless-npc-sprites.mjs` (NPC sprite groups in every NPC picker) and
 `headless-github.mjs` (GitHub sync against a mocked api.github.com,
 `tests/github-mock.mjs`; it never talks to GitHub).

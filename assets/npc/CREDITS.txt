@@ -1,0 +1,9 @@
+The sprites in the group folders here (Clergy, Demons, Mages, Nobles,
+Orcs and Ogres, Rogues, Strangers, Townsfolk, Undead, Warriors) are cut by
+tools/build_npc_sprites.py from the "Tome" tileset by David E. Gervais
+(CC BY 3.0, https://creativecommons.org/licenses/by/3.0/,
+http://pousse.rapiere.free.fr/tome/), already credited on the login screen:
+AngbandTk dg_people32, dg_humans32, dg_classm32, dg_uniques32 and
+dg_undead32, and Silmar beings / player. Changes: the background is made
+transparent the same way as the older NPC art, and the odd-sized Silmar
+sprites are set on a 32x32 cell. No other edits and no generated art.
