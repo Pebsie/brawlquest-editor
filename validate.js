@@ -12,7 +12,7 @@ const BQCheck = (() => {
   // null are ignored.
   const PAIR = { list: "pair" };
   const T = {
-    step: { Type: "string", Target: "string", Targets: "names", NPC: "int", Count: "count", At: "string", X: "int", Y: "int", Radius: "float", Consume: "bool", Text: "string", Line: "string", Hint: "string" },
+    step: { Type: "string", Target: "string", Targets: "names", NPC: "int", Count: "count", At: "string", X: "int", Y: "int", Radius: "float", Consume: "bool", Text: "string", Line: "string", Hint: "string", Reply: "string", Tree: "string" },
     reward: { ItemID: "int", Amount: "int" },
     invItem: { ID: "int", Amount: "int", ItemID: "int", Enchantment: "string", PlayerID: "int" },
     action: {
@@ -182,6 +182,8 @@ const BQCheck = (() => {
           if (!names.length && !phOnly) add("error", "quest_def", w, `${at}: no item named ""`, sr);
           names.forEach(n => { if (!itemNames.has(n.toLowerCase())) add("error", "quest_def", w, `${at}: no item named "${n}"`, sr); });
         }
+        const tree = String(g("Tree") ?? "").trim();
+        if (tree && type === "talk" && nodeIds && !nodeIds.has(tree)) add("warning", "quest_def", w, `${at}: its conversation "${tree}" doesn't exist, so the NPC says its Line instead`, sr);
         if (extra.length && ["talk", "reach", "equip", "level"].includes(type)) add("warning", "quest_def", w, `${at}: Targets is ignored on ${type} steps`, sr);
         if (type === "craft" && target && itemNames && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: no item named "${target}"`, sr);
         if (type === "equip" && target && itemNames && !["weapon", "shield", "head", "chest", "legs", "mount"].includes(target.toLowerCase()) && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: "${target}" is not an item or a slot`, sr);

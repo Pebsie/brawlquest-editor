@@ -483,3 +483,38 @@ select.qs-act{cursor:pointer}
 }
 .qs-own h4{display:block}
 @media (max-width: 760px){ .qs-widen{display:none} }
+/* the quest's whole path at a glance, and talk objectives at other NPCs */
+.qs-act.act-next,.qs-tag.act-next{border-color:#8fd6c8;color:#b6ece1}
+.qs-tag.act-quest{border-color:var(--gold);color:var(--gold);background:none;cursor:pointer}
+button.qs-tag{font:15px rainyhearts,sans-serif}
+.qs-mapbox{border-color:var(--gold);margin-bottom:8px}
+.qs-mapbox>summary{color:var(--gold);font:14px/22px BMmini,monospace}
+.qs-map{list-style:none;margin:4px 0 2px;padding:0 0 0 14px;border-left:2px solid #555;counter-reset:beat}
+.qs-beat{position:relative;margin:0 0 8px;padding-left:6px}
+.qs-beat::before{content:"";position:absolute;left:-21px;top:9px;width:10px;height:10px;background:#000;border:2px solid var(--line)}
+.qs-beat.lead::before{border-color:#7ac8ff}.qs-beat.st::before{border-color:var(--gold)}.qs-beat.talk::before{border-color:#8fd6c8}.qs-beat.next::before{border-color:#fff}
+.qs-beat-h{display:flex;align-items:center;gap:6px;background:none;border:0;padding:2px 0;color:#fff;cursor:pointer;text-align:left;min-height:28px}
+.qs-beat-h b{font:13px BMmini,monospace;text-transform:uppercase;letter-spacing:1px}
+.qs-beat-h small{color:var(--dim);font:15px rainyhearts,sans-serif}
+.qs-beat-h:hover b{color:var(--gold)}
+.qs-beat-t{font:17px/1.15 rainyhearts,sans-serif;color:#e6e6e6;margin:0 0 2px}
+.qs-beat-r{list-style:none;margin:0 0 0 4px;padding:0 0 0 10px;border-left:1px dashed #555}
+.qs-beat .qs-ol-root{margin:0}
+.qs-stage.talk .qs-stage-n{background:#2c5c54}
+.qs-nexts{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.qs-qbranch.next{border-left-color:#fff}
+.qs-qbranch.next .qs-qtag{background:#fff}
+.qs-qconvo.nested{border-left:2px dashed #555;padding-left:6px}
+.qs-more{margin-left:2px}
+.qs-morebox{background:#1b1b1b;border:2px solid #000;padding:6px;margin:4px;color:#ddd;font:15px system-ui,sans-serif;min-width:0;overflow:auto}
+.qs-morebox .node{border:0;padding:0;margin:0;background:none}
+.qs-morebox textarea,.qs-morebox input{max-width:100%}
+.qs.qs-embed{display:block;flex:none;border:2px solid #000;padding:8px;margin:12px 0}
+.qs.qs-embed>h3{font:15px BMmini,monospace;color:var(--gold);margin:2px 0 8px;text-transform:uppercase}
+.qs.qs-embed>h3 .hint{font:15px rainyhearts,sans-serif;text-transform:none;color:var(--dim)}
+.qs.qs-embed>h3 a{font:15px rainyhearts,sans-serif;color:var(--gold);text-transform:none}
+@media (max-width: 760px){
+  .qs-beat-h{min-height:44px}
+  .qs-map{padding-left:12px}
+  .qs.qs-embed{padding:4px;margin:8px -4px}
+}

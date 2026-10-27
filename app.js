@@ -298,6 +298,10 @@ function renderQuests(m) {
 function questForm(form, q) {
   form.textContent = "";
   if (!q) return;
+  // A saved quest's dialogue (every line, answer and conversation of it) is
+  // edited in place by the Quest Studio view embedded below and saved as you
+  // go; Save here keeps those columns as they are stored.
+  const saved = !!q.id && S.c.quests.some(x => x.id === q.id);
   if (q.id) syncHash("#quest/" + q.id);
   const f = {
     Title: txt(q.Title), Act: num(q.Act), Zone: txt(q.Zone), Level: num(q.Level), MinLevel: num(q.MinLevel),
@@ -343,6 +347,7 @@ function questForm(form, q) {
         else if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) { el = enemySelect(s.Target); el.onchange = () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== el.value.toLowerCase())); drawSteps(); }; }
         else if (k === "Target" && s.Type === "collect") { el = txt(s.Target); el.setAttribute("list", "bq-item-names"); el.onchange = () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== el.value.trim().toLowerCase())); drawSteps(); }; el.oninput = () => (s.Target = el.value); }
         else if (k === "Target") { el = txt(s.Target); el.oninput = () => (s.Target = el.value); }
+        else if (k === "Line" && saved) { el = h("a", { href: "#", class: "hint", onclick: ev => { ev.preventDefault(); highlight("qline-step-" + i); } }, s.Tree ? "a conversation: edit it in the dialogue above" : "edit it in the dialogue above"); }
         else if (k === "Line") { el = txt(s.Line || "", "What the NPC says"); el.classList.add("qline-in"); el.dataset.step = i; el.oninput = () => { s.Line = el.value; if (conv) conv.refresh(); }; }
         else { el = num(s[k]); el.oninput = () => { s[k] = +el.value; if (mini) mini.draw(); }; }
         inputs[k] = el;
@@ -379,11 +384,25 @@ function questForm(form, q) {
   };
   drawRw();
 
+  // dialogue columns as stored (edited live above), talk steps' lines too
+  const dlg = () => {
+    const st = saved && S.c.quests.find(x => x.id === q.id);
+    if (!st) return { Offer: f.Offer.value, Accept: f.Accept.value, Progress: f.Progress.value, Complete: f.Complete.value, Steps: JSON.stringify(steps) };
+    const ss = parseJSON(st.Steps, []);
+    const merged = steps.map((s, i) => {
+      if (s.Type !== "talk") return s;
+      const o = ss[i] && ss[i].Type === "talk" && ss[i].NPC === s.NPC ? ss[i] : null;
+      const m = { ...s }; delete m.Line; delete m.Reply; delete m.Tree;
+      if (o) for (const k of ["Line", "Reply", "Tree"]) { if (o[k] != null && o[k] !== "") m[k] = o[k]; }
+      else if (s.Line != null) m.Line = s.Line;
+      return m;
+    });
+    return { Offer: st.Offer, Accept: st.Accept, Progress: st.Progress, Complete: st.Complete, Steps: JSON.stringify(merged) };
+  };
   const collect = () => ({
     id: q.id, Act: +f.Act.value, Zone: f.Zone.value, Title: f.Title.value, Summary: f.Summary.value, Level: +f.Level.value,
     MinLevel: +f.MinLevel.value, Giver: +f.Giver.value, TurnIn: +f.TurnIn.value, Prereqs: JSON.stringify([...prereqs]),
-    Offer: f.Offer.value, Accept: f.Accept.value, Progress: f.Progress.value, Complete: f.Complete.value,
-    XP: +f.XP.value, Gold: +f.Gold.value, Rewards: JSON.stringify(rewards), Steps: JSON.stringify(steps),
+    XP: +f.XP.value, Gold: +f.Gold.value, Rewards: JSON.stringify(rewards), ...dlg(),
     Sequential: f.Sequential.checked ? 1 : 0,
     ...(f.Daily ? { Daily: f.Daily.checked ? 1 : 0 } : {}),
   });
@@ -395,10 +414,10 @@ function questForm(form, q) {
       field("Level / min", h("div", {}, f.Level, " min level ", f.MinLevel)),
       field("Giver", f.Giver), field("Turn in to", f.TurnIn), field("Prerequisites", preBox),
       field("Summary", f.Summary),
-      field("Offer", f.Offer), field("Accept", f.Accept), field("In progress", f.Progress), field("Complete", f.Complete),
+      saved ? null : [field("Offer", f.Offer), field("Accept", f.Accept), field("In progress", f.Progress), field("Complete", f.Complete)],
       field("XP / Gold", h("div", {}, f.XP, " XP  ", f.Gold, " gold"))),
     h("p", { class: "hint" }, "Text can use {SHIELD}, {INTERACT}, {MOUNTS}, {CHARACTER} for the player's keys."),
-    q.id ? (conv = questConversation(q, f, steps, stepBox)) : null,
+    saved ? questDialogueEmbed(q) : q.id ? (conv = questConversation(q, f, steps, stepBox)) : h("p", { class: "hint" }, "Save the quest to write its conversations: greeting, offer and answers, talk objectives, hand-in."),
     h("h3", {}, "Steps"),
     h("label", { class: "chk", title: "Off: every objective counts at once (kill 3 Spiders and kill 3 Cave Spiders fill together). On: one objective at a time, in order: only the current one counts." },
       f.Sequential, " Complete objectives in order"),
@@ -1628,7 +1647,7 @@ async function applyRoute() {
   if (!BQ.has() || !S.c) return;
   const [kind, a, b, c] = location.hash.slice(1).split("/").map(decodeURIComponent);
   let target = null;
-  if (kind === "quest") { S.tab = "quests"; S.quest = { id: +a }; if (b === "line") target = "qline-" + c; if (b === "step") target = "qstep-" + c; }
+  if (kind === "quest") { S.tab = "quests"; S.quest = { id: +a }; if (b === "line") target = "qline-" + c; if (b === "step") target = "qline-step-" + c; }
   else if (kind === "npc") { S.tab = "npcs"; S.npc = { id: +a }; if (b === "quest") target = "npcq-" + c; }
   else if (kind === "dialog") {
     const owner = nodeOwners(a)[0];
@@ -1651,6 +1670,7 @@ async function applyRoute() {
   else if (TABS.includes(kind)) S.tab = kind;
   S.routing = true;
   try { await renderTab(); } finally { S.routing = false; }
+  if (target && !document.getElementById(target) && target.startsWith("qline-step-")) target = "qstep-" + target.slice(11);
   if (target) highlight(target);
 }
 window.addEventListener("hashchange", applyRoute);
@@ -1768,6 +1788,23 @@ function questConversation(q, f, steps, stepBox) {
   refresh();
   box.refresh = () => { if (!editing) refresh(); };
   box.open = open;
+  return box;
+}
+// Every piece of dialogue of a saved quest, as in Quest Studio's quest sheet:
+// the giver's chat that brings it up, the offer and its answers, after
+// accepting, talk objectives at other NPCs, in progress, the hand-in, and the
+// quests it unlocks. Each edit saves at once (with undo in Quest Studio).
+function questDialogueEmbed(q) {
+  const box = h("div", { class: "panel qs-embed", id: "quest-dialogue" });
+  const draw = () => {
+    const cur = S.c.quests.find(x => x.id === q.id); if (!cur) { box.replaceChildren(); return; }
+    const keep = window.scrollY;
+    box.replaceChildren(h("h3", {}, "Dialogue ", h("span", { class: "hint" }, "everything said in this quest, in order: click any line or answer to edit it; saved as you go. "), h("a", { href: "#studio/journey/" + q.id }, "Quest Studio")),
+      qsQuestInConvo(cur, { ids: true }));
+    window.scrollTo(0, keep);
+  };
+  QS.embed = { el: box, draw };
+  draw();
   return box;
 }
 function renderOrphan(m) {
