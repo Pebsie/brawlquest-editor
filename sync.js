@@ -350,6 +350,14 @@ const BQSync = (() => {
         renderGitHub(body);
       } catch (e) { out.className = "gh-out err"; out.textContent = e.message; }
     };
+    // A form with edits not saved to the db (the mob form): they would not be
+    // in this commit, so say so, with its save button right here.
+    function unsavedNote(body) {
+      const u = typeof S !== "undefined" && S.unsavedForm, what = u && u.what();
+      if (!what) return null;
+      return h("p", { class: "gh-out err gh-unsaved" }, `${what} has unsaved changes, so they are not in the db and won't be in this commit. `,
+        h("button", { onclick: async () => { if (await u.save()) renderGitHub(body); } }, u.button + " first"));
+    }
     body.replaceChildren(
       h("p", {}, "Connected to ", h("b", {}, BQGitHub.REPO), login ? ` as ${login}. ` : ". ",
         h("button", { onclick: () => { if (confirm("Disconnect GitHub? The token is removed from this browser.")) { BQGitHub.disconnect(); localStorage.removeItem("bqGitHubLogin"); connectView(body); } } }, "Disconnect")),
@@ -358,6 +366,7 @@ const BQSync = (() => {
         : `${BQ.st.name}, opened from a file, not from GitHub. Committing it replaces bq-content.db on the branch (the old one stays in the history).`),
       h("div", { class: "bar" },
         h("button", { onclick: () => openFromGitHub({ branch: brSel.value }) }, "Open latest from GitHub")),
+      unsavedNote(body),
       BQ.has() ? h("div", {}, h("h3", {}, "Commit"),
         h("div", { class: "grid" },
           h("label", {}, "Message"), msgIn,

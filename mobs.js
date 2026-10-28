@@ -151,11 +151,22 @@ function mobForm(form, e) {
     if (f.Speed) r.Speed = +f.Speed.value || 1;
     return r;
   };
+  // Fields here only reach the db with Save mob (the sound slots below save
+  // as soon as they change), so say when the form differs from the db, and
+  // let the GitHub dialog warn before a commit leaves it out.
+  const orig = JSON.stringify(collect());
+  const flag = h("span", { class: "dirtyflag mob-unsaved" });
+  const formDirty = () => form.isConnected && S.mobFormId === formId && JSON.stringify(collect()) !== orig;
+  const showFlag = () => { const d = formDirty(); flag.textContent = d ? "unsaved changes: Save mob to keep them" : ""; flag.className = "dirtyflag mob-unsaved" + (d ? " on" : ""); };
+  const formId = S.mobFormId = (S.mobFormId || 0) + 1;
+  const saveMob = async () => { try { const r = collect(); const id = await save("enemies", r); S.mob = { id }; if (!e.id && S.mobDraft) { await savePatterns(id, S.mobDraft); } renderTab(); return true; } catch { return false; /* shown in the status bar */ } };
+  S.unsavedForm = { what: () => formDirty() ? `${e.id ? e.Name : "The new mob"} (Mobs tab)` : null, save: saveMob, button: e.id ? "Save mob" : "Create mob" };
+  grid.addEventListener("input", showFlag); grid.addEventListener("change", showFlag); grid.addEventListener("click", () => setTimeout(showFlag, 0));
   const placed = e.id ? (S.world ? [...S.world.tiles.values()].filter(t => S.world.strings[t[6]] === e.Name).length : null) : 0;
   const spells = (S.c.spells || []).filter(s => s.EnemyID === e.id);
   form.append(h("h2", {}, e.id ? `${e.Name} (${e.id})` : "New mob"), grid,
     h("div", { class: "bar" },
-      h("button", { class: "primary", onclick: async () => { try { const r = collect(); const id = await save("enemies", r); S.mob = { id }; if (!e.id && S.mobDraft) { await savePatterns(id, S.mobDraft); } renderTab(); } catch { /* shown in the status bar */ } } }, e.id ? "Save mob" : "Create mob"),
+      h("button", { class: "primary", onclick: saveMob }, e.id ? "Save mob" : "Create mob"), flag,
       e.id ? h("button", { onclick: () => { const c = collect(); c.id = 0; c.Name += " (copy)"; S.mobDraft = mobPatterns(e.id); S.mob = c; mobForm(form, c); } }, "Duplicate") : null,
       e.id ? h("button", { class: "danger", onclick: async () => { if (await del("enemies", e.id)) { S.mob = null; renderTab(); } } }, "Delete") : null,
       e.id ? link("#loot/" + e.id, "Loot table →", "btnlink") : null),

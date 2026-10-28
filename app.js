@@ -1866,6 +1866,6 @@ $("#open").addEventListener("change", e => { if (e.target.files[0]) openFile(e.t
 $("#btn-save").addEventListener("click", saveDb);
 document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f); });
-window.addEventListener("beforeunload", e => { if (BQ.st.dirty) { e.preventDefault(); e.returnValue = ""; } });
+window.addEventListener("beforeunload", e => { if (BQ.st.dirty || (S.unsavedForm && S.unsavedForm.what())) { e.preventDefault(); e.returnValue = ""; } });
 syncFile();
 BQ.init().catch(e => status("Could not load sql.js: " + e.message, true));
