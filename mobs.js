@@ -2,8 +2,8 @@
 // Mobs tab: enemies (all columns) and their boss_patterns primitives, with a
 // top-down preview driven by mobsim.js (the same rules as the API).
 
-const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider.png", HP: 20, Range: 1, CanMove: 1, XP: 10, Width: 1, Height: 1, Attributes: "None", AttackSpeed: 1, KnockbackResist: 0, HitEffect: "blood", SpawnsDay: 1, SpawnsNight: 1, Speed: 1, Passive: 0, Flip: 0 };
-const MOB_LABELS = { SpawnsDay: "Spawns in day", SpawnsNight: "Spawns at night" };
+const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider.png", HP: 20, Range: 1, CanMove: 1, XP: 10, Width: 1, Height: 1, Attributes: "None", AttackSpeed: 1, KnockbackResist: 0, HitEffect: "blood", SpawnsDay: 1, SpawnsNight: 1, Speed: 1, Passive: 0, Flip: 0, SleepsAtNight: 0 };
+const MOB_LABELS = { SpawnsDay: "Spawns in day", SpawnsNight: "Spawns at night", SleepsAtNight: "Sleeps at night" };
 const PRIM_NEW = {
   zone: { every: 3, do: "zone", target: "target", radius: 1, maxRadius: 1, windup: 2, once: true, damage: 20, duration: 2 },
   soak: { every: 10, do: "soak", target: "target", radius: 1.5, damage: 60, duration: 4, failRadius: 8 },
@@ -125,6 +125,7 @@ function mobForm(form, e) {
     SpawnsDay: "the spawner puts it out from 06:00 to 18:00 on the world clock (a day is 30 minutes). Untick for a night-only mob",
     SpawnsNight: "out from 18:00 to 06:00. One caught out when the time turns fades away once it is out of combat (no loot or XP). Leave both ticked for a mob that is always about",
     Passive: "wanders and fights back, but never starts a fight: only a player hurting it sets it off, and it calms down after 8 s left alone",
+    SleepsAtNight: "from 18:00 to 06:00 it lies asleep and ignores players walking past; a hit, or a sprint within 3 tiles, wakes it dazed for 1 s, then it fights. Off: awake all night",
     HitEffect: "what comes off it when hit or killed: blood for flesh, wood chips for trees and chests, stone/crystal/ice shards, bone for skeletons, ectoplasm for ghosts, slime, ichor (spiders), water (fishing spots), metal sparks, embers, leaf, pulp, or none" };
   for (const c of cols) {
     if (c === "id") continue;
@@ -132,7 +133,7 @@ function mobForm(form, e) {
     if (c === "Flip") continue; // beside the sprite
     if (c === "Speed") { f.Speed = mobSpeedInput(e.Speed); grid.append(h("label", {}, "Speed"), f.Speed.box); continue; }
     if (c === "CanMove" || c === "SpawnsDay" || c === "SpawnsNight") f[c] = h("input", { type: "checkbox", name: c }), f[c].checked = !!+(e[c] ?? 1);
-    else if (c === "Passive") f[c] = h("input", { type: "checkbox", name: c }), f[c].checked = !!+(e[c] ?? 0);
+    else if (c === "Passive" || c === "SleepsAtNight") f[c] = h("input", { type: "checkbox", name: c }), f[c].checked = !!+(e[c] ?? 0);
     else if (c === "Name" || c === "Attributes") f[c] = txt(e[c]);
     else if (c === "KnockbackResist") f[c] = h("input", { type: "number", class: "num", min: 0, max: 1, step: 0.05, value: e[c] ?? 0 });
     else if (c === "HitEffect") {

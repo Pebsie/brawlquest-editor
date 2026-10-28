@@ -25,6 +25,7 @@ function:
 | Exotic spawns | `enemies.go` | 1 in 10: 3x HP, double XP |
 | Speeds | `movement.go` | you walk 2.5 tiles/s, sprint 1.4x; mobs `enemies.Speed` (1 by default, 0.25 to 6) |
 | Passive | `enemies.go passiveCalmTicks` | never starts a fight; calms after 8 s left alone |
+| Sleeps at night | `sleep.go` | 18:00 to 06:00 asleep, aggro range 0; a hit or a sprint within 3 tiles wakes it dazed for 1 s. The guide calls it an optional fight at night |
 
 The API's `testdata/balance_cases.json` is written by those Go functions
 (`TestBalanceCases`); `tests/balance-cases.json` here is a copy and

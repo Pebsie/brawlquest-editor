@@ -91,11 +91,12 @@ const BQ = (() => {
   // 2026-10-25-day-night-spawns.sql adds enemies.SpawnsDay and SpawnsNight
   // (1 = the spawner puts it out then; every mob 1 and 1).
   // 2026-10-28-mob-speed-passive-flip.sql adds enemies.Speed (tiles/s, 1),
-  // Passive (0) and Flip (0). Same text as the migrations' CREATE, so either
+  // Passive (0) and Flip (0); 2026-10-28-mob-sleeps-at-night.sql adds
+  // SleepsAtNight (0). Same text as the migrations' CREATE, so either
   // path dumps the same.
-  const ENEMY_COLS = '\n\t\t\tid INTEGER PRIMARY KEY,\n\t\t\tName TEXT,\n\t\t\tATK INTEGER,\n\t\t\tImage TEXT,\n\t\t\tHP INTEGER,\n\t\t\tRange INTEGER,\n\t\t\tCanMove BOOL,\n\t\t\tXP INTEGER\n\t\t, Width INTEGER DEFAULT 1, Height INTEGER DEFAULT 1, Attributes TEXT DEFAULT "None", AttackSpeed INTEGER NOT NULL DEFAULT 1, KnockbackResist REAL NOT NULL DEFAULT 0, HitEffect TEXT NOT NULL DEFAULT \'blood\', SpawnsDay INTEGER NOT NULL DEFAULT 1, SpawnsNight INTEGER NOT NULL DEFAULT 1, Speed REAL NOT NULL DEFAULT 1, Passive INTEGER NOT NULL DEFAULT 0, Flip INTEGER NOT NULL DEFAULT 0';
+  const ENEMY_COLS = '\n\t\t\tid INTEGER PRIMARY KEY,\n\t\t\tName TEXT,\n\t\t\tATK INTEGER,\n\t\t\tImage TEXT,\n\t\t\tHP INTEGER,\n\t\t\tRange INTEGER,\n\t\t\tCanMove BOOL,\n\t\t\tXP INTEGER\n\t\t, Width INTEGER DEFAULT 1, Height INTEGER DEFAULT 1, Attributes TEXT DEFAULT "None", AttackSpeed INTEGER NOT NULL DEFAULT 1, KnockbackResist REAL NOT NULL DEFAULT 0, HitEffect TEXT NOT NULL DEFAULT \'blood\', SpawnsDay INTEGER NOT NULL DEFAULT 1, SpawnsNight INTEGER NOT NULL DEFAULT 1, Speed REAL NOT NULL DEFAULT 1, Passive INTEGER NOT NULL DEFAULT 0, Flip INTEGER NOT NULL DEFAULT 0, SleepsAtNight INTEGER NOT NULL DEFAULT 0';
   const ENEMY_REBUILD = ["DROP TABLE IF EXISTS enemies_upgrade;", `CREATE TABLE enemies_upgrade (${ENEMY_COLS});`,
-    "INSERT INTO enemies_upgrade (id, Name, ATK, Image, HP, Range, CanMove, XP, Width, Height, Attributes, AttackSpeed, KnockbackResist, HitEffect, SpawnsDay, SpawnsNight, Speed, Passive, Flip) SELECT e.id, e.Name, e.ATK, e.Image, e.HP, e.Range, e.CanMove, e.XP, e.Width, e.Height, e.Attributes, IFNULL((SELECT AttackSpeed FROM enemies q WHERE q.id = e.id), 1), IFNULL((SELECT KnockbackResist FROM enemies q WHERE q.id = e.id), 0), IFNULL(NULLIF((SELECT HitEffect FROM enemies q WHERE q.id = e.id), ''), 'blood'), IFNULL((SELECT SpawnsDay FROM enemies q WHERE q.id = e.id), 1), IFNULL((SELECT SpawnsNight FROM enemies q WHERE q.id = e.id), 1), IFNULL(NULLIF((SELECT Speed FROM enemies q WHERE q.id = e.id), 0), 1), IFNULL((SELECT Passive FROM enemies q WHERE q.id = e.id), 0), IFNULL((SELECT Flip FROM enemies q WHERE q.id = e.id), 0) FROM enemies e, (SELECT 1 AS AttackSpeed, 0 AS KnockbackResist, 'blood' AS HitEffect, 1 AS SpawnsDay, 1 AS SpawnsNight, 1 AS Speed, 0 AS Passive, 0 AS Flip) d;",
+    "INSERT INTO enemies_upgrade (id, Name, ATK, Image, HP, Range, CanMove, XP, Width, Height, Attributes, AttackSpeed, KnockbackResist, HitEffect, SpawnsDay, SpawnsNight, Speed, Passive, Flip, SleepsAtNight) SELECT e.id, e.Name, e.ATK, e.Image, e.HP, e.Range, e.CanMove, e.XP, e.Width, e.Height, e.Attributes, IFNULL((SELECT AttackSpeed FROM enemies q WHERE q.id = e.id), 1), IFNULL((SELECT KnockbackResist FROM enemies q WHERE q.id = e.id), 0), IFNULL(NULLIF((SELECT HitEffect FROM enemies q WHERE q.id = e.id), ''), 'blood'), IFNULL((SELECT SpawnsDay FROM enemies q WHERE q.id = e.id), 1), IFNULL((SELECT SpawnsNight FROM enemies q WHERE q.id = e.id), 1), IFNULL(NULLIF((SELECT Speed FROM enemies q WHERE q.id = e.id), 0), 1), IFNULL((SELECT Passive FROM enemies q WHERE q.id = e.id), 0), IFNULL((SELECT Flip FROM enemies q WHERE q.id = e.id), 0), IFNULL((SELECT SleepsAtNight FROM enemies q WHERE q.id = e.id), 0) FROM enemies e, (SELECT 1 AS AttackSpeed, 0 AS KnockbackResist, 'blood' AS HitEffect, 1 AS SpawnsDay, 1 AS SpawnsNight, 1 AS Speed, 0 AS Passive, 0 AS Flip, 0 AS SleepsAtNight) d;",
     "DROP TABLE enemies;", "ALTER TABLE enemies_upgrade RENAME TO enemies;"];
   const ENEMY_KB_UPGRADE = [...ENEMY_REBUILD,
     "UPDATE enemies SET KnockbackResist = 1 WHERE KnockbackResist = 0 AND (id IN (SELECT EnemyID FROM loot WHERE ItemID = 53) OR Name = 'Rift Colossus');",
@@ -181,7 +182,7 @@ const BQ = (() => {
         !ec.includes("HitEffect") && "enemies.HitEffect (what comes off a mob when hit: wood for trees, bone for skeletons...)",
         !ec.includes("SpawnsDay") && "enemies.SpawnsDay/SpawnsNight (every mob out day and night)"].filter(Boolean);
       st.warnings.push(`Added ${added.join(" and ")} to this copy. The server needs content/migrations/2026-10-20-boss-knockback.sql, 2026-10-22-hit-effects.sql and 2026-10-25-day-night-spawns.sql; Export SQL includes the same step.`);
-    } else if (["SpawnsDay", "SpawnsNight", "Speed", "Passive", "Flip"].some(k => !ec.includes(k))) {
+    } else if (["SpawnsDay", "SpawnsNight", "Speed", "Passive", "Flip", "SleepsAtNight"].some(k => !ec.includes(k))) {
       // Only newer columns are missing: rebuild the table without re-running
       // the knockback and hit effect defaults over tuned values.
       const dn = !ec.includes("SpawnsDay") || !ec.includes("SpawnsNight");
@@ -191,6 +192,8 @@ const BQ = (() => {
     }
     if (!ec.includes("Speed") || !ec.includes("Passive") || !ec.includes("Flip"))
       st.warnings.push("Added enemies.Speed (1 tile/s), Passive (off) and Flip (off) to this copy; every mob is unchanged. The server needs content/migrations/2026-10-28-mob-speed-passive-flip.sql, or a restart of the new API, which adds them itself; Export SQL includes the same step.");
+    if (!ec.includes("SleepsAtNight"))
+      st.warnings.push("Added enemies.SleepsAtNight (off: every mob stays awake at night) to this copy; every mob is unchanged. The server needs content/migrations/2026-10-28-mob-sleeps-at-night.sql, or a restart of the new API, which adds it itself; Export SQL includes the same step.");
     if (has("quest_def") && !cols("quest_def").includes("Sequential")) {
       db.exec("BEGIN;" + QUEST_SEQ_UPGRADE.join("\n") + "COMMIT;");
       st.questsUpgraded = true;
@@ -294,7 +297,7 @@ const BQ = (() => {
         if (!(kb >= 0 && kb <= 1)) throw new Error("knockback resist is 0 (full knockback) to 1 (immune)");
         row.KnockbackResist = kb;
       }
-      for (const k of ["SpawnsDay", "SpawnsNight", "Passive", "Flip"]) if (k in row) row[k] = +row[k] ? 1 : 0;
+      for (const k of ["SpawnsDay", "SpawnsNight", "Passive", "Flip", "SleepsAtNight"]) if (k in row) row[k] = +row[k] ? 1 : 0;
       if ("Speed" in row) { const v = +row.Speed; row.Speed = v > 0 ? Math.min(6, Math.max(0.25, Math.round(v * 100) / 100)) : 1; } // the API's clampMobSpeed
       if ("HitEffect" in row) {
         row.HitEffect = String(row.HitEffect ?? "").trim().toLowerCase() || "blood";
@@ -544,7 +547,7 @@ const BQ = (() => {
       const plots = st.plotUpgraded || st.changes.some(c => /\bplot\b/.test(c));
       let schema = plots ? "-- plot table with the Agent column (as content/migrations/2026-10-19-plot-agents.sql)\n" + PLOT_UPGRADE.join("\n") + "\n" : "";
       if (st.enemiesUpgraded || st.changes.some(c => /INTO enemies\b/.test(c)))
-        schema += "-- enemies.KnockbackResist, HitEffect, SpawnsDay, SpawnsNight, Speed, Passive and Flip (as content/migrations/2026-10-20-boss-knockback.sql, 2026-10-22-hit-effects.sql, 2026-10-25-day-night-spawns.sql and 2026-10-28-mob-speed-passive-flip.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
+        schema += "-- enemies.KnockbackResist, HitEffect, SpawnsDay, SpawnsNight, Speed, Passive, Flip and SleepsAtNight (as content/migrations/2026-10-20-boss-knockback.sql, 2026-10-22-hit-effects.sql, 2026-10-25-day-night-spawns.sql 2026-10-28-mob-speed-passive-flip.sql and 2026-10-28-mob-sleeps-at-night.sql)\n" + ENEMY_KB_UPGRADE.join("\n") + "\n";
       if (st.changes.some(c => /\bworld_flip\b/.test(c))) schema += "-- world_flip table (as content/migrations/2026-10-25-world-flip.sql)\n" + WORLD_FLIP_TABLE + "\n";
       if (st.changes.some(c => /\barea(_tiles|s)\b/.test(c))) schema += "-- areas tables (as content/migrations/2026-10-24-areas.sql)\n" + AREA_TABLES.join("\n") + "\n";
       const daily = hasDaily(), dialogue = hasDialogue();

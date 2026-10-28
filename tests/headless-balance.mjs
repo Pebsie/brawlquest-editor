@@ -1,8 +1,9 @@
-// Mob form: Speed (slider + number), Passive, Flip beside the sprite, and the
+// Mob form: Speed (slider + number), Passive, Sleeps at night, Flip beside the sprite, and the
 // balance guide (stage chips, the player at that level, what happens with the
 // current numbers, bands, chart). Desktop and a 390x844 phone with touch.
 // Serve this folder on 127.0.0.1:8988 first (or set URL); DB: a content db.
 const { chromium } = await import("/usr/local/lib/pnpm/5/.pnpm/playwright-core@1.59.1/node_modules/playwright-core/index.mjs");
+const SLEEP_OUT = process.env.SLEEP_OUT || "/workspace/sleep/" + (process.env.OUT && process.env.OUT.includes("live") ? "live-" : "");
 const URL = process.env.URL || "http://127.0.0.1:8988/index.html", DB = process.env.DB || "/tmp/bal.db", OUT = process.env.OUT || "/workspace/balance/";
 const b = await chromium.launch({ executablePath: "/usr/bin/google-chrome" });
 const errs = [];
@@ -37,6 +38,15 @@ for (const [w, hgt, tag] of [[1400, 900, "desktop"], [390, 844, "phone"]]) {
   await m.evaluate(() => { const l = [...document.querySelectorAll(".form .grid > label")].find(x => x.textContent === "Passive"); l.nextElementSibling.querySelector("input").click(); });
   await m.waitForTimeout(400);
   ok(/Passive: it never starts a fight/.test(await m.$eval(".mg", x => x.innerText)), `${tag}: passive is an optional fight in the guide`);
+  // sleeps at night: checkbox next to Passive, the guide says it can be walked past
+  const sleepRow = await m.evaluate(() => { const ls = [...document.querySelectorAll(".form .grid > label")].map(x => x.textContent); return [ls.indexOf("Passive"), ls.indexOf("Sleeps at night")]; });
+  ok(sleepRow[1] === sleepRow[0] + 1, `${tag}: Sleeps at night sits under Passive (${sleepRow})`);
+  ok(await m.evaluate(() => { const l = [...document.querySelectorAll(".form .grid > label")].find(x => x.textContent === "Sleeps at night"); return !l.nextElementSibling.querySelector("input").checked && /sprint within 3 tiles/.test(l.nextElementSibling.innerText); }), `${tag}: Sleeps at night is off by default and explained`);
+  await m.evaluate(() => { const l = [...document.querySelectorAll(".form .grid > label")].find(x => x.textContent === "Sleeps at night"); l.nextElementSibling.querySelector("input").click(); });
+  await m.waitForTimeout(400);
+  ok(/Sleeps at night: walk past/.test(await m.$eval(".mg", x => x.innerText)), `${tag}: the guide says a sleeper can be walked past at night`);
+  await m.evaluate(() => { const l = [...document.querySelectorAll(".form .grid > label")].find(x => x.textContent === "Sleeps at night"); l.scrollIntoView({ block: "center" }); });
+  await m.screenshot({ path: SLEEP_OUT + `editor-sleeps-at-night-${tag}.png` });
   // a band row sets HP and ATK
   await m.click(".mg-bandrow:nth-child(3)"); await m.waitForTimeout(300);
   const band = await m.$eval(".mg-now .mg-band", x => x.textContent);
@@ -56,7 +66,7 @@ for (const [w, hgt, tag] of [[1400, 900, "desktop"], [390, 844, "phone"]]) {
   // save keeps speed / passive / flip
   await m.click('.form button.primary'); await m.waitForTimeout(800);
   const row = await m.evaluate(() => S.c.enemies.find(e => e.id === 7));
-  ok(+row.Speed === 3 && +row.Passive === 1 && +row.Flip === 1, `${tag}: saved Speed ${row.Speed}, Passive ${row.Passive}, Flip ${row.Flip}`);
+  ok(+row.Speed === 3 && +row.Passive === 1 && +row.Flip === 1 && +row.SleepsAtNight === 1, `${tag}: saved Speed ${row.Speed}, Passive ${row.Passive}, Flip ${row.Flip}, SleepsAtNight ${row.SleepsAtNight}`);
   await m.context().close();
 }
 ok(!errs.length, "no page errors" + (errs.length ? ": " + errs.join("\n") : ""));
