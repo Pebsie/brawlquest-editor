@@ -78,6 +78,7 @@ function mobGuide(form, e, read, grid) {
     lines.push(f.xp > 0 ? `${f.xp} XP a kill at level ${lv} (${m.XP} / ${lv}): about ${f.killsPerLevel} kills a level.` : `No XP at level ${lv}: XP ${m.XP} / level ${lv} is 1 or less.`);
     if (+m.CanMove) lines.push(f.speed < f.walk ? `At ${f.speed} tiles/s you can walk away from it (you walk ${f.walk}).` : f.speed < f.sprint ? `At ${f.speed} tiles/s it keeps up with a walk; only a sprint (${s1(f.sprint)}) gets away while stamina lasts.` : `At ${f.speed} tiles/s it outruns even a sprint (${s1(f.sprint)}): no escape on foot.`);
     if (+m.Passive) lines.push("Passive: it never starts a fight, so players choose it. It can sit a band tougher than the mobs around it.");
+    if (+m.SleepsAtNight && +m.CanMove) lines.push(+m.SpawnsDay ? "Sleeps at night: walk past (don't sprint) and it stays down, so at night it is an optional fight." : "Sleeps at night, and that is the only time it is out: players can walk past it, so it is an optional fight.");
     if (boss) lines.push("Boss (drops an Old World Crystal): its hits go through twice as much armour.");
     lines.push(`1 in 10 spawn exotic: 3x the HP (${(+m.HP || 0) * 3}) and double XP.`);
     box.append(h("div", { class: "mg-now" }, h("span", { class: "mg-band mg-" + band.id }, band.over ? "Beyond elite" : band.label),
