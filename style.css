@@ -242,3 +242,28 @@ canvas#map{touch-action:none}
   .form textarea,.form input[type=text],.form select{max-width:100%}
   .form .step .top{flex-wrap:wrap}
 }
+/* mob form: flip, speed and the balance guide (mobguide.js) */
+.mg-flip{display:inline-flex;align-items:center;gap:4px;padding:0;color:#aab}
+.mg-face{color:#889;font-size:12px}
+.mg-speedbox{max-width:420px}
+.mg-track{position:relative;padding-bottom:14px}
+.mg-speed{width:100%;margin:0;accent-color:#3b6fd4}
+.mg-marks span{position:absolute;bottom:0;transform:translateX(-50%);font-size:10px;color:#889;white-space:nowrap;border-left:1px solid #556;padding-left:2px}
+.mg .mg-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0}
+.mg-level{flex:1;min-width:160px;max-width:360px;accent-color:#3b6fd4}
+.mg-lv{min-width:22px;font-size:15px}
+.mg-why{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0}
+.mg-chip{padding:2px 8px;font-size:12px}
+.mg-chip.on{border-color:#4f80e0;color:#fff}
+.mg-who p{margin:6px 0}
+.mg-now ul{margin:6px 0 4px;padding-left:18px}
+.mg-now li{margin:2px 0}
+.mg-band{display:inline-block;min-width:56px;text-align:center;padding:1px 6px;border-radius:3px;font-weight:600;font-size:12px;color:#111}
+.mg-easy{background:#8fc79a}.mg-fair{background:#8fb3e0}.mg-tough{background:#e0c46a}.mg-elite{background:#e08a6a}.mg-boss{background:#b49ae0}
+.mg-bands{display:flex;flex-direction:column;gap:2px;margin:4px 0 10px}
+.mg-bandrow{display:grid;grid-template-columns:70px 120px 110px 1fr;gap:8px;align-items:center;text-align:left;background:transparent;border-color:transparent;padding:3px 4px}
+.mg-bandrow:hover,.mg-bandrow.on{background:#1d222b;border-color:#2e3440}
+.mg-chart canvas{display:block;width:100%;border:1px solid #2a2f38;touch-action:manipulation}
+.mg-tip{min-height:18px;margin-top:4px}
+.mg-odd{margin-top:6px;font-size:12px;line-height:1.6}
+@media (max-width:700px){.mg-bandrow{grid-template-columns:60px 1fr 1fr}.mg-bandrow .hint{grid-column:1/-1}}
