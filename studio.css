@@ -565,3 +565,13 @@ button.qs-tag{font:15px rainyhearts,sans-serif}
   .qs-rtplay .qs-btn{min-height:44px;flex:1 1 40%;justify-content:center}
   .qs-routine .qs-sel{min-height:44px;font-size:16px}
 }
+/* the NPC's sounds (sound.js sfxSlotsPanel, look "qs") */
+.qs-sfx .sfx-slot{padding:6px 0;border-top:1px dashed #555}
+.qs-sfx .sfx-slot:first-child{border-top:0}
+.qs-sfx .sfx-slothead b{font:16px BMmini,monospace;color:var(--gold);margin-right:6px}
+.qs-sfx .sfx-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center}
+.qs-sfx .sfx-chip{display:inline-flex}
+.qs-sfx button{font:16px/16px rainyhearts,sans-serif;background:#000;color:#fff;border:1px solid #fff;border-radius:0;padding:3px 7px;cursor:pointer;margin-left:-1px}
+.qs-sfx button:hover{background:var(--hot)}
+.qs-sfx .sfx-add{border-color:var(--gold);color:var(--gold);margin-left:0}
+.qs-sfx .sfx-x{color:var(--err)}

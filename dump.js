@@ -9,10 +9,10 @@
 // changed" between two versions; BQDump.diff(a, b) counts it per table.
 const BQDump = (() => {
   const ident = s => `"${String(s).replace(/"/g, '""')}"`;
-  const LABEL = { quest_def: "Quests", conversation: "Dialogue", npc: "NPCs", items: "Items", enemies: "Mobs", loot: "Loot",
+  const LABEL = { quest_def: "Quests", conversation: "Dialogue", npc: "NPCs", items: "Items", enemies: "Mobs", loot: "Loot", sfx: "Sounds", sound_slot: "Mob and NPC sounds", sfx_preset: "Sound presets",
     world: "Map tiles", craft: "Craft", forge: "Forge", boss_patterns: "Boss patterns", effects: "Effects", plot: "Plots",
     enemySpells: "Mob spells", routine: "NPC routines", routineNode: "NPC routine nodes", areas: "Areas", area_tiles: "Area tiles", world_flip: "Flipped objects", quest_daily_pool: "Daily quest pools", npc_spawn: "NPC placements" };
-  const ORDER = ["quest_def", "quest_daily_pool", "conversation", "npc", "npc_spawn", "items", "enemies", "boss_patterns", "effects", "loot", "craft", "forge", "plot", "world", "world_flip", "areas", "area_tiles"];
+  const ORDER = ["quest_def", "quest_daily_pool", "conversation", "npc", "npc_spawn", "items", "enemies", "boss_patterns", "effects", "loot", "craft", "forge", "plot", "world", "world_flip", "areas", "area_tiles", "sfx", "sound_slot", "sfx_preset"];
 
   function tables(q) {
     return q("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name");

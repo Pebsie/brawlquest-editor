@@ -27,7 +27,9 @@ async function api(path, body) {
     areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
     areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body),
     dailyEnable: () => BQ.api.dailyEnable(), dialogueEnable: () => BQ.api.dialogueEnable(), saveMany: () => BQ.api.saveMany(body),
-    spawnsEnable: () => BQ.api.spawnsEnable(), routinesEnable: () => BQ.api.routinesEnable(), routineSet: () => BQ.api.routineSet(body) }[path];
+    spawnsEnable: () => BQ.api.spawnsEnable(), routinesEnable: () => BQ.api.routinesEnable(), routineSet: () => BQ.api.routineSet(body),
+    soundsEnable: () => BQ.api.soundsEnable(), sfxSave: () => BQ.api.sfxSave(body), sfxGet: () => BQ.api.sfxGet(body), sfxDelete: () => BQ.api.sfxDelete(body),
+    sfxRename: () => BQ.api.sfxRename(body.id, body.Name), slotSet: () => BQ.api.slotSet(body), presetSave: () => BQ.api.presetSave(body), presetDelete: () => BQ.api.presetDelete(body) }[path];
   const v = BQ.st.version;
   const out = fn();
   syncFile();
@@ -492,6 +494,7 @@ function npcForm(form, n) {
       n.id ? h("button", { class: "danger", onclick: async () => { if (await del("npc", n.id)) { S.npc = null; renderTab(); } } }, "Delete NPC") : null));
   if (!n.id) return;
 
+  form.append(sfxSlotsPanel("npc", n.id));
   form.append(npcQuestPanel(n));
 
   form.append(h("h3", {}, "Dialogue tree (free chat when no quest is waiting)"),
@@ -1657,7 +1660,7 @@ function nodeOwners(ident) {
   }
   return S.ownerCache[ident] || [];
 }
-const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "loot", "export", "sprites"];
+const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "loot", "sounds", "export", "sprites"];
 async function applyRoute() {
   if (!BQ.has() || !S.c) return;
   const [kind, a, b, c, d] = location.hash.slice(1).split("/").map(decodeURIComponent);
@@ -1673,6 +1676,7 @@ async function applyRoute() {
   else if (kind === "loot") { S.tab = "loot"; S.lootEnemy = { id: +a }; }
   else if (kind === "mob") { S.tab = "mobs"; S.mob = { id: +a }; }
   else if (kind === "effect") { S.tab = "effects"; S.effect = { id: +a }; }
+  else if (kind === "sounds") { S.tab = "sounds"; S.sfxSel = a ? { id: +a } : S.sfxSel; }
   else if (kind === "plot") { S.tab = "map"; M.tool = "plot"; const p = (S.c.plots || []).find(v => v.id === +a); if (p) { M.plotSel = { ...p, Agent: +p.Agent || 0 }; M.plotOrig = JSON.stringify(plotRow(M.plotSel)); S.focus = { x: p.X + p.W / 2, y: p.Y + p.H / 2 }; } }
   else if (kind === "studio") { S.tab = "studio"; qsRoute(a, b, c, d); if (a === "npc" && c === "routine") target = "qs-routine"; }
   else if (kind === "map" && a === "npc") {
@@ -1834,7 +1838,7 @@ function switchTab(t) { go("#" + t); }
 
 async function renderTab() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
-  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|mob|effect|dialog|map|plot|studio)\//.test(location.hash)) syncHash("#" + S.tab);
+  if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|mob|effect|dialog|map|plot|studio|sounds)\//.test(location.hash)) syncHash("#" + S.tab);
   document.body.classList.toggle("in-studio", S.tab === "studio");
   const m = $("#main"); m.textContent = ""; window.onmousemove = window.onmouseup = null; M.cv = null;
   try {
@@ -1847,6 +1851,7 @@ async function renderTab() {
     else if (S.tab === "mobs") renderMobs(m);
     else if (S.tab === "effects") renderEffects(m);
     else if (S.tab === "sprites") renderSprites(m);
+    else if (S.tab === "sounds") renderSounds(m);
     else if (S.tab === "dialog") renderOrphan(m);
     else await renderExport(m);
   } catch (e) { status(e.message, true); }

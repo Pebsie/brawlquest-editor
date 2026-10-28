@@ -1165,6 +1165,8 @@ function qsNpcSheet(body, id) {
           h("h4", {}, "Where they stand ", h("span", { class: "hint" }, QS.spot.add ? "tap the map to put them there too" : "tap the map to move the picked place, drag to look around")), spotList, map,
           h("div", {}, h("a", { class: "qs-link", href: `#map/npc/${n.id}` + (QS.spot.add ? "" : `/${QS.spot.X},${QS.spot.Y}`) }, "place them on the big map")))),
       qsRoutinePanel(n),
+      h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "THEIR SOUNDS"), h("span", { class: "qs-sp" }), h("a", { class: "qs-link", href: "#sounds" }, "workshop")),
+        h("div", { class: "qs-wbody" }, sfxSlotsPanel("npc", n.id, "qs"))),
       h("div", { class: "qs-win" }, h("div", { class: "qs-wtitle" }, h("span", {}, "THEIR QUESTS")),
         h("div", { class: "qs-wbody" }, r.all.length ? h("div", { class: "qs-qlist" }, r.all.map(q => h("a", { class: "qs-qrow" + (qsIsDaily(q) ? " daily" : ""), href: "#studio/journey/" + q.id, title: qsIsDaily(q) ? "Daily. Today: " + qsDayDef(q).Title : null }, h("span", { class: "qc-lv" }, q.Level), qsIsDaily(q) ? qsDailyBadge() : null, h("b", {}, qsIsDaily(q) ? qsPh(q.Title) : q.Title), h("small", {}, roleTag(q))))) : h("p", { class: "hint" }, "None yet."),
           r.gives.some(qsIsDaily) ? h("p", { class: "hint" }, qsDailyBadge(), ` Offers one of ${n.Name}'s dailies a day: hidden after the hand-in until the 21:00 reset.`) : null,
