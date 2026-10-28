@@ -72,6 +72,12 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
    * **Mobs**: list/search, create, edit, duplicate and delete enemies (every
      `enemies` column; sprite from the thumbnail picker) and their boss pattern
      primitives, with a live preview. See [Mobs and boss patterns](#mobs-and-boss-patterns).
+     The mob form's sprite picker has a chip per creature folder from the
+     Tome tiles in `assets/monsters/`: Aberrations, Beasts, Demons and Devils,
+     Dragons, Giants and Golems, Humanoids, Insects and Spiders, Plants and
+     Fungi, Reptiles, Slimes and Oozes, Spirits and Elementals, Undead (David
+     E. Gervais, CC BY 3.0; see `assets/monsters/CREDITS.txt`). Sprites named
+     "(2x2)" / "(3x3)" are 64/96 px; picking one sets Width/Height to match.
    * **Effects**: status effects (buffs/debuffs) that projectiles apply. See
      [Effects and projectiles](#effects-and-projectiles).
    * **Loot**: each enemy's drops (item, chance %, amount ± variance).
@@ -457,6 +463,7 @@ Local preview: `python3 -m http.server 8080`, then open http://localhost:8080/.
 Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
 `tests/headless-*.mjs` (Playwright, see their headers), including
 `headless-history.mjs` (autosave), `headless-validate.mjs` (checks),
-`headless-npc-sprites.mjs` (NPC sprite groups in every NPC picker) and
+`headless-npc-sprites.mjs` (NPC sprite groups in every NPC picker),
+`headless-mob-sprites.mjs` (monster sprite groups in the mob picker) and
 `headless-github.mjs` (GitHub sync against a mocked api.github.com,
 `tests/github-mock.mjs`; it never talks to GitHub).
