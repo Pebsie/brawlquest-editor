@@ -160,6 +160,7 @@ function mobForm(form, e) {
       e.id ? link("#loot/" + e.id, "Loot table →", "btnlink") : null),
     h("p", { class: "hint" }, e.id ? (placed === null ? "Open the Map tab once to count spawns. " : `Placed on ${placed} map tile(s). `) + "Renaming moves its map spawns along; quest steps that name it are not changed. Deleting also removes its loot and patterns." : "Create the mob, then it can be placed from Map > Place mobs."));
   mobGuide(form, e, collect, grid);
+  if (e.id) form.append(sfxSlotsPanel("enemy", e.id));
   if (spells.length) form.append(h("div", { class: "panel" }, h("h3", {}, "Legacy spells (enemySpells)"),
     h("p", { class: "hint" }, "Older mechanics, kept as they are and not edited here. New boss mechanics should use the pattern primitives below."),
     spells.map(s => h("div", {}, `${s.Name} ${s.Value} every ${s.Frequency}s`))));

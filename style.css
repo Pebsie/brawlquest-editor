@@ -267,3 +267,58 @@ canvas#map{touch-action:none}
 .mg-tip{min-height:18px;margin-top:4px}
 .mg-odd{margin-top:6px;font-size:12px;line-height:1.6}
 @media (max-width:700px){.mg-bandrow{grid-template-columns:60px 1fr 1fr}.mg-bandrow .hint{grid-column:1/-1}}
+/* eleven tabs still fit one row at 1500px */
+#tabs button{padding:4px 8px}
+@media (min-width: 761px){header{gap:12px}}
+/* Sounds: the workshop (sound.js) and the slots in the mob / NPC forms */
+.sfx-form{max-width:900px}
+.sfx-name{display:flex;gap:8px;align-items:center;margin:4px 0 8px}
+.sfx-name input{flex:1;max-width:420px}
+.sfx-recbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sfx-rec{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:6px 16px;font-size:15px}
+.sfx-rec i{width:14px;height:14px;border-radius:50%;background:#d33;display:inline-block}
+.recording .sfx-rec{background:#6b2121;border-color:#8a2c2c}
+.recording .sfx-rec i{border-radius:2px;background:#fff}
+.sfx-meter{width:140px;height:8px;background:#0f1216;border:1px solid #3a404c}
+.sfx-meter i{display:block;height:100%;width:0;background:#4caf50}
+.sfx-wave{display:block;width:100%;height:120px;border:1px solid #2e3440;touch-action:none;cursor:ew-resize}
+.sfx-wave.small{height:56px;cursor:default;touch-action:auto}
+.sfx-tight{margin:8px 0;align-items:center}
+.sfx-seg{display:inline-flex;margin-bottom:2px}
+.sfx-seg button{border-radius:0}
+.sfx-seg button:first-child{border-radius:3px 0 0 3px}
+.sfx-seg button:last-child{border-radius:0 3px 3px 0;border-left:0}
+.sfx-seg button.on{background:#3b6fd4;border-color:#4f80e0;color:#fff}
+.sfx-row{display:grid;grid-template-columns:72px minmax(120px,1fr) minmax(150px,auto) auto;gap:8px;align-items:center;margin:4px 0}
+.sfx-row label{padding:0}
+.sfx-row input[type=range]{width:100%}
+.sfx-val{color:#ccd;font-variant-numeric:tabular-nums;font-size:12px}
+.sfx-reset{padding:1px 7px;font-size:11px;color:#99a}
+.sfx-chk{color:#aab;padding:0;display:inline-flex;align-items:center;gap:4px}
+.panel .sfx-chk{margin:4px 0 4px 80px}
+.sfx-slots .sfx-slot{display:grid;grid-template-columns:200px 1fr;gap:8px;align-items:center;padding:5px 0;border-top:1px solid #222832}
+.sfx-slothead b{display:inline-block;min-width:52px}
+.sfx-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sfx-chip{display:inline-flex}
+.sfx-chip button{border-radius:0;margin-left:-1px}
+.sfx-chip button:first-child{border-radius:3px 0 0 3px;margin:0;background:#1f2a3d}
+.sfx-chip button:last-child{border-radius:0 3px 3px 0}
+.sfx-x{color:#f99}
+.sfx-lib{display:flex;flex-direction:column;max-height:55vh;overflow:auto;border:1px solid #2e3440}
+.sfx-librow{display:flex;gap:8px;align-items:center;padding:4px 8px;border-bottom:1px solid #20242b}
+.sfx-librow span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sfx-modal .panel{max-width:none}
+.sfx-ov .modal-box{width:min(820px,96vw)}
+@media (max-width: 760px){
+  .sfx-row{grid-template-columns:64px 1fr auto;row-gap:0}
+  .sfx-row .sfx-val{grid-column:2/3;grid-row:2}
+  .sfx-row input[type=range]{min-height:34px}
+  .panel .sfx-chk{margin-left:0}
+  .sfx-form button,.sfx-modal button,.sfx-slots button,.sfx-form select,.sfx-modal select{min-height:40px}
+  .sfx-recbar .sfx-rec{flex:1 1 100%;justify-content:center;min-height:56px;font-size:17px}
+  .sfx-meter{flex:1}
+  .sfx-slots .sfx-slot{grid-template-columns:1fr}
+  .sfx-ov{align-items:stretch}
+  .sfx-ov .modal-box{width:100vw;max-height:none;height:100%;border-radius:0;padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+  .sfx-name input{font-size:16px}
+}

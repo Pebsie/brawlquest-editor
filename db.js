@@ -35,6 +35,15 @@ const BQ = (() => {
     "INSERT INTO routineNode_upgrade (id, Routine, X, Y, Position, Wait)\n  SELECT e.id, e.Routine, e.X, e.Y, e.Position,\n    IFNULL((SELECT Wait FROM routineNode r WHERE r.id = e.id), 0)\n  FROM routineNode e, (SELECT 0 AS Wait) d;",
     "DROP TABLE routineNode;",
     "ALTER TABLE routineNode_upgrade RENAME TO routineNode;"];
+  // Sounds from the sound workshop and the mob / NPC slots that play them
+  // (the API's content/migrations/2026-10-28-sound-slots.sql, docs/SOUNDS.md).
+  // Same statements as the migration; run by itself on the first sound saved.
+  const SOUND_MIGRATION = [
+    "CREATE TABLE IF NOT EXISTS sfx (\n  id INTEGER PRIMARY KEY,\n  Name TEXT NOT NULL DEFAULT '',\n  Hash TEXT NOT NULL DEFAULT '',\n  Data BLOB,\n  Raw BLOB,\n  Recipe TEXT NOT NULL DEFAULT '{}',\n  Created TEXT NOT NULL DEFAULT ''\n);",
+    "CREATE TABLE IF NOT EXISTS sound_slot (\n  id INTEGER PRIMARY KEY,\n  Kind TEXT NOT NULL,\n  RefID INTEGER NOT NULL,\n  Slot TEXT NOT NULL,\n  Sfx INTEGER NOT NULL\n);",
+    "CREATE INDEX IF NOT EXISTS sound_slot_ref ON sound_slot(Kind, RefID);",
+    "CREATE TABLE IF NOT EXISTS sfx_preset (\n  id INTEGER PRIMARY KEY,\n  Name TEXT NOT NULL,\n  Recipe TEXT NOT NULL DEFAULT '{}'\n);"];
+  const SOUND_SLOTS = { enemy: ["aggro", "attack", "hurt", "death", "idle"], npc: ["greet", "talk"] };
   // Quest Studio's personality notes per NPC (content/migrations/2026-10-26-npc-notes.sql
   // in the API). Editor-only: the game never reads it. Created on the first note.
   const NOTES_TABLE = "CREATE TABLE IF NOT EXISTS npc_notes (id INTEGER PRIMARY KEY, NPC INTEGER NOT NULL UNIQUE, Notes TEXT NOT NULL DEFAULT '');";
@@ -195,6 +204,7 @@ const BQ = (() => {
     return st.warnings;
   }
   const has = t => !!q("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t]).length;
+  const hasSounds = () => has("sfx") && has("sound_slot") && has("sfx_preset");
   const hasRoutineCols = () => has("routine") && has("routineNode") && cols("routine").includes("Spawn") && cols("routineNode").includes("Wait");
   function checkSchema() {
     for (const t of ["items", "enemies", "npc", "conversation", "world"])
@@ -215,6 +225,7 @@ const BQ = (() => {
   function cols(t) { return q(`PRAGMA table_info(${t})`).map(r => r.name); }
   const lit = v => {
     if (v === null || v === undefined) return "''";
+    if (v instanceof Uint8Array) { let x = ""; for (let i = 0; i < v.length; i++) x += (v[i] < 16 ? "0" : "") + v[i].toString(16); return "X'" + x + "'"; }
     if (typeof v === "boolean") return v ? "1" : "0";
     if (typeof v === "number") { if (!isFinite(v)) throw new Error("bad number"); return String(v); }
     return "'" + String(v).replace(/'/g, "''") + "'";
@@ -341,6 +352,7 @@ const BQ = (() => {
   const spawnUsers = id => patternUsers(x => x.do === "spawn" && +x.enemy === id, id);
 
   const api = {
+    SOUND_SLOTS,
     content() {
       const quests = has("quest_def") ? q("SELECT * FROM quest_def ORDER BY Level, id") : [];
       return {
@@ -353,6 +365,10 @@ const BQ = (() => {
         hasSpawns: has("npc_spawn"),
         npcSpawns: has("npc_spawn") ? q("SELECT id, NPC, X, Y FROM npc_spawn ORDER BY NPC, id") : [],
         hasRoutineSpawn: hasRoutineCols(),
+        hasSounds: hasSounds(),
+        sfx: hasSounds() ? q("SELECT id, Name, Hash, Recipe, Created, length(Data) AS Size, Raw IS NOT NULL AS HasRaw FROM sfx ORDER BY id DESC") : [],
+        soundSlots: hasSounds() ? q("SELECT id, Kind, RefID, Slot, Sfx FROM sound_slot ORDER BY Kind, RefID, Slot, id") : [],
+        sfxPresets: hasSounds() ? q("SELECT id, Name, Recipe FROM sfx_preset ORDER BY Name") : [],
         routines: has("routine") ? q(`SELECT id, NPC, TriggerHour, Loop, ${hasRoutineCols() ? "Spawn, Speed" : "0 AS Spawn, 1 AS Speed"} FROM routine ORDER BY NPC, TriggerHour, id`) : [],
         routineNodes: has("routineNode") ? q(`SELECT id, Routine, X, Y, Position, ${hasRoutineCols() ? "Wait" : "0 AS Wait"} FROM routineNode ORDER BY Routine, Position, id`) : [],
         conversations: q("SELECT id, Identifier, Title, ImgPath, Options, ReputationChange, ItemsGiven, QuestStart FROM conversation ORDER BY Identifier"),
@@ -447,6 +463,7 @@ const BQ = (() => {
     delete({ table, id }) {
       if (!EDITABLE.includes(table) || !(id > 0)) throw new Error("bad delete");
       const s = [`DELETE FROM ${table} WHERE id = ${+id};`];
+      if ((table === "npc" || table === "enemies") && hasSounds()) s.push(`DELETE FROM sound_slot WHERE Kind = '${table === "npc" ? "npc" : "enemy"}' AND RefID = ${+id};`);
       if (table === "npc") s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE NPC = ${+id});`, `DELETE FROM routine WHERE NPC = ${+id};`);
       if (table === "npc" && has("npc_spawn")) s.push(`DELETE FROM npc_spawn WHERE NPC = ${+id};`);
       if (table === "npc_spawn") {
@@ -557,6 +574,65 @@ const BQ = (() => {
       st.dialogueUpgraded = true;
       return { ok: true };
     },
+    // ---- sounds (sound.js)
+    soundsEnable() {
+      if (!hasSounds()) apply(SOUND_MIGRATION, "sounds (as content/migrations/2026-10-28-sound-slots.sql)");
+      return { ok: true };
+    },
+    // A finished sound: { id?, Name, Hash, Data (WAV bytes), Raw (WAV bytes or
+    // null: keep the stored one), Recipe (object or JSON) }.
+    sfxSave(row) {
+      const pre = hasSounds() ? [] : SOUND_MIGRATION;
+      const data = row.Data instanceof Uint8Array ? row.Data : null;
+      if (!data || data.length < 44 || String.fromCharCode(...data.slice(0, 4)) !== "RIFF") throw new Error("a sound is a WAV");
+      if (data.length > 4 * 1048576) throw new Error("that sound is over 4 MB: trim it");
+      if (!/^[0-9a-f]{40}$/.test(row.Hash || "")) throw new Error("bad hash");
+      const name = String(row.Name || "").trim() || "sound";
+      const recipe = typeof row.Recipe === "string" ? row.Recipe : JSON.stringify(row.Recipe || {});
+      let id = Math.trunc(+row.id || 0);
+      const cur = id > 0 && hasSounds() ? q("SELECT id FROM sfx WHERE id = ?", [id])[0] : null;
+      if (!cur) id = hasSounds() ? q("SELECT IFNULL(MAX(id), 0) + 1 AS n FROM sfx")[0].n : 1;
+      const raw = row.Raw instanceof Uint8Array ? row.Raw : null;
+      if (raw && raw.length > 8 * 1048576) throw new Error("that recording is over 8 MB");
+      const created = new Date().toISOString().slice(0, 19).replace("T", " ");
+      const stmt = cur
+        ? `UPDATE sfx SET Name = ${lit(name)}, Hash = ${lit(row.Hash)}, Data = ${lit(data)}, Recipe = ${lit(recipe)}${raw ? ", Raw = " + lit(raw) : ""} WHERE id = ${id};`
+        : `INSERT INTO sfx (id, Name, Hash, Data, Raw, Recipe, Created) VALUES (${id}, ${lit(name)}, ${lit(row.Hash)}, ${lit(data)}, ${raw ? lit(raw) : "NULL"}, ${lit(recipe)}, ${lit(created)});`;
+      apply([...pre, stmt], `sound ${id} ${name}`);
+      return { id };
+    },
+    sfxRename(id, name) { apply([`UPDATE sfx SET Name = ${lit(String(name || "").trim() || "sound")} WHERE id = ${Math.trunc(+id)};`], `sound ${id} renamed`); return { ok: true }; },
+    // The bytes (not in content(): they can be big).
+    sfxGet(id) { const r = hasSounds() ? q("SELECT Data, Raw FROM sfx WHERE id = ?", [Math.trunc(+id)])[0] : null; return r || null; },
+    sfxDelete(id) {
+      id = Math.trunc(+id);
+      apply([`DELETE FROM sound_slot WHERE Sfx = ${id};`, `DELETE FROM sfx WHERE id = ${id};`], `sound ${id} deleted`);
+      return { ok: true };
+    },
+    // One slot's variants, in order: { Kind, RefID, Slot, sfx: [ids] }.
+    slotSet({ Kind, RefID, Slot, sfx }) {
+      if (!SOUND_SLOTS[Kind] || !SOUND_SLOTS[Kind].includes(Slot)) throw new Error("no such sound slot");
+      RefID = Math.trunc(+RefID);
+      const table = Kind === "enemy" ? "enemies" : "npc";
+      if (!q(`SELECT 1 FROM ${table} WHERE id = ?`, [RefID]).length) throw new Error(`no ${Kind} ${RefID}`);
+      const pre = hasSounds() ? [] : SOUND_MIGRATION;
+      const ids = (sfx || []).map(x => Math.trunc(+x));
+      for (const x of ids) if (!hasSounds() || !q("SELECT 1 FROM sfx WHERE id = ?", [x]).length) throw new Error("no sound " + x);
+      const stmts = [...pre, `DELETE FROM sound_slot WHERE Kind = ${lit(Kind)} AND RefID = ${RefID} AND Slot = ${lit(Slot)};`];
+      for (const x of ids) stmts.push(`INSERT INTO sound_slot (Kind, RefID, Slot, Sfx) VALUES (${lit(Kind)}, ${RefID}, ${lit(Slot)}, ${x});`);
+      apply(stmts, `${Kind} ${RefID} ${Slot} sound`);
+      return { ok: true };
+    },
+    presetSave({ id, Name, Recipe }) {
+      const pre = hasSounds() ? [] : SOUND_MIGRATION;
+      id = Math.trunc(+id || 0);
+      const name = String(Name || "").trim(); if (!name) throw new Error("a preset needs a name");
+      const recipe = typeof Recipe === "string" ? Recipe : JSON.stringify(Recipe || {});
+      if (!id) id = hasSounds() ? q("SELECT IFNULL(MAX(id), 0) + 1 AS n FROM sfx_preset")[0].n : 1;
+      apply([...pre, `INSERT OR REPLACE INTO sfx_preset (id, Name, Recipe) VALUES (${id}, ${lit(name)}, ${lit(recipe)});`], `sound preset ${name}`);
+      return { id };
+    },
+    presetDelete(id) { apply([`DELETE FROM sfx_preset WHERE id = ${Math.trunc(+id)};`], `sound preset ${id} deleted`); return { ok: true }; },
     // Routines on this copy (the API's 2026-10-27-routine-placements.sql);
     // done by itself on the first routine saved.
     routinesEnable() {

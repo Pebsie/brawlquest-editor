@@ -102,6 +102,9 @@ const BQCheck = (() => {
       // npc.go loadRoutines: walks per placement (2026-10-27-routine-placements.sql adds Spawn, Speed, Wait).
       routine: { optional: true, types: { id: "i", NPC: "i", TriggerHour: "i", Loop: "i" }, opt: { Spawn: "i", Speed: "n" } },
       routineNode: { optional: true, types: { id: "i", Routine: "i", X: "i", Y: "i", Position: "i" }, opt: { Wait: "i" } },
+      // sounds.go loadSounds (2026-10-28-sound-slots.sql): a slot whose sound has no bytes is skipped.
+      sfx: { optional: true, types: { id: "i", Name: "s", Hash: "s" } },
+      sound_slot: { optional: true, types: { id: "i", Kind: "s", RefID: "i", Slot: "s", Sfx: "i" } },
       quest_daily_pool: { optional: true, types: { id: "i", QuestID: "i", Kind: "s", Slot: "i", RefID: "i", Name: "s", Label: "s", Min: "i", Max: "i", X: "i", Y: "i", Radius: "n", Weight: "i" } },
     };
     const ok = {};
@@ -242,6 +245,18 @@ const BQCheck = (() => {
     if (ok.npc && nodeIds) for (const r of q("SELECT id, Name, Conversation FROM npc WHERE IFNULL(Conversation, '') <> '' ORDER BY id"))
       if (!nodeIds.has(r.Conversation)) add("warning", "npc", `NPC ${r.id} ${r.Name}`, `greeting node "${r.Conversation}" doesn't exist`, "#npc/" + r.id);
 
+    if (ok.sound_slot) {
+      const SLOTS = { enemy: ["aggro", "attack", "hurt", "death", "idle"], npc: ["greet", "talk"] };
+      const sfxIds = ok.sfx ? new Set(q("SELECT id FROM sfx WHERE Data IS NOT NULL AND length(Data) > 44").map(r => r.id)) : new Set();
+      for (const r of q("SELECT id, Kind, RefID, Slot, Sfx FROM sound_slot ORDER BY id")) {
+        const w = `sound slot ${r.id} (${r.Kind} ${r.RefID} ${r.Slot})`, route = r.Kind === "npc" ? "#npc/" + r.RefID : r.Kind === "enemy" ? "#mob/" + r.RefID : "#sounds";
+        if (!SLOTS[r.Kind]) { add("warning", "sound_slot", w, `kind ${r.Kind} is not enemy or npc: the API skips it`, "#sounds"); continue; }
+        if (!SLOTS[r.Kind].includes(r.Slot)) add("warning", "sound_slot", w, `slot ${r.Slot} isn't one the game plays (${SLOTS[r.Kind].join(", ")})`, route);
+        if (!sfxIds.has(r.Sfx)) add("warning", "sound_slot", w, `sound ${r.Sfx} doesn't exist or has no audio: the API skips it`, route);
+        const owner = r.Kind === "npc" ? (ok.npc && q("SELECT 1 FROM npc WHERE id = ?", [r.RefID]).length) : (ok.enemies && q("SELECT 1 FROM enemies WHERE id = ?", [r.RefID]).length);
+        if (!owner) add("warning", "sound_slot", w, `${r.Kind === "npc" ? "NPC" : "mob"} ${r.RefID} doesn't exist, so it never plays`, "#sounds");
+      }
+    }
     if (ok.loot) {
       const orphan = new Map();
       for (const r of q("SELECT id, EnemyID, ItemID FROM loot ORDER BY id")) {

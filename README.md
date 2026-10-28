@@ -314,6 +314,48 @@ Mobs and bosses use only the `boss_patterns` primitives the API runs
 
 URL: `#mob/ID`.
 
+## Sounds
+
+All the game's sound effects are recordings pitched and stretched. The
+**Sounds** tab is a workshop for making more, and the mob form, the NPC form
+and the Quest Studio NPC sheet have slots to give them out.
+
+1. **Record**: tap Record, make the noise, tap Stop (up to 15 s). The first
+   time, the browser asks for the mic (on an iPhone it needs the https site,
+   tomlock.me/bq-editor, and a tap; if it was refused: Settings > Safari >
+   Microphone, or aA > Website Settings). Or upload a WAV, OGG, MP3 or M4A.
+2. **Trim**: the silence is trimmed for you; drag the yellow handles (mouse or
+   finger) to change it.
+3. **Shape**:
+   - *Pitch and length*: pitch in semitones (-24 to +24) and length (0.25x to
+     4x) on their own. This is how most of the old sounds were made (the Cave
+     Spider is high but still long). A WSOLA time-stretch in the page, then a
+     resample.
+   - *Tape speed (linked)*: one speed, faster is higher and shorter, like a
+     tape. No stretch artefacts.
+   - volume (with normalise to -1 dB), fade in and fade out.
+   - presets: starters (Small critter, Spider, Big beast, Ghostly, Villager,
+     Chipmunk, Giant) and your own (Save as preset keeps the shape, not the
+     trim; stored in `sfx_preset`).
+4. **Listen and save**: changes play straight away (untick "play on change"
+   to stop that). Save renders the same Web Audio graph offline to a 32 kHz
+   mono 16-bit WAV.
+
+The original recording is kept with the settings (`sfx.Raw`, `sfx.Recipe`),
+so Edit on any sound brings back the whole recording to redo it.
+
+**Slots** (`sound_slot`): mobs have aggro, attack, hurt, death and idle; NPCs
+greet and talk. "+ add" picks from the library or records a new one there and
+then; two or more in a slot are variants and the game picks one at random.
+An empty slot keeps what played before (the mob's folder sounds, the
+sprite's greet sound). What each slot does in game is in the API's
+`docs/SOUNDS.md`.
+
+The sounds live in the content db (`sfx.Data`), so they ship with the server
+and content, not a client release: the API serves them at `/sfx/<sha1>` and
+the client caches them. The first sound saved adds the tables
+(`2026-10-28-sound-slots.sql`).
+
 ## Effects and projectiles
 
 The API's effects engine (`effects.go`) codes what each modifier type does;
