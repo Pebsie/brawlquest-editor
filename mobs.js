@@ -115,7 +115,9 @@ function mobForm(form, e) {
   const img = sprite(imgPath);
   const imgIn = assetInput(imgPath, v => { imgPath = v; img.src = assetURL(v); });
   const pickImg = () => openPicker({ title: `Sprite for ${f.Name.value || "this mob"}`, groups: mobSpriteGroups, group: "monsters", recentKey: "mob", value: imgPath,
-    onPick: v => { if (v) { imgPath = v; imgIn.value = v; img.src = assetURL(v); if (S.mobPreview) S.mobPreview.setImage(v); } } });
+    onPick: v => { if (v) { imgPath = v; imgIn.value = v; img.src = assetURL(v); if (S.mobPreview) S.mobPreview.setImage(v); fitSize(v); } } });
+  // Tome sprites bigger than a tile are named "... (2x2).png" / "(3x3)": match the mob's footprint to the art.
+  const fitSize = v => { const m = /\((\d)x(\d)\)\.png$/i.exec(v); if (m && f.Width && f.Height) { f.Width.value = m[1]; f.Height.value = m[2]; } };
   img.addEventListener("click", pickImg); img.style.cursor = "pointer"; img.title = "Pick a sprite";
   const help = { ATK: "melee damage per hit", HP: "hit points", Range: "attack/aggro reach in tiles (0 = never attacks)", CanMove: "walks and chases; off = static (spawned adds despawn)",
     XP: "XP per kill", Width: "tiles wide", Height: "tiles tall", Attributes: "free text, None by default", AttackSpeed: "melee hits per second (1 = once a second)",
@@ -160,7 +162,10 @@ function mobForm(form, e) {
 
 const mobSpriteGroups = () => {
   const used = [...new Set(S.c.enemies.map(e => e.Image).filter(Boolean))].sort().map(v => ({ value: v, note: S.c.enemies.filter(e => e.Image === v).map(e => e.Name).join(", ").slice(0, 40) }));
-  return [{ id: "monsters", label: "Monsters", entries: folderEntries("assets/monsters/") }, { id: "used", label: "Used by mobs", entries: used },
+  // A chip per creature folder from the Tome tiles (Beasts, Undead, Dragons...); the older lower-case folders stay under Monsters.
+  const folders = [...new Set(assetPaths().filter(p => p.startsWith("assets/monsters/")).map(p => p.slice(16).split("/")).filter(a => a.length > 1 && /^[A-Z]/.test(a[0])).map(a => a[0]))].sort()
+    .map(f => ({ id: "monsters:" + f, label: f, entries: folderEntries(`assets/monsters/${f}/`) }));
+  return [{ id: "monsters", label: "Monsters", entries: folderEntries("assets/monsters/") }, ...folders, { id: "used", label: "Used by mobs", entries: used },
     { id: "npc", label: "NPC art", entries: folderEntries("assets/npc/") }, { id: "objects", label: "World objects", entries: folderEntries("assets/world/objects/") }];
 };
 

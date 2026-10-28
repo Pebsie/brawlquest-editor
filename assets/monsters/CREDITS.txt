@@ -1,0 +1,17 @@
+The sprites in the group folders here (Aberrations, Beasts, Demons and
+Devils, Dragons, Giants and Golems, Humanoids, Insects and Spiders, Plants
+and Fungi, Reptiles, Slimes and Oozes, Spirits and Elementals, Undead) are
+cut by tools/build_monster_sprites.py from the "Tome" tileset by David E.
+Gervais (CC BY 3.0, https://creativecommons.org/licenses/by/3.0/,
+http://pousse.rapiere.free.fr/tome/), already credited on the login screen:
+AngbandTk dg_monster1-7, dg_dragon, dg_undead and dg_uniques (32x32), DO
+Monsters (54x54) and Silmar monsters. tools/monster_sprites_sources.json
+lists the tile each sprite comes from.
+
+Changes: the background is made transparent the same way as the older
+monster art, the 54x54 DO and odd-sized Silmar tiles are set bottom-centre
+on a 32x32 cell (trailing rows of ground shadow dropped), and the few
+creatures bigger than 32 px go on a 64x64 or 96x96 cell like the existing
+bosses (file names ending "(2x2)" / "(3x3)"). Pixels are never scaled or
+redrawn, and no generated art is used. Tiles by other artists in the Tome
+pack (e.g. Henk Brouwer / Xerathul's Revenge) are not used.
