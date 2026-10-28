@@ -78,6 +78,13 @@ Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-edit
      Fungi, Reptiles, Slimes and Oozes, Spirits and Elementals, Undead (David
      E. Gervais, CC BY 3.0; see `assets/monsters/CREDITS.txt`). Sprites named
      "(2x2)" / "(3x3)" are 64/96 px; picking one sets Width/Height to match.
+     **Speed** (tiles a second, slider with your walk and sprint marked),
+     **Passive** (never starts a fight) and **Flip sprite** (beside the
+     sprite, for art that faces left) need the API's
+     `content/migrations/2026-10-28-mob-speed-passive-flip.sql` (added to a
+     copy on open). Under the form, the **balance guide** shows the player at
+     the mob's level, how the fight goes with its current numbers and HP / ATK
+     bands from Easy to Boss; see [docs/BALANCE.md](docs/BALANCE.md).
    * **Effects**: status effects (buffs/debuffs) that projectiles apply. See
      [Effects and projectiles](#effects-and-projectiles).
    * **Loot**: each enemy's drops (item, chance %, amount ± variance).
@@ -464,6 +471,8 @@ Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
 `tests/headless-*.mjs` (Playwright, see their headers), including
 `headless-history.mjs` (autosave), `headless-validate.mjs` (checks),
 `headless-npc-sprites.mjs` (NPC sprite groups in every NPC picker),
-`headless-mob-sprites.mjs` (monster sprite groups in the mob picker) and
+`headless-mob-sprites.mjs` (monster sprite groups in the mob picker),
+`balance.test.mjs` (the balance guide's maths against the API's cases),
+`headless-balance.mjs` (speed, passive, flip and the guide) and
 `headless-github.mjs` (GitHub sync against a mocked api.github.com,
 `tests/github-mock.mjs`; it never talks to GitHub).
