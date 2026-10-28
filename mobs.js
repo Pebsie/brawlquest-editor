@@ -2,7 +2,7 @@
 // Mobs tab: enemies (all columns) and their boss_patterns primitives, with a
 // top-down preview driven by mobsim.js (the same rules as the API).
 
-const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider.png", HP: 20, Range: 1, CanMove: 1, XP: 10, Width: 1, Height: 1, Attributes: "None", AttackSpeed: 1, KnockbackResist: 0, HitEffect: "blood", SpawnsDay: 1, SpawnsNight: 1 };
+const MOB_NEW = { id: 0, Name: "New mob", ATK: 5, Image: "assets/monsters/spider.png", HP: 20, Range: 1, CanMove: 1, XP: 10, Width: 1, Height: 1, Attributes: "None", AttackSpeed: 1, KnockbackResist: 0, HitEffect: "blood", SpawnsDay: 1, SpawnsNight: 1, Speed: 1, Passive: 0, Flip: 0 };
 const MOB_LABELS = { SpawnsDay: "Spawns in day", SpawnsNight: "Spawns at night" };
 const PRIM_NEW = {
   zone: { every: 3, do: "zone", target: "target", radius: 1, maxRadius: 1, windup: 2, once: true, damage: 20, duration: 2 },
@@ -124,11 +124,15 @@ function mobForm(form, e) {
     KnockbackResist: "0 = full knockback from hits, 0.5 = half, 1 = immune (bosses hold their ground and walk home after a fight)",
     SpawnsDay: "the spawner puts it out from 06:00 to 18:00 on the world clock (a day is 30 minutes). Untick for a night-only mob",
     SpawnsNight: "out from 18:00 to 06:00. One caught out when the time turns fades away once it is out of combat (no loot or XP). Leave both ticked for a mob that is always about",
+    Passive: "wanders and fights back, but never starts a fight: only a player hurting it sets it off, and it calms down after 8 s left alone",
     HitEffect: "what comes off it when hit or killed: blood for flesh, wood chips for trees and chests, stone/crystal/ice shards, bone for skeletons, ectoplasm for ghosts, slime, ichor (spiders), water (fishing spots), metal sparks, embers, leaf, pulp, or none" };
   for (const c of cols) {
     if (c === "id") continue;
-    if (c === "Image") { grid.append(h("label", {}, "Sprite"), h("div", {}, h("div", { class: "bar", style: "margin:0;align-items:center" }, img, h("button", { onclick: pickImg }, "Pick sprite…")), imgIn)); continue; }
+    if (c === "Image") { grid.append(h("label", {}, "Sprite"), h("div", {}, h("div", { class: "bar", style: "margin:0;align-items:center" }, img, h("button", { onclick: pickImg }, "Pick sprite…"), mobFlipToggle(f, e, img, cols)), imgIn)); continue; }
+    if (c === "Flip") continue; // beside the sprite
+    if (c === "Speed") { f.Speed = mobSpeedInput(e.Speed); grid.append(h("label", {}, "Speed"), f.Speed.box); continue; }
     if (c === "CanMove" || c === "SpawnsDay" || c === "SpawnsNight") f[c] = h("input", { type: "checkbox", name: c }), f[c].checked = !!+(e[c] ?? 1);
+    else if (c === "Passive") f[c] = h("input", { type: "checkbox", name: c }), f[c].checked = !!+(e[c] ?? 0);
     else if (c === "Name" || c === "Attributes") f[c] = txt(e[c]);
     else if (c === "KnockbackResist") f[c] = h("input", { type: "number", class: "num", min: 0, max: 1, step: 0.05, value: e[c] ?? 0 });
     else if (c === "HitEffect") {
@@ -143,6 +147,7 @@ function mobForm(form, e) {
   const collect = () => {
     const r = { id: e.id || 0, Image: imgPath };
     for (const [k, el] of Object.entries(f)) r[k] = el.type === "checkbox" ? (el.checked ? 1 : 0) : el.type === "number" ? +el.value : el.value;
+    if (f.Speed) r.Speed = +f.Speed.value || 1;
     return r;
   };
   const placed = e.id ? (S.world ? [...S.world.tiles.values()].filter(t => S.world.strings[t[6]] === e.Name).length : null) : 0;
@@ -154,6 +159,7 @@ function mobForm(form, e) {
       e.id ? h("button", { class: "danger", onclick: async () => { if (await del("enemies", e.id)) { S.mob = null; renderTab(); } } }, "Delete") : null,
       e.id ? link("#loot/" + e.id, "Loot table →", "btnlink") : null),
     h("p", { class: "hint" }, e.id ? (placed === null ? "Open the Map tab once to count spawns. " : `Placed on ${placed} map tile(s). `) + "Renaming moves its map spawns along; quest steps that name it are not changed. Deleting also removes its loot and patterns." : "Create the mob, then it can be placed from Map > Place mobs."));
+  mobGuide(form, e, collect, grid);
   if (spells.length) form.append(h("div", { class: "panel" }, h("h3", {}, "Legacy spells (enemySpells)"),
     h("p", { class: "hint" }, "Older mechanics, kept as they are and not edited here. New boss mechanics should use the pattern primitives below."),
     spells.map(s => h("div", {}, `${s.Name} ${s.Value} every ${s.Frequency}s`))));
