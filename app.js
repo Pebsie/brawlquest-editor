@@ -1091,7 +1091,7 @@ function selSide(s) {
   }
 }
 function spawnSide(s) {
-  M.spawnCount = M.spawnCount || num(3);
+  M.spawnCount = M.spawnCount || num(1);
   const en = S.c.enemies.find(v => v.Name === M.spawnEnemy);
   s.append(h("h3", {}, "Place mobs"),
     h("div", { class: "row2" }, h("span", {}, "Enemy"), h("b", { class: "big" }, en ? en.Name : "pick one below"), h("span", {}, "Count"), M.spawnCount),
