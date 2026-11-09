@@ -7,7 +7,15 @@
 // rely on, so a tree that passes here loads cleanly.
 
 const SKILL_TREES = ["Warrior Order", "Mage Order", "Stoic Order", "None"];
-const SKILL_ICONS = ["axe", "banner", "blink", "book", "boot", "counter", "crystal", "edge", "eye", "fist", "flame", "heart", "horn", "hush", "lance", "lung", "plate", "quake", "shield", "siphon", "storm", "sweep", "veil", "wall"];
+// Icons are sprite paths (the client draws assets/skills/*.png: Tome art, 32x32). A bare name with no
+// slash is an older drawn icon the client still understands.
+const skillIconGroups = () => [
+  { id: "skills", label: "Skill icons", entries: folderEntries("assets/skills/") },
+  { id: "items", label: "Items", entries: folderEntries("assets/items/") },
+  { id: "gear", label: "Gear", entries: folderEntries("assets/player/gear/") },
+  { id: "fx", label: "Effects", entries: folderEntries("assets/fx/") },
+  { id: "monsters", label: "Monsters", entries: folderEntries("assets/monsters/") },
+];
 const SKILL_MODS = {
   STR: "Strength", INT: "Intelligence", STA: "Stamina (10 health each)", DEF: "Defence", HP: "Max health",
   MOVE: "Move speed, percent", DMG: "Damage dealt, percent", CRIT: "Critical chance, percent",
@@ -27,7 +35,7 @@ const SKILL_AB_FIELDS = [
   ["heal", "Heal (% max)", "1", []], ["drain", "Damage returned as health (0-1)", "0.05", ["cone", "nova", "dash", "beam"]], ["give_mana", "Mana given", "1", []],
   ["iframes", "Untouchable for (s)", "0.1", []], ["rank_dmg", "Damage added per rank (0 = 0.2)", "0.05", []], ["rank_cd", "Cooldown cut per rank (0 = 0.08)", "0.01", []],
 ];
-const SKILL_NEW = { id: 0, Tree: "Warrior Order", Branch: "", Name: "New skill", Desc: "", Icon: "fist", Tier: 1, Col: 1, Kind: "passive", MaxRank: 5, Cost: 1, ReqLevel: 2, ReqBranch: 0, Requires: "", Mods: '{"DMG":1}', Ability: "{}" };
+const SKILL_NEW = { id: 0, Tree: "Warrior Order", Branch: "", Name: "New skill", Desc: "", Icon: "assets/skills/warrior-heavy-hands.png", Tier: 1, Col: 1, Kind: "passive", MaxRank: 5, Cost: 1, ReqLevel: 2, ReqBranch: 0, Requires: "", Mods: '{"DMG":1}', Ability: "{}" };
 
 // ------------------------------------------------------------------ rules
 
@@ -38,11 +46,15 @@ function skillRequires(n) { return String(n.Requires || "").split(",").map(x => 
 function skillIssues(nodes, effectIds) {
   const out = [], byId = new Map(nodes.map(n => [+n.id, n]));
   const add = (n, text) => out.push({ id: n ? +n.id : 0, text: (n ? `${n.Name} (${n.id}): ` : "") + text });
-  const seen = new Map();
+  const seen = new Map(), icons = new Map();
   for (const n of nodes) {
+    if (n.Icon && String(n.Icon).includes("/")) { if (icons.has(n.Icon)) add(n, `shares its icon with ${icons.get(n.Icon)}`); else icons.set(n.Icon, n.Name); }
     if (!n.Name) add(n, "needs a name");
     if (!SKILL_TREES.includes(n.Tree) && !n.Tree) add(n, "has no tree");
     if (n.Kind !== "passive" && n.Kind !== "active") add(n, "Kind must be passive or active");
+    if (!n.Icon) add(n, "needs an icon");
+    else if (!String(n.Icon).includes("/")) add(n, `uses the older drawn icon "${n.Icon}": pick a sprite instead`);
+    else if (!/\.png$/i.test(n.Icon)) add(n, "icon must be a .png path");
     if (!(+n.MaxRank >= 1)) add(n, "MaxRank must be at least 1");
     if (!(+n.Cost >= 1)) add(n, "Cost must be at least 1 point");
     if (!(+n.Tier >= 1 && +n.Tier <= 6)) add(n, "Tier must be 1 to 6");
@@ -129,6 +141,7 @@ async function renderSkills(m) {
       const n = treeNodes.find(x => x.Branch === b && +x.Tier === tier && +x.Col === c);
       cells.append(n ? h("button", { "data-node": n.id, class: +n.id === S.skillSel ? "primary" : "", style: `min-height:54px;text-align:center;${n.Kind === "active" ? "border-width:2px;" : ""}`,
         onclick: () => { S.skillSel = +n.id; S.skillDraft = null; renderTab(); } },
+        String(n.Icon || "").includes("/") ? h("img", { class: "skill-ico", src: assetURL(n.Icon), alt: "", "data-icon": n.Icon, onerror: e => { e.target.style.opacity = .3; } }) : null,
         h("div", {}, n.Name), h("div", { class: "hint" }, `${n.Kind === "active" ? "ability" : "passive"} · ${n.MaxRank}×${n.Cost}p · L${n.ReqLevel}`)) : h("div", {}));
     }
     col.append(cells);
@@ -181,7 +194,14 @@ function skillForm(n, treeNodes, allNodes, effects) {
   };
   const tree = h("select", {}, SKILL_TREES.map(t => h("option", { value: t }, t))); tree.value = n.Tree;
   const kind = h("select", {}, ["passive", "active"].map(k => h("option", { value: k }, k))); kind.value = n.Kind;
-  const icon = h("select", {}, SKILL_ICONS.map(k => h("option", { value: k }, k))); icon.value = SKILL_ICONS.includes(n.Icon) ? n.Icon : SKILL_ICONS[0];
+  let iconPath = n.Icon || "";
+  const iconImg = sprite(iconPath);
+  const iconIn = assetInput(iconPath, v => { iconPath = v; iconImg.src = assetURL(v); });
+  iconIn.dataset.key = "Icon";
+  const pickIcon = () => openPicker({ title: `Icon for ${f.Name.value || "this skill"}`, groups: skillIconGroups, recentKey: "skill", value: iconPath,
+    onPick: v => { if (v) { iconPath = v; iconIn.value = v; iconImg.src = assetURL(v); } } });
+  iconImg.addEventListener("click", pickIcon); iconImg.style.cursor = "pointer";
+  const icon = h("div", {}, h("div", { class: "bar", style: "margin:0;align-items:center" }, iconImg, h("button", { "data-act": "pick-icon", onclick: pickIcon }, "Pick icon…")), iconIn);
   // requires: any one of these, from the same tree on an earlier tier
   const reqSet = new Set(skillRequires(n));
   const reqBox = h("div", {}, ...allNodes.filter(x => x.Tree === n.Tree && +x.id !== +n.id).map(x =>
@@ -217,7 +237,7 @@ function skillForm(n, treeNodes, allNodes, effects) {
   kind.addEventListener("change", showKind);
   showKind();
   const collect = () => {
-    const out = { id: +n.id || 0, Tree: tree.value, Branch: f.Branch.value.trim(), Name: f.Name.value.trim(), Desc: f.Desc.value, Icon: icon.value, Tier: +f.Tier.value, Col: +f.Col.value,
+    const out = { id: +n.id || 0, Tree: tree.value, Branch: f.Branch.value.trim(), Name: f.Name.value.trim(), Desc: f.Desc.value, Icon: iconPath, Tier: +f.Tier.value, Col: +f.Col.value,
       Kind: kind.value, MaxRank: +f.MaxRank.value, Cost: +f.Cost.value, ReqLevel: +f.ReqLevel.value, ReqBranch: +f.ReqBranch.value,
       Requires: [...reqBox.querySelectorAll("input[data-req]")].filter(i => i.checked).map(i => i.dataset.req).join(","),
       Mods: kind.value === "passive" ? JSON.stringify(mods) : "{}", Ability: kind.value === "active" ? JSON.stringify(ab) : "{}" };

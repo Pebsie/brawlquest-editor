@@ -41,6 +41,20 @@ await p.click("[data-act=save]"); await wait(250);
 const saved = await p.evaluate(() => BQ.api.loreTables().skill_node.rows.find(r => r.id === S.skillSel));
 ok(JSON.parse(saved.Ability).cd === 7.5, "cooldown saved: " + saved.Ability);
 
+// icons: drawn in the tree, shown in the form, pickable
+ok((await p.$$("img.skill-ico[data-icon^='assets/skills/']")).length >= 12, "tree nodes show their sprite");
+ok(await p.$eval("[data-key=Icon]", e => e.value.startsWith("assets/skills/")), "form shows the icon path");
+ok(await p.$eval(".form img.sprite", e => e.complete && e.naturalWidth === 32), "form previews the 32 px sprite");
+await p.click("[data-act=pick-icon]"); await wait(300);
+ok(await p.$$eval(".picker .pcell", e => e.length) >= 60, "picker lists the skill icons");
+await shot("skills-editor-picker");
+await p.click(".picker .pcell[data-value='assets/skills/none-sprint.png']"); await wait(150);
+ok(await p.inputValue("[data-key=Icon]") === "assets/skills/none-sprint.png", "picking an icon fills the field");
+await p.click("[data-act=save]"); await wait(250);
+const pickedRow = await p.evaluate(() => BQ.api.loreTables().skill_node.rows.find(r => r.id === S.skillSel));
+ok(pickedRow.Icon === "assets/skills/none-sprint.png", "icon saved on the node: " + pickedRow.Icon);
+ok(/shares its icon with/.test(await p.textContent("[data-issues]")), "a shared icon is reported in the checks");
+
 // a passive's stat
 await p.click("[data-node]:has-text('passive')"); await wait(150);
 ok((await p.$$("[data-mod]")).length >= 1, "passive shows its stats");

@@ -322,3 +322,4 @@ canvas#map{touch-action:none}
   .sfx-ov .modal-box{width:100vw;max-height:none;height:100%;border-radius:0;padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
   .sfx-name input{font-size:16px}
 }
+.skill-ico{image-rendering:pixelated;width:32px;height:32px;display:block;margin:0 auto 2px}
