@@ -292,8 +292,8 @@ const BQ = (() => {
       const hit = q("SELECT Name FROM plot WHERE id <> ? AND X < ? AND X + W > ? AND Y < ? AND Y + H > ?", [row.id, row.X + row.W, row.X, row.Y + row.H, row.Y]);
       if (hit.length) throw new Error("overlaps plot " + hit[0].Name);
       const area = [row.X, row.X + row.W - 1, row.Y, row.Y + row.H - 1];
-      const forest = q("SELECT COUNT(*) AS n FROM world WHERE X BETWEEN ? AND ? AND Y BETWEEN ? AND ? AND (Name = 'Foundation Forest' OR Name LIKE 'Dominion of %')", area)[0].n;
-      if (forest) throw new Error(`${forest} tile(s) are in Foundation Forest, where building is free: plots go outside it`);
+      const forest = q("SELECT COUNT(*) AS n FROM world WHERE X BETWEEN ? AND ? AND Y BETWEEN ? AND ? AND Name LIKE 'Dominion of %'", area)[0].n;
+      if (forest) throw new Error(`${forest} tile(s) are in an old Dominion claim, where building is free: plots go outside it`);
       const onMap = q("SELECT COUNT(DISTINCT X || ',' || Y) AS n FROM world WHERE X BETWEEN ? AND ? AND Y BETWEEN ? AND ?", area)[0].n;
       if (onMap < row.W * row.H) throw new Error(`${row.W * row.H - onMap} tile(s) are off the map`);
     } else if (table === "enemies") {

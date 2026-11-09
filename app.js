@@ -1258,7 +1258,7 @@ const PLOT_MAX = 12;
 const PLOT_BAD_GROUND = ["Path", "Cobblestone", "Walkway", "Stone Floor", "Wood Floor", "Tiled Floor", "Water", "Lava", "Bridge"];
 const PLOT_DOORS = ["Portal", "Hole", "Door", "Sign", "Class Machine", "Well"];
 const PLOT_COLOURS = ["#78ff8c", "#7ac8ff", "#ff9ad5", "#ffb45a", "#c59bff", "#fff36b"];
-const isFreeBuild = name => name === "Foundation Forest" || /^Dominion of /.test(name || "");
+const isFreeBuild = name => /^Dominion of /.test(name || "");
 const landAgents = () => S.c.npcs.filter(n => n.Faction === "Land Agent");
 const agentName = id => (+id ? (S.npcBy[id] ? S.npcBy[id].Name : `missing NPC ${id}`) : "Any Land Agent");
 function plotColour(p) {
@@ -1297,7 +1297,7 @@ function plotIssues(p) {
     if (S.c.npcs.some(n => Math.abs(n.SpawnX - x) <= 1 && Math.abs(n.SpawnY - y) <= 1)) pr.npc++;
     if (pr.road + pr.blocked + pr.door + pr.spawn + pr.npc > before) unusable++;
   }
-  if (forest) errors.push(`${forest} tile(s) in Foundation Forest (or a Dominion there). Building is free in the forest, so plots go outside it.`);
+  if (forest) errors.push(`${forest} tile(s) in an old Dominion claim. Those are free-build for their owners, so plots go outside them.`);
   if (missing) errors.push(`${missing} tile(s) are off the map.`);
   const cells = p.W * p.H, bad = [];
   if (pr.road) bad.push(`${pr.road} on roads, floors or water`);
@@ -1457,7 +1457,7 @@ function plotSide(s) {
     h("li", {}, h("b", {}, "Draw: "), `drag on the map (up to ${PLOT_MAX} x ${PLOT_MAX}). Red means it can't go there.`),
     h("li", {}, h("b", {}, "Edit: "), "click a plot, then drag it to move or drag an edge or corner handle to resize. Arrow keys nudge it, Shift+arrows resize."),
     h("li", {}, h("b", {}, "Keys: "), "Enter saves, Esc deselects, Delete removes."),
-    h("li", {}, h("span", { class: "sw", style: "background:rgba(255,140,0,.6)" }), " Foundation Forest: no plots (building there is free).")));
+    h("li", {}, h("span", { class: "sw", style: "background:rgba(255,140,0,.6)" }), " Old Dominion claims: no plots (their owners build there freely).")));
   const p = M.plotSel;
   if (p) {
     const box = h("div", { class: "panel", id: "plot-form-box" });
@@ -1495,7 +1495,7 @@ function plotSide(s) {
   }
   const list = (S.c.plots || []).slice().sort((a, b) => a.Name.localeCompare(b.Name));
   s.append(h("h3", {}, `All plots (${list.length})`));
-  if (!list.length) s.append(h("p", { class: "hint" }, "No plots yet. Drag on the map outside Foundation Forest to make one."));
+  if (!list.length) s.append(h("p", { class: "hint" }, "No plots yet. Drag on the map outside an old Dominion to make one."));
   for (const v of list) {
     const iss = plotIssues(v);
     s.append(h("div", { class: "plotrow" + (p && p.id === v.id ? " sel" : ""), onclick: () => { if (plotConfirmDiscard()) selectPlot(v, true); } },

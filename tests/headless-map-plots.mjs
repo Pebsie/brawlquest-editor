@@ -137,10 +137,10 @@ ok(/overlaps/.test(dbErr), "database refuses overlap too: " + dbErr);
 p.on("dialog", d => d.accept());
 await p.click("#plot-form-box button:has-text('Discard')");
 // forest
-const ff = await p.evaluate(() => { for (const t of S.world.tiles.values()) if (S.world.strings[t[4]] === "Foundation Forest") return [t[0], t[1]]; });
+const ff = await p.evaluate(() => { for (const t of S.world.tiles.values()) if (/^Dominion of /.test(S.world.strings[t[4]])) return [t[0], t[1]]; });
 const ffErr = await p.evaluate(([x, y]) => { try { BQ.api.save({ table: "plot", row: { id: 0, Name: "Forest", X: x, Y: y, W: 2, H: 2, Rent: 1, MinLevel: 1, Agent: 0 } }); return ""; } catch (e) { return e.message; } }, ff);
-ok(/Foundation Forest/.test(ffErr), "database refuses a plot in Foundation Forest: " + ffErr);
-ok(await p.evaluate(([x, y]) => plotIssues({ id: 0, Name: "F", X: x, Y: y, W: 2, H: 2, Rent: 1, MinLevel: 1, Agent: 0 }).errors.some(e => /Foundation Forest/.test(e)), ff), "editor flags Foundation Forest live");
+ok(/Dominion/.test(ffErr), "database refuses a plot in an old Dominion: " + ffErr);
+ok(await p.evaluate(([x, y]) => plotIssues({ id: 0, Name: "F", X: x, Y: y, W: 2, H: 2, Rent: 1, MinLevel: 1, Agent: 0 }).errors.some(e => /Dominion/.test(e)), ff), "editor flags an old Dominion live");
 const agErr = await p.evaluate(([x, y]) => { try { BQ.api.save({ table: "plot", row: { id: 0, Name: "A", X: x, Y: y, W: 2, H: 2, Rent: 1, MinLevel: 1, Agent: 1 } }); return ""; } catch (e) { return e.message; } }, [spot[0] + 30, spot[1]]);
 ok(/Land Agent|overlap|off the map|Forest/.test(agErr), "database refuses a non-agent Agent: " + agErr);
 

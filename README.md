@@ -214,13 +214,13 @@ Every change is one undo step. The first routine saved upgrades the db with the 
 
 ## Plots
 
-Plots are leased building land outside Foundation Forest (table `plot`,
+Plots are leased building land outside old Dominion claims (table `plot`,
 `content/migrations/2026-10-14-plots.sql`; `Agent` from
 `2026-10-19-plot-agents.sql`). None ship: you place them all.
 
 * **Draw**: Map > Plots, drag a rectangle (1 to 12 tiles a side). The outline is
   red, with the reason, if it can't go there: overlapping another plot, any tile
-  in Foundation Forest (shaded orange) or a Dominion, or off the map.
+  in old Dominion claims (shaded orange) or a Dominion, or off the map.
 * **Edit**: click a plot; drag it to move, drag an edge or corner handle to
   resize, arrow keys nudge (Shift+arrows resize). Name, rent (gold/week), min
   level and **Offered by** (any Land Agent, or one: Gideon or Sharon Gazump) are
