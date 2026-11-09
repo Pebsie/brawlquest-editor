@@ -15,6 +15,11 @@ const BQ = (() => {
     item_set: { key: "id", create: "CREATE TABLE IF NOT EXISTS item_set (id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Desc TEXT NOT NULL DEFAULT '');" },
     item_set_bonus: { key: "id", create: "CREATE TABLE IF NOT EXISTS item_set_bonus (id INTEGER PRIMARY KEY, SetID INTEGER NOT NULL, Pieces INTEGER NOT NULL, Attributes TEXT NOT NULL DEFAULT '', Desc TEXT NOT NULL DEFAULT '');" },
     npc_vendor: { key: "NPC", create: "CREATE TABLE IF NOT EXISTS npc_vendor (NPC INTEGER PRIMARY KEY, BuyPct INTEGER NOT NULL DEFAULT 100, Greeting TEXT NOT NULL DEFAULT '', Buys TEXT NOT NULL DEFAULT '');" },
+    // Skill trees (the API's skills.go and content/migrations/2026-11-10-skilltree.sql).
+    skill_node: { key: "id", create: "CREATE TABLE IF NOT EXISTS skill_node (id INTEGER PRIMARY KEY, Tree TEXT NOT NULL, Branch TEXT NOT NULL DEFAULT '', Name TEXT NOT NULL, Desc TEXT NOT NULL DEFAULT '', Icon TEXT NOT NULL DEFAULT '', Tier INTEGER NOT NULL DEFAULT 1, Col INTEGER NOT NULL DEFAULT 1, Kind TEXT NOT NULL DEFAULT 'passive', MaxRank INTEGER NOT NULL DEFAULT 1, Cost INTEGER NOT NULL DEFAULT 1, ReqLevel INTEGER NOT NULL DEFAULT 1, ReqBranch INTEGER NOT NULL DEFAULT 0, Requires TEXT NOT NULL DEFAULT '', Mods TEXT NOT NULL DEFAULT '{}', Ability TEXT NOT NULL DEFAULT '{}');" },
+    skill_points: { key: "FromLevel", create: "CREATE TABLE IF NOT EXISTS skill_points (FromLevel INTEGER PRIMARY KEY, Points INTEGER NOT NULL);" },
+    skill_config: { key: "Key", create: "CREATE TABLE IF NOT EXISTS skill_config (Key TEXT PRIMARY KEY, Value REAL NOT NULL);" },
+    skill_trainer: { key: "NPC", create: "CREATE TABLE IF NOT EXISTS skill_trainer (NPC INTEGER PRIMARY KEY);" },
   };
   const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects", "npc_notes", "quest_daily_pool", "npc_spawn"];
   // NPC placements (the API's content/migrations/2026-10-27-npc-spawns.sql,
@@ -59,7 +64,7 @@ const BQ = (() => {
   // Status effects (the API's effects.go creates the same table at startup).
   const EFFECT_TABLE = "CREATE TABLE IF NOT EXISTS effects (id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Description TEXT NOT NULL DEFAULT '', Icon TEXT NOT NULL DEFAULT '', Visual TEXT NOT NULL DEFAULT '', Duration REAL NOT NULL DEFAULT 3, Stacking TEXT NOT NULL DEFAULT 'refresh', MaxStacks INTEGER NOT NULL DEFAULT 1, Modifiers TEXT NOT NULL DEFAULT '[]');";
   const STACKING = ["refresh", "stack", "extend", "ignore"];
-  const MOD_TYPES = ["move_speed", "stun", "dot"];
+  const MOD_TYPES = ["move_speed", "stun", "dot", "dmg_in", "dmg_out", "regen", "counter"];
   // Same table the API creates at startup (enemies.go); one JSON array of
   // primitives per row, all rows of an enemy run together.
   const PATTERN_TABLE = "CREATE TABLE IF NOT EXISTS boss_patterns (id INTEGER PRIMARY KEY, EnemyID INTEGER NOT NULL, Pattern TEXT NOT NULL);";
@@ -329,6 +334,9 @@ const BQ = (() => {
         if (!MOD_TYPES.includes(m.type)) throw new Error(`modifier ${i + 1}: type must be one of ${MOD_TYPES.join(", ")}`);
         if (m.type === "move_speed" && !(m.mult >= 0 && m.mult <= 3)) throw new Error(`modifier ${i + 1}: move_speed mult is 0 to 3 (0.5 = half speed)`);
         if (m.type === "dot" && !(m.damage > 0)) throw new Error(`modifier ${i + 1}: dot needs damage`);
+        if ((m.type === "dmg_in" || m.type === "dmg_out") && !(m.mult > 0 && m.mult <= 5)) throw new Error(`modifier ${i + 1}: ${m.type} mult is above 0 and up to 5 (0.7 = 30% less)`);
+        if (m.type === "regen" && !(m.pct > 0 && m.pct <= 50)) throw new Error(`modifier ${i + 1}: regen pct is above 0 and up to 50 a second`);
+        if (m.type === "counter" && !(m.mult > 0 && m.radius > 0)) throw new Error(`modifier ${i + 1}: counter needs mult and radius`);
       });
       row.Modifiers = JSON.stringify(mods);
       for (const k of ["Description", "Icon", "Visual"]) row[k] = String(row[k] ?? "");
@@ -432,7 +440,8 @@ const BQ = (() => {
     loreDelete({ table, id }) {
       const L = LORE[table];
       if (!L || !has(table)) throw new Error("not an extra table: " + table);
-      apply([`DELETE FROM ${table} WHERE "${L.key}" = ${+id};`], `delete ${table} ${id}`);
+      const keyLit = typeof id === "number" || /^-?\d+$/.test(String(id)) ? String(+id) : "'" + String(id).replace(/'/g, "''") + "'";
+      apply([`DELETE FROM ${table} WHERE "${L.key}" = ${keyLit};`], `delete ${table} ${id}`);
       return { ok: true };
     },
     save({ table, row }) {

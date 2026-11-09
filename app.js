@@ -1661,7 +1661,7 @@ function nodeOwners(ident) {
   }
   return S.ownerCache[ident] || [];
 }
-const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "lore", "loot", "sounds", "export", "sprites"];
+const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "lore", "skills", "loot", "sounds", "export", "sprites"];
 async function applyRoute() {
   if (!BQ.has() || !S.c) return;
   const [kind, a, b, c, d] = location.hash.slice(1).split("/").map(decodeURIComponent);
@@ -1852,6 +1852,7 @@ async function renderTab() {
     else if (S.tab === "mobs") renderMobs(m);
     else if (S.tab === "effects") renderEffects(m);
     else if (S.tab === "lore") await renderLore(m);
+    else if (S.tab === "skills") await renderSkills(m);
     else if (S.tab === "sprites") renderSprites(m);
     else if (S.tab === "sounds") renderSounds(m);
     else if (S.tab === "dialog") renderOrphan(m);
