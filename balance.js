@@ -23,7 +23,7 @@ const BQBal = (() => {
   };
   // players.go cpGains: character points gained on reaching each level.
   const CP_GAINS = [0, 0, 5, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 20, 13, 13, 14, 14, 20, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5];
-  const ORDER_MULT = { "Warrior Order": 1.25, "Stoic Order": 0.6, "Mage Order": 0.8 }; // party.go orderDamageMult
+  const ORDER_MULT = {}; // party.go orderDamageMult: all Orders 1x (was Warrior 1.25 / Mage 0.8 / Stoic 0.6)
 
   // enemies.go meleeHitDamage: one landed swing before the crit roll.
   // Go's math.Round rounds half away from zero; Math.round agrees for >= 0.
