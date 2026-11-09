@@ -13,6 +13,20 @@ const MOD_HELP = {
   move_speed: "multiply move speed: 0.5 = half speed, 1.2 = 20% faster (0 to 3)",
   stun: "cannot move while active",
   dot: "damage every N seconds (ignores armour)",
+  dmg_in: "damage you take is multiplied: 0.7 = 30% less (skill buffs)",
+  dmg_out: "damage you deal is multiplied: 1.25 = 25% more (skill buffs)",
+  regen: "heal this percent of max health every second (skill buffs)",
+  counter: "the next hit you take is answered with a burst around you: mult x power, radius, daze and knockback",
+};
+// Extra fields each modifier type takes: [key, label, step, starting value]
+const MOD_FIELDS = {
+  move_speed: [["mult", "mult", "0.05", 0.5]],
+  dot: [["damage", "damage", "1", 5], ["every", "every (s)", "0.25", 1]],
+  dmg_in: [["mult", "mult", "0.05", 0.7]],
+  dmg_out: [["mult", "mult", "0.05", 1.25]],
+  regen: [["pct", "% a second", "0.5", 2]],
+  counter: [["mult", "mult", "0.1", 1], ["radius", "radius", "0.1", 2], ["stun", "daze (s)", "0.1", 0.5], ["knock", "knock", "0.1", 1]],
+  stun: [],
 };
 
 function renderEffects(m) {
@@ -52,13 +66,12 @@ function effectForm(form, e) {
   if (!Array.isArray(mods)) mods = [];
   const modBox = h("div", { class: "rewards" });
   const drawMods = () => modBox.replaceChildren(...mods.map((md, i) => {
-    const type = h("select", { onchange: () => { mods[i] = type.value === "move_speed" ? { type: "move_speed", mult: 0.5 } : type.value === "dot" ? { type: "dot", damage: 5, every: 1 } : { type: "stun" }; drawMods(); } },
+    const type = h("select", { onchange: () => { mods[i] = { type: type.value, ...Object.fromEntries((MOD_FIELDS[type.value] || []).map(([k, , , v]) => [k, v])) }; drawMods(); } },
       Object.keys(MOD_HELP).map(k => h("option", { value: k }, k)));
     type.value = md.type;
     const field = (k, step) => { const el = h("input", { type: "number", class: "num", step, value: md[k] ?? "", "data-key": k }); el.addEventListener("input", () => { md[k] = +el.value; }); return el; };
     return h("div", { class: "rw" }, type,
-      md.type === "move_speed" ? ["mult", field("mult", "0.05")] : null,
-      md.type === "dot" ? ["damage", field("damage", "1"), "every (s)", field("every", "0.25")] : null,
+      (MOD_FIELDS[md.type] || []).map(([k, lbl, step]) => [lbl, field(k, step)]),
       h("span", { class: "hint" }, MOD_HELP[md.type] || "unknown type: ignored by the server"),
       h("button", { class: "danger", onclick: () => { mods.splice(i, 1); drawMods(); } }, "×"));
   }));
