@@ -323,3 +323,17 @@ canvas#map{touch-action:none}
   .sfx-name input{font-size:16px}
 }
 .skill-ico{image-rendering:pixelated;width:32px;height:32px;display:block;margin:0 auto 2px}
+
+/* NPC roles (roles.js) */
+.roles{margin:12px 0;padding:8px 10px;border:1px solid #334;border-radius:4px;max-width:900px}
+.roles h4{margin:0 0 6px;font-size:13px;color:#9bd}
+.roles .role{display:flex;gap:8px;align-items:flex-start;padding:4px 0;cursor:pointer}
+.roles .role input{margin-top:3px}
+.roles .role span{display:flex;flex-direction:column}
+.roles .role small{color:#889;font-size:12px}
+.roles .role-sub{margin:0 0 6px 24px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:4px;display:flex;flex-direction:column;gap:6px}
+.roles .role-buys{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+.roles .role-buy{display:inline-flex;gap:4px;align-items:center;cursor:pointer}
+.roles .role-pay input.num{width:64px}
+.roles .role-greet input{width:min(100%,420px)}
+.side .roles{max-width:none}
