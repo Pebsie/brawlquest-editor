@@ -526,6 +526,11 @@ Edits the skill trees the API serves (`skills.go`, content `migrations/2026-11-1
 
 The Skills tab shows each node's Tome sprite (a 32 px icon the client draws from `assets/skills/`). Pick one with "Pick icon…" (skill icons, items, gear, effects, monsters) or type a path; a bare name with no slash is the older drawn icon and shows up in the checks. The checks also flag two nodes sharing an icon. `assets/skills/` is a copy of the client's folder; `assets/index.json` lists it.
 
+
+## Season tab
+
+The seasonal decoration (Christmas), served by the API as `GET /season` (`season.go`, `docs/SEASON.md`; content `migrations/2026-11-10-christmas.sql`). The switch row sets `Mode`: On (always), Off (never) or Auto (between two `MM-DD` dates, which may wrap the new year, with a line saying whether it is shown today); falling snow can be turned off. Towns lists the props per town; pick one to edit its rows (kind, tile, far end for lights and garlands, variant, colour) or add and delete props. The checks flag unknown kinds, lights without a far end, a rectangle with its corner the wrong way, duplicate spots and a season with no switch row. The map is never changed by any of it, and nothing here deletes a map row. A db without the tables creates them on the first save. `tests/headless-season.mjs` covers it. The shipped placements come from `tools/build_season.py` in the content repo, which checks them against the map.
+
 ## NPC roles (Junk buyer / vendor, Plot seller, Skill trainer)
 
 Creating or editing an NPC (the NPCs & dialogue tab, the map's NPC tool, Quest Studio's new NPC and character sheet) shows a **Roles** box with three ticks. They save into the content the API already reads, so a role works in game with no code change:
