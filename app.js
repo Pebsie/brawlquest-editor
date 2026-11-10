@@ -27,6 +27,7 @@ async function api(path, body) {
     areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
     areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body),
     dailyEnable: () => BQ.api.dailyEnable(), dialogueEnable: () => BQ.api.dialogueEnable(), saveMany: () => BQ.api.saveMany(body),
+    loreTables: () => BQ.api.loreTables(), loreSave: () => BQ.api.loreSave(body), loreDelete: () => BQ.api.loreDelete(body),
     spawnsEnable: () => BQ.api.spawnsEnable(), routinesEnable: () => BQ.api.routinesEnable(), routineSet: () => BQ.api.routineSet(body),
     soundsEnable: () => BQ.api.soundsEnable(), sfxSave: () => BQ.api.sfxSave(body), sfxGet: () => BQ.api.sfxGet(body), sfxDelete: () => BQ.api.sfxDelete(body),
     sfxRename: () => BQ.api.sfxRename(body.id, body.Name), slotSet: () => BQ.api.slotSet(body), presetSave: () => BQ.api.presetSave(body), presetDelete: () => BQ.api.presetDelete(body) }[path];
@@ -1660,7 +1661,7 @@ function nodeOwners(ident) {
   }
   return S.ownerCache[ident] || [];
 }
-const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "loot", "sounds", "export", "sprites"];
+const TABS = ["studio", "map", "quests", "npcs", "items", "mobs", "effects", "lore", "loot", "sounds", "export", "sprites"];
 async function applyRoute() {
   if (!BQ.has() || !S.c) return;
   const [kind, a, b, c, d] = location.hash.slice(1).split("/").map(decodeURIComponent);
@@ -1850,6 +1851,7 @@ async function renderTab() {
     else if (S.tab === "loot") renderLoot(m);
     else if (S.tab === "mobs") renderMobs(m);
     else if (S.tab === "effects") renderEffects(m);
+    else if (S.tab === "lore") await renderLore(m);
     else if (S.tab === "sprites") renderSprites(m);
     else if (S.tab === "sounds") renderSounds(m);
     else if (S.tab === "dialog") renderOrphan(m);
