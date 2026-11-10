@@ -27,7 +27,7 @@ async function api(path, body) {
     areas: () => BQ.api.areas(), areasCreate: () => BQ.api.areasCreate(), areaSave: () => BQ.api.areaSave(body),
     areaDelete: () => BQ.api.areaDelete(body), areaTiles: () => BQ.api.areaTiles(body),
     dailyEnable: () => BQ.api.dailyEnable(), dialogueEnable: () => BQ.api.dialogueEnable(), saveMany: () => BQ.api.saveMany(body),
-    loreTables: () => BQ.api.loreTables(), loreSave: () => BQ.api.loreSave(body), loreDelete: () => BQ.api.loreDelete(body),
+    npcRoles: () => BQ.api.npcRoles(body), npcRolesSave: () => BQ.api.npcRolesSave(body), loreTables: () => BQ.api.loreTables(), loreSave: () => BQ.api.loreSave(body), loreDelete: () => BQ.api.loreDelete(body),
     spawnsEnable: () => BQ.api.spawnsEnable(), routinesEnable: () => BQ.api.routinesEnable(), routineSet: () => BQ.api.routineSet(body),
     soundsEnable: () => BQ.api.soundsEnable(), sfxSave: () => BQ.api.sfxSave(body), sfxGet: () => BQ.api.sfxGet(body), sfxDelete: () => BQ.api.sfxDelete(body),
     sfxRename: () => BQ.api.sfxRename(body.id, body.Name), slotSet: () => BQ.api.slotSet(body), presetSave: () => BQ.api.presetSave(body), presetDelete: () => BQ.api.presetDelete(body) }[path];
@@ -475,15 +475,21 @@ function npcForm(form, n) {
     onPick: v => { if (v) { f.ImgPath.value = v; img.src = assetURL(v); } } });
   img.addEventListener("click", pickImg); img.style.cursor = "pointer"; img.title = "Pick a sprite";
   const collect = () => ({ id: n.id, Name: f.Name.value, ImgPath: f.ImgPath.value, Faction: f.Faction.value, Conversation: f.Conversation.value, SpawnX: +f.SpawnX.value, SpawnY: +f.SpawnY.value });
+  const roles = rolesOfNpc(n.id);
+  const rbox = rolesBox(roles, { onChange: () => { // Plot seller is Faction "Land Agent"
+    if (roles.plot) f.Faction.value = ROLE_PLOT; else if (f.Faction.value === ROLE_PLOT) f.Faction.value = ""; } });
+  f.Faction.addEventListener("input", () => rbox.setPlot(f.Faction.value === ROLE_PLOT));
   form.append(h("h2", {}, n.id ? `${n.Name} (${n.id})` : "New NPC"),
     h("div", { class: "grid" },
       field("Name", f.Name), field("Sprite", h("div", {}, img, " ", f.ImgPath, " ", h("button", { onclick: pickImg }, "Pick…"))), field("Faction", f.Faction),
       field("Greeting node", f.Conversation), field("Position", h("div", {}, "X ", f.SpawnX, "  Y ", f.SpawnY, " ",
         link(`#map/${n.SpawnX},${n.SpawnY}`, "Show on map", "btnlink")))),
+    rbox,
     h("div", { class: "bar" },
       h("button", { class: "primary", onclick: async () => {
         const row = collect(), old = n.ImgPath || "";
         const id = await save("npc", row); S.npc = { id };
+        try { await rolesSave(id, roles); } catch (e) { status(e.message, true); }
         // Nodes holding the old sprite were copies (older editors saved the NPC
         // sprite into every node): clear them so the portrait follows.
         if (n.id && old && old !== row.ImgPath) {
@@ -787,9 +793,11 @@ async function npcToolTap(t) {
     if (M.npcMode === "new") {
       await api("spawnsEnable");
       const nn = M.npcNew;
-      const id = await save("npc", { id: 0, Name: nn.Name.trim(), ImgPath: nn.ImgPath, Faction: nn.Faction || "", Conversation: "", SpawnX: t.x, SpawnY: t.y });
+      const rl = nn.roles || rolesBlank();
+      const id = await save("npc", { id: 0, Name: nn.Name.trim(), ImgPath: nn.ImgPath, Faction: rl.plot ? ROLE_PLOT : (nn.Faction === ROLE_PLOT ? "" : nn.Faction || ""), Conversation: "", SpawnX: t.x, SpawnY: t.y });
+      await rolesSave(id, rl);
       n = S.npcBy[id];
-      M.npcMode = "existing"; M.npcPick = id; M.npcNew = { Name: "", ImgPath: nn.ImgPath, Faction: "" };
+      M.npcMode = "existing"; M.npcPick = id; M.npcNew = { Name: "", ImgPath: nn.ImgPath, Faction: "", roles: rolesBlank() };
       status(`${n.Name} is in the world at ${t.x}, ${t.y}. Tap again to put them somewhere else too.`);
     } else {
       n = S.npcBy[M.npcPick];
@@ -826,16 +834,17 @@ function npcToolDraw(g, px, py, sc) {
 }
 function npcSide(s) {
   M.npcMode = M.npcMode || "existing";
-  M.npcNew = M.npcNew || { Name: "", ImgPath: "assets/npc/Person.png", Faction: "" };
+  M.npcNew = M.npcNew || { Name: "", ImgPath: "assets/npc/Person.png", Faction: "", roles: rolesBlank() };
   s.append(h("h3", {}, "NPCs"),
     seg([["existing", "Someone you have"], ["new", "A new NPC"]], M.npcMode, v => { M.npcMode = v; drawSide(); drawMap(); }),
     h("p", { class: "hint" }, "Tap the map to put them there. Drag a placed NPC to move them. One NPC can stand in many places: same name, words and quests at each."));
   if (M.npcMode === "new") {
     const nn = M.npcNew;
     const name = h("input", { type: "text", value: nn.Name, placeholder: "Name, e.g. Gate Guard", oninput: () => { nn.Name = name.value; drawMap(); } });
+    nn.roles = nn.roles || rolesBlank();
     const fac = h("input", { type: "text", value: nn.Faction, placeholder: "Faction (optional)", oninput: () => { nn.Faction = fac.value; } });
     const pickImg = () => openPicker({ title: "How they look", groups: npcSpriteGroups, recentKey: "npc", value: nn.ImgPath, onPick: v => { if (v) { nn.ImgPath = v; drawSide(); drawMap(); } } });
-    s.append(h("div", { class: "npcnew" }, thumb(nn.ImgPath, pickImg, "Change sprite"), h("div", { class: "npcnew-f" }, name, fac, h("button", { type: "button", onclick: pickImg }, "Change look…"))));
+    s.append(h("div", { class: "npcnew" }, thumb(nn.ImgPath, pickImg, "Change sprite"), h("div", { class: "npcnew-f" }, name, fac, h("button", { type: "button", onclick: pickImg }, "Change look…"))), rolesBox(nn.roles));
   } else {
     const f = h("input", { type: "search", value: M.npcFilter || "", placeholder: "Search NPCs…", oninput: () => { M.npcFilter = f.value; drawList(); } });
     const list = h("div", { class: "npclist" });
@@ -850,6 +859,8 @@ function npcSide(s) {
     };
     drawList();
     s.append(f, list);
+    const picked = S.npcBy[M.npcPick];
+    if (picked) s.append(h("h3", {}, `${picked.Name}: roles`), rolesBox(rolesOfNpc(picked.id), { live: picked.id, after: () => { drawSide(); } }));
   }
   const sel = M.npcSel && S.npcBy[M.npcSel.npc];
   if (sel) {
@@ -1213,7 +1224,7 @@ function drawMapNow() {
     const agent = n.Faction === "Land Agent";
     g.strokeStyle = agent ? "#ff9ad5" : "#ffd34d"; g.lineWidth = 2; g.strokeRect(px(x), py(y), sc, sc); g.lineWidth = 1;
     if (!i) { g.fillStyle = g.strokeStyle; g.fillRect(px(x) + sc / 4, py(y) + sc / 4, sc / 2, sc / 2); }
-    if (sc >= 6) { g.fillStyle = agent ? "#ff9ad5" : "#ffd34d"; g.fillText(n.Name + (agent && M.tool === "plot" ? " (Land Agent)" : ""), px(x), py(y) - 3); }
+    if (sc >= 6) { g.fillStyle = agent ? "#ff9ad5" : "#ffd34d"; g.fillText(n.Name + (agent && M.tool === "plot" ? " (plot seller)" : ""), px(x), py(y) - 3); }
   }
   if (M.sel && M.tool === "select") { g.strokeStyle = "#fff"; g.strokeRect(px(M.sel.x) - 1, py(M.sel.y) - 1, sc + 2, sc + 2); }
   if (M.tool === "npc") npcToolDraw(g, px, py, sc);
@@ -1260,7 +1271,7 @@ const PLOT_DOORS = ["Portal", "Hole", "Door", "Sign", "Class Machine", "Well"];
 const PLOT_COLOURS = ["#78ff8c", "#7ac8ff", "#ff9ad5", "#ffb45a", "#c59bff", "#fff36b"];
 const isFreeBuild = name => name === "Foundation Forest" || /^Dominion of /.test(name || "");
 const landAgents = () => S.c.npcs.filter(n => n.Faction === "Land Agent");
-const agentName = id => (+id ? (S.npcBy[id] ? S.npcBy[id].Name : `missing NPC ${id}`) : "Any Land Agent");
+const agentName = id => (+id ? (S.npcBy[id] ? S.npcBy[id].Name : `missing NPC ${id}`) : "Any plot seller");
 function plotColour(p) {
   if (!+p.Agent) return PLOT_COLOURS[0];
   const i = landAgents().findIndex(n => n.id === +p.Agent);
@@ -1275,7 +1286,7 @@ function plotIssues(p) {
   if (!(p.W >= 1 && p.H >= 1 && p.W <= PLOT_MAX && p.H <= PLOT_MAX)) errors.push(`Size must be 1 to ${PLOT_MAX} tiles a side (it is ${p.W} x ${p.H}).`);
   if (!(p.Rent >= 0)) errors.push("Rent can't be negative.");
   if (!(p.MinLevel >= 1 && p.MinLevel <= 40)) errors.push("Min level must be 1 to 40.");
-  if (+p.Agent && !landAgents().some(n => n.id === +p.Agent)) errors.push(`${agentName(p.Agent)} is not a Land Agent (Faction 'Land Agent').`);
+  if (+p.Agent && !landAgents().some(n => n.id === +p.Agent)) errors.push(`${agentName(p.Agent)} is not a plot seller (tick Plot seller on them).`);
   for (const o of S.c.plots || []) if (o.id !== p.id && p.X < o.X + o.W && o.X < p.X + p.W && p.Y < o.Y + o.H && o.Y < p.Y + p.H) errors.push(`Overlaps ${o.Name}.`);
   let forest = 0, missing = 0;
   const pr = { road: 0, blocked: 0, door: 0, spawn: 0, npc: 0 }; let unusable = 0;
@@ -1308,7 +1319,7 @@ function plotIssues(p) {
   if (bad.length) warnings.push(`Players can't build on some tiles: ${bad.join("; ")}.`);
   if (unusable >= cells && cells > 0) warnings.push("No tile here is buildable at all.");
   else if (bad.length) warnings.push(`${cells - unusable} of ${cells} tiles are buildable.`);
-  if (!landAgents().length) warnings.push("No NPC has Faction 'Land Agent', so nobody can let this plot.");
+  if (!landAgents().length) warnings.push("No NPC is a plot seller (Roles > Plot seller), so nobody can let this plot.");
   return { errors, warnings };
 }
 const plotDirty = () => M.plotSel && JSON.stringify(plotRow(M.plotSel)) !== M.plotOrig;
@@ -1463,7 +1474,7 @@ function plotSide(s) {
     const box = h("div", { class: "panel", id: "plot-form-box" });
     const f = { Name: txt(p.Name), Rent: num(p.Rent), MinLevel: num(p.MinLevel), X: num(p.X), Y: num(p.Y), W: num(p.W), H: num(p.H) };
     f.Name.id = "plot-name"; f.Rent.id = "plot-rent"; f.MinLevel.id = "plot-level";
-    const agentSel = h("select", { id: "plot-agent" }, h("option", { value: 0 }, "Any Land Agent"), agents.map(n => h("option", { value: n.id }, `${n.Name} (at ${n.SpawnX}, ${n.SpawnY})`)));
+    const agentSel = h("select", { id: "plot-agent" }, h("option", { value: 0 }, "Any plot seller"), agents.map(n => h("option", { value: n.id }, `${n.Name} (at ${n.SpawnX}, ${n.SpawnY})`)));
     if (+p.Agent && !agents.some(n => n.id === +p.Agent)) agentSel.append(h("option", { value: p.Agent }, agentName(p.Agent)));
     agentSel.value = +p.Agent || 0;
     const checks = h("div", { id: "plot-check" });
@@ -1489,7 +1500,7 @@ function plotSide(s) {
         h("button", { class: "danger", onclick: plotDelete }, p.id ? "Delete" : "Discard"),
         h("button", { onclick: () => { if (plotConfirmDiscard()) { M.plotSel = null; drawSide(); drawMap(); } } }, "Deselect"),
         h("button", { onclick: () => { M.cx = p.X + p.W / 2; M.cy = p.Y + p.H / 2; M.scale = Math.max(M.scale, 16); drawMap(); } }, "Zoom to")));
-    if (!agents.length) box.append(h("p", { class: "chk-warn" }, "No NPC in this database has Faction 'Land Agent'. Apply content/migrations/2026-10-14-plots.sql (Gideon and Sharon Gazump), or set an NPC's Faction to Land Agent."));
+    if (!agents.length) box.append(h("p", { class: "chk-warn" }, "No NPC is a plot seller yet, so nobody can let these plots. Tick Plot seller on an NPC (NPCs tab, the NPC tool or Quest Studio)."));
     drawChecks();
     s.append(box);
   }
@@ -1503,7 +1514,7 @@ function plotSide(s) {
       h("div", { class: "hint" }, `${v.W} x ${v.H} at ${v.X}, ${v.Y} · ${v.Rent}g/wk · Lv ${v.MinLevel}+ · ${agentName(v.Agent)}`),
       iss.errors.length ? h("div", { class: "chk-err" }, "✖ " + iss.errors[0]) : null));
   }
-  if (agents.length) s.append(h("h3", {}, "Land Agents"), ...agents.map(n => h("div", { class: "plotrow", onclick: () => { M.cx = n.SpawnX; M.cy = n.SpawnY; drawMap(); } },
+  if (agents.length) s.append(h("h3", {}, "Plot sellers"), ...agents.map(n => h("div", { class: "plotrow", onclick: () => { M.cx = n.SpawnX; M.cy = n.SpawnY; drawMap(); } },
     h("span", { class: "sw", style: "background:" + plotColour({ Agent: n.id }) }), h("b", {}, n.Name), h("div", { class: "hint" },
       `at ${n.SpawnX}, ${n.SpawnY} · ${(S.c.plots || []).filter(p => +p.Agent === n.id).length} own plots, plus ${(S.c.plots || []).filter(p => !+p.Agent).length} any-agent plots`))));
 }

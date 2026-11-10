@@ -1157,10 +1157,11 @@ function qsNpcSheet(body, id) {
           h("div", { class: "qs-hero" }, h("button", { class: "qs-herobtn", title: "Change sprite", onclick: () => openPicker({ title: `Sprite for ${n.Name}`, groups: npcSpriteGroups, recentKey: "npc", value: n.ImgPath, onPick: v => v && P({ ImgPath: v }, `New look for ${n.Name}`) }) }, qsScene(n, null, "hero")),
             h("div", { class: "qs-heroinfo" }, qsInline(n.Name, v => P({ Name: v || n.Name }, `Renamed to ${v}`), { cls: "qs-h big" }),
               h("div", {}, h("small", {}, "Faction "), qsInline(n.Faction, v => P({ Faction: v }, `Faction ${v}`), { list: "qs-factions", ph: "none" })),
-              n.Faction === "Land Agent" ? h("div", { class: "qs-plot" }, "Land Agent: lists rent plots ([Plot] rows) after their quests") : null,
+              n.Faction === "Land Agent" ? h("div", { class: "qs-plot" }, "Plot seller: lists rent plots ([Plot] rows) after their quests") : null,
               h("div", {}, h("small", {}, spots.length > 1 ? `Stands in ${spots.length} places ` : "Lives at "), spots.length ? `${spots[0].X},${spots[0].Y}` : "nowhere yet", zone ? ` - ${zone}` : "", spots.length > 1 ? " and more" : ""),
               h("div", { class: "qs-nstats" }, h("span", {}, pix("assets/ui/studio/alert.png", "mi"), `gives ${r.gives.length}`), h("span", {}, pix("assets/ui/studio/complete.png", "mi"), `takes ${r.takes.length}`), h("span", {}, pix("assets/ui/studio/alert-item.png", "mi"), `talk ${r.talks.length}`)))),
           iss.length ? h("div", { class: "qs-iss" }, iss.map(x => h("div", { class: "qs-prob " + x.sev }, h("i", { class: "lg " + x.sev }), x.msg))) : null,
+          rolesBox(rolesOfNpc(id), { live: id, after: qsRerender }),
           h("h4", {}, "Personality notes"), notes,
           h("h4", {}, "Where they stand ", h("span", { class: "hint" }, QS.spot.add ? "tap the map to put them there too" : "tap the map to move the picked place, drag to look around")), spotList, map,
           h("div", {}, h("a", { class: "qs-link", href: `#map/npc/${n.id}` + (QS.spot.add ? "" : `/${QS.spot.X},${QS.spot.Y}`) }, "place them on the big map")))),
@@ -1411,7 +1412,7 @@ function qsNewQuest(afterId, giverId, o = {}) {
 }
 function qsNewNpc() {
   const sel = QS.sel && qById(QS.sel), near = sel && S.npcBy[sel.Giver];
-  const st = { Name: "", ImgPath: "assets/npc/Person.png", Faction: "", x: near ? near.SpawnX + 3 : 0, y: near ? near.SpawnY : 0 };
+  const st = { Name: "", ImgPath: "assets/npc/Person.png", Faction: "", roles: rolesBlank(), x: near ? near.SpawnX + 3 : 0, y: near ? near.SpawnY : 0 };
   const close = () => { ov.remove(); };
   const body = h("div", { class: "qs-wbody qs-new" });
   const ov = h("div", { class: "qs-modal", onclick: e => { if (e.target === ov) close(); } }, h("div", { class: "qs-win qs-newwin" }, h("div", { class: "qs-wtitle" }, h("span", {}, "NEW NPC"), h("button", { class: "qs-x", onclick: close }, "x")), body));
@@ -1428,11 +1429,14 @@ function qsNewNpc() {
   const pin = { x: st.x, y: st.y };
   const map = qsWorldCanvas({ cx: st.x, cy: st.y, w: 460, h: 240, sc: 16, pin, pinImg: st.ImgPath, onPick: (x, y) => { st.x = pin.x = x; st.y = pin.y = y; where.textContent = `${x},${y} ${zoneAt(x, y)}`; drawLook(); } });
   drawLook();
-  body.append(h("div", { class: "qs-row wrap" }, look, h("div", { class: "qs-grid2" }, h("label", {}, "Name"), name, h("label", {}, "Faction"), fac)),
+  const rbox = rolesBox(st.roles, { onChange: () => { if (st.roles.plot) { st.Faction = ROLE_PLOT; fac.value = ROLE_PLOT; } else if (st.Faction === ROLE_PLOT) { st.Faction = ""; fac.value = ""; } } });
+  fac.addEventListener("input", () => rbox.setPlot(st.Faction === ROLE_PLOT));
+  body.append(h("div", { class: "qs-row wrap" }, look, h("div", { class: "qs-grid2" }, h("label", {}, "Name"), name, h("label", {}, "Faction"), fac)), rbox,
     h("h4", {}, "Drop them on the map ", jump), map, h("div", {}, "Standing at ", where),
     h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot big", onclick: async () => {
       if (!st.Name.trim()) { qsToast("Give them a name"); name.focus(); return; }
-      const id = await qsCommit("npc", { id: 0, Name: st.Name.trim(), ImgPath: st.ImgPath, Faction: st.Faction, Conversation: "", SpawnX: st.x, SpawnY: st.y }, `New NPC: ${st.Name}`);
+      const id = await qsCommit("npc", { id: 0, Name: st.Name.trim(), ImgPath: st.ImgPath, Faction: st.roles.plot ? ROLE_PLOT : st.Faction, Conversation: "", SpawnX: st.x, SpawnY: st.y }, `New NPC: ${st.Name}`);
+      try { await rolesSave(id, st.roles); } catch (e) { qsToast(e.message); }
       close(); qsGo("npc", id);
     } }, "Bring them to life")));
   document.body.append(ov); name.focus();

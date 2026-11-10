@@ -371,6 +371,22 @@ const BQ = (() => {
   const effectUsers = id => patternUsers(x => +x.effect === id);
   const spawnUsers = id => patternUsers(x => x.do === "spawn" && +x.enemy === id, id);
 
+  // NPC roles (see api.npcRoles). Faction 'Land Agent' is how the API knows a plot seller.
+  const PLOT_SELLER = "Land Agent";
+  const VENDOR_BUYS = ["junk", "misc", "reagent", "consumable", "gear"];
+  function rolesOf(id) {
+    const v = has("npc_vendor") ? q("SELECT BuyPct, Greeting, Buys FROM npc_vendor WHERE NPC = ?", [id])[0] : null;
+    const n = q("SELECT Faction FROM npc WHERE id = ?", [id])[0];
+    return { vendor: v || null, plot: !!n && n.Faction === PLOT_SELLER, trainer: has("skill_trainer") && q("SELECT 1 FROM skill_trainer WHERE NPC = ?", [id]).length > 0 };
+  }
+  function rolesAll() {
+    const out = {}, get = id => out[id] || (out[id] = { vendor: null, plot: false, trainer: false });
+    if (has("npc_vendor")) for (const v of q("SELECT NPC, BuyPct, Greeting, Buys FROM npc_vendor")) get(v.NPC).vendor = { BuyPct: v.BuyPct, Greeting: v.Greeting, Buys: v.Buys };
+    if (has("skill_trainer")) for (const t of q("SELECT NPC FROM skill_trainer")) get(t.NPC).trainer = true;
+    for (const n of q("SELECT id FROM npc WHERE Faction = ?", [PLOT_SELLER])) get(n.id).plot = true;
+    return out;
+  }
+
   const api = {
     SOUND_SLOTS,
     content() {
@@ -382,6 +398,7 @@ const BQ = (() => {
         dailyPools: has("quest_daily_pool") ? q("SELECT * FROM quest_daily_pool ORDER BY QuestID, Kind, Slot, id") : [],
         plots: has("plot") ? q("SELECT * FROM plot ORDER BY Name") : [],
         npcs: q("SELECT id, Name, ImgPath, Faction, Conversation, SpawnX, SpawnY FROM npc ORDER BY Name"),
+        npcRoles: rolesAll(),
         hasSpawns: has("npc_spawn"),
         npcSpawns: has("npc_spawn") ? q("SELECT id, NPC, X, Y FROM npc_spawn ORDER BY NPC, id") : [],
         hasRoutineSpawn: hasRoutineCols(),
@@ -417,6 +434,38 @@ const BQ = (() => {
       }
       stmt.free();
       return { strings, tiles };
+    },
+    // NPC roles (the NPC form, the map's NPC tool, Quest Studio): what an NPC does for players.
+    //   vendor  Junk buyer / vendor: a npc_vendor row (BuyPct, Greeting, Buys); the API adds "I have things to sell"
+    //   plot    Plot seller: Faction "Land Agent" (the API lists the plots on its books); which plots: plot.Agent
+    //   trainer Skill trainer: a skill_trainer row (respec happens next to them)
+    // Tables are created on the first save, as the API and the Sets & vendors tab do.
+    npcRoles({ id }) { return rolesOf(+id); },
+    npcRolesSave({ id, roles }) {
+      id = +id;
+      if (!q("SELECT 1 FROM npc WHERE id = ?", [id]).length) throw new Error(`npc ${id} does not exist`);
+      const stmts = [], r = roles || {};
+      if ("vendor" in r) {
+        if (r.vendor) {
+          if (!has("npc_vendor")) stmts.push(LORE.npc_vendor.create);
+          let pct = Math.round(+r.vendor.BuyPct || 100); pct = Math.max(10, Math.min(300, pct));
+          const buys = String(r.vendor.Buys || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+          for (const b of buys) if (!VENDOR_BUYS.includes(b)) throw new Error(`a vendor cannot buy "${b}" (use ${VENDOR_BUYS.join(", ")})`);
+          stmts.push(`INSERT OR REPLACE INTO npc_vendor (NPC, BuyPct, Greeting, Buys) VALUES (${id}, ${pct}, ${lit(r.vendor.Greeting || "")}, ${lit(buys.join(","))});`);
+        } else if (has("npc_vendor")) stmts.push(`DELETE FROM npc_vendor WHERE NPC = ${id};`);
+      }
+      if ("trainer" in r) {
+        if (r.trainer) { if (!has("skill_trainer")) stmts.push(LORE.skill_trainer.create); stmts.push(`INSERT OR IGNORE INTO skill_trainer (NPC) VALUES (${id});`); }
+        else if (has("skill_trainer")) stmts.push(`DELETE FROM skill_trainer WHERE NPC = ${id};`);
+      }
+      if ("plot" in r) {
+        const cur = q("SELECT Faction FROM npc WHERE id = ?", [id])[0].Faction;
+        if (r.plot && cur !== PLOT_SELLER) stmts.push(`UPDATE npc SET Faction = '${PLOT_SELLER}' WHERE id = ${id};`);
+        if (!r.plot && cur === PLOT_SELLER) stmts.push(`UPDATE npc SET Faction = '' WHERE id = ${id};`);
+        if (!r.plot && has("plot")) stmts.push(`UPDATE plot SET Agent = 0 WHERE Agent = ${id};`);
+      }
+      if (stmts.length) apply(stmts, `roles of npc ${id}`);
+      return rolesOf(id);
     },
     // Sets & vendors tab: every extra table as plain rows (empty when the db has none yet).
     loreTables() {
@@ -512,6 +561,9 @@ const BQ = (() => {
       if ((table === "npc" || table === "enemies") && hasSounds()) s.push(`DELETE FROM sound_slot WHERE Kind = '${table === "npc" ? "npc" : "enemy"}' AND RefID = ${+id};`);
       if (table === "npc") s.push(`DELETE FROM routineNode WHERE Routine IN (SELECT id FROM routine WHERE NPC = ${+id});`, `DELETE FROM routine WHERE NPC = ${+id};`);
       if (table === "npc" && has("npc_spawn")) s.push(`DELETE FROM npc_spawn WHERE NPC = ${+id};`);
+      if (table === "npc" && has("npc_vendor")) s.push(`DELETE FROM npc_vendor WHERE NPC = ${+id};`);
+      if (table === "npc" && has("skill_trainer")) s.push(`DELETE FROM skill_trainer WHERE NPC = ${+id};`);
+      if (table === "npc" && has("plot")) s.push(`UPDATE plot SET Agent = 0 WHERE Agent = ${+id};`);
       if (table === "npc_spawn") {
         const sp = q("SELECT NPC FROM npc_spawn WHERE id = ?", [+id])[0];
         if (sp && hasRoutineCols()) {
