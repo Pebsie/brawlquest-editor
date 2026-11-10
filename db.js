@@ -7,6 +7,15 @@ const BQ = (() => {
   // version counts edits; touched names the tables edited since the history
   // module last looked (null = all of them, after an open).
   const st = { name: "", changes: [], dirty: false, warnings: [], version: 0, touched: null };
+  // Item extra tables (the API's lore_items.go creates
+  // the same tables at startup; content/migrations/2026-11-10-item-ext.sql).
+  // key: the primary key column. Created here on the first save, as for effects.
+  const LORE = {
+    item_ext: { key: "ItemID", create: "CREATE TABLE IF NOT EXISTS item_ext (ItemID INTEGER PRIMARY KEY, Sell INTEGER NOT NULL DEFAULT 0, Junk INTEGER NOT NULL DEFAULT 0, SetID INTEGER NOT NULL DEFAULT 0, Rarity INTEGER NOT NULL DEFAULT 0);" },
+    item_set: { key: "id", create: "CREATE TABLE IF NOT EXISTS item_set (id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Desc TEXT NOT NULL DEFAULT '');" },
+    item_set_bonus: { key: "id", create: "CREATE TABLE IF NOT EXISTS item_set_bonus (id INTEGER PRIMARY KEY, SetID INTEGER NOT NULL, Pieces INTEGER NOT NULL, Attributes TEXT NOT NULL DEFAULT '', Desc TEXT NOT NULL DEFAULT '');" },
+    npc_vendor: { key: "NPC", create: "CREATE TABLE IF NOT EXISTS npc_vendor (NPC INTEGER PRIMARY KEY, BuyPct INTEGER NOT NULL DEFAULT 100, Greeting TEXT NOT NULL DEFAULT '', Buys TEXT NOT NULL DEFAULT '');" },
+  };
   const EDITABLE = ["quest_def", "npc", "conversation", "items", "loot", "plot", "enemies", "effects", "npc_notes", "quest_daily_pool", "npc_spawn"];
   // NPC placements (the API's content/migrations/2026-10-27-npc-spawns.sql,
   // docs/NPC_SPAWNS.md): one NPC standing in many places. Same statements as
@@ -400,6 +409,31 @@ const BQ = (() => {
       }
       stmt.free();
       return { strings, tiles };
+    },
+    // Sets & vendors tab: every extra table as plain rows (empty when the db has none yet).
+    loreTables() {
+      const out = {};
+      for (const t of Object.keys(LORE)) out[t] = { key: LORE[t].key, exists: has(t), cols: has(t) ? cols(t) : [], rows: has(t) ? q(`SELECT * FROM ${t} ORDER BY ${LORE[t].key}`) : [] };
+      return out;
+    },
+    loreSave({ table, row }) {
+      const L = LORE[table];
+      if (!L) throw new Error("not an extra table: " + table);
+      if (!has(table)) apply([L.create], `create ${table} table`);
+      const c = cols(table);
+      const lit = v => typeof v === "number" ? (Number.isFinite(v) ? String(v) : "0") : "'" + String(v ?? "").replace(/'/g, "''") + "'";
+      const keys = c.filter(k => k in row);
+      if (L.key !== "id" && !(L.key in row)) throw new Error(L.key + " is needed");
+      if (L.key === "id" && !(+row.id > 0)) { const m = q(`SELECT IFNULL(MAX(id), 0) + 1 AS n FROM ${table}`)[0]; row.id = m.n; if (!keys.includes("id")) keys.unshift("id"); }
+      for (const k of keys) { const col = q(`PRAGMA table_info(${table})`).find(x => x.name === k); if (col && /INT|REAL/i.test(col.type)) row[k] = +row[k] || 0; }
+      apply([`INSERT OR REPLACE INTO ${table} (${keys.map(k => `"${k}"`).join(", ")}) VALUES (${keys.map(k => lit(row[k])).join(", ")});`], `${table} ${row[L.key]}`);
+      return { id: row[L.key] };
+    },
+    loreDelete({ table, id }) {
+      const L = LORE[table];
+      if (!L || !has(table)) throw new Error("not an extra table: " + table);
+      apply([`DELETE FROM ${table} WHERE "${L.key}" = ${+id};`], `delete ${table} ${id}`);
+      return { ok: true };
     },
     save({ table, row }) {
       if (!EDITABLE.includes(table)) throw new Error("table not editable: " + table);
