@@ -2,7 +2,7 @@
 // the rules in skills.js, the retraining/points helpers, and the shipped trees.
 // Run: node tests/skills.mjs path/to/bq-content.db
 import { createRequire } from "module";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 const require = createRequire(import.meta.url);
 const ROOT = new URL("..", import.meta.url).pathname;
 process.chdir(ROOT);
@@ -31,6 +31,12 @@ for (const tree of ["Warrior Order", "Mage Order", "Stoic Order"]) {
 ok(nodes.some(n => n.Tree === "None"), "None has a tree");
 ok(SK.skillPointsAt(1, curve) === 0 && SK.skillPointsAt(10, curve) === 9 && SK.skillPointsAt(25, curve) === 9 + 30 && SK.skillPointsAt(40, curve) === 9 + 30 + 45, "curve: 1 a level to 10, 2 to 25, 3 to 40 (84)");
 
+// icons: sprite paths in the bundled art, one each
+const index = new Set(JSON.parse(readFileSync(ROOT + "assets/index.json", "utf8")));
+ok(nodes.every(n => index.has(n.Icon)), "every node's icon is listed in assets/index.json: " + nodes.filter(n => !index.has(n.Icon)).map(n => n.Name + "=" + n.Icon).join(", "));
+ok(nodes.every(n => existsSync(ROOT + n.Icon)), "every icon file is bundled in the editor");
+ok(new Set(nodes.map(n => n.Icon)).size === nodes.length, "no two nodes share an icon");
+
 // the rules catch what would go wrong
 const good = nodes.find(n => n.Kind === "active");
 const bad = (patch, re) => {
@@ -41,6 +47,9 @@ const bad = (patch, re) => {
 bad({ Requires: "99999" }, /does not exist/);
 bad({ Requires: String(nodes.find(n => n.Tree !== good.Tree).id) }, /another tree/);
 bad({ Cost: 0 }, /Cost/);
+bad({ Icon: "fist" }, /older drawn icon/);
+bad({ Icon: "" }, /needs an icon/);
+bad({ Icon: nodes.find(n => n.id !== good.id).Icon }, /shares its icon/);
 bad({ Mods: "{" }, /not valid JSON/);
 bad({ Mods: '{"LUCK":3}' }, /unknown stat/);
 bad({ Ability: '{"type":"cone","cd":0,"dmg":1}' }, /cooldown/);
