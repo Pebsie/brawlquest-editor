@@ -81,9 +81,10 @@ async function renderSeason(m) {
   // ---- the switch
   const mode = h("select", { "data-key": "Mode" }, SEASON_MODES.map(([v, l]) => h("option", { value: v }, l)));
   mode.value = cur ? cur.Mode : "off";
-  const from = txt(cur ? cur.AutoFrom : "12-01", "MM-DD"), to = txt(cur ? cur.AutoTo : "01-06", "MM-DD");
+  const from = txt(cur ? cur.AutoFrom : "12-19", "MM-DD"), to = txt(cur ? cur.AutoTo : "01-04", "MM-DD");
   from.dataset.key = "AutoFrom"; to.dataset.key = "AutoTo"; from.style.width = to.style.width = "70px";
   const snow = h("input", { type: "checkbox", "data-key": "Snowfall" }); snow.checked = !cur || +cur.Snowfall !== 0;
+  const world = h("input", { type: "checkbox", "data-key": "WorldSnow" }); world.checked = !cur || +cur.WorldSnow !== 0;
   const live = h("b", { "data-active": "1" });
   const showLive = () => {
     const row = { Mode: mode.value, AutoFrom: from.value, AutoTo: to.value };
@@ -95,10 +96,11 @@ async function renderSeason(m) {
   main.append(h("h3", {}, "The switch"),
     h("div", { class: "bar" }, h("span", {}, "Season "), h("b", {}, S.seasonName), " ", mode, h("span", {}, " from "), from, h("span", {}, " to "), to, " ",
       h("label", { class: "chk" }, snow, " falling snow"), " ",
+      h("label", { class: "chk" }, world, " overworld snow"), " ",
       h("button", { class: "primary", "data-act": "save-switch", onclick: async () => {
-        if (mode.value === "auto" && !(/^\d\d-\d\d$/.test(from.value) && /^\d\d-\d\d$/.test(to.value))) { status("Dates are MM-DD, for example 12-01 and 01-06", true); return; }
+        if (mode.value === "auto" && !(/^\d\d-\d\d$/.test(from.value) && /^\d\d-\d\d$/.test(to.value))) { status("Dates are MM-DD, for example 12-19 and 01-04", true); return; }
         try {
-          await api("loreSave", { table: "season", row: { id: cur ? +cur.id : 0, Name: S.seasonName, Mode: mode.value, AutoFrom: from.value, AutoTo: to.value, Snowfall: snow.checked ? 1 : 0 } });
+          await api("loreSave", { table: "season", row: { id: cur ? +cur.id : 0, Name: S.seasonName, Mode: mode.value, AutoFrom: from.value, AutoTo: to.value, Snowfall: snow.checked ? 1 : 0, WorldSnow: world.checked ? 1 : 0 } });
           status("Saved the season switch. Use Save .db or Export SQL to keep it."); renderTab();
         } catch (e) { status(e.message, true); }
       } }, cur ? "Save switch" : "Create switch"), " ", live));

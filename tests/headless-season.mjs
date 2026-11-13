@@ -53,6 +53,8 @@ await p.fill("[data-key=AutoFrom]", "12-01"); await p.fill("[data-key=AutoTo]", 
 await p.click("[data-act=save-switch]"); await p.waitForTimeout(250);
 const auto = (await tables(p)).season.rows[0];
 ok(auto.Mode === "auto" && auto.AutoFrom === "12-01" && auto.AutoTo === "01-06", "auto window saved");
+const worldBox = await p.$("[data-key=WorldSnow]");
+ok(worldBox, "the switch has an overworld snow checkbox");
 const win = await p.evaluate(() => [new Date(2026, 11, 25), new Date(2027, 0, 3), new Date(2026, 6, 1), new Date(2026, 10, 30), new Date(2027, 0, 7)].map(d => seasonActive({ Mode: "auto", AutoFrom: "12-01", AutoTo: "01-06" }, d)));
 ok(JSON.stringify(win) === "[true,true,false,false,false]", "the window wraps the new year: " + win);
 await p.selectOption("[data-key=Mode]", "on");
