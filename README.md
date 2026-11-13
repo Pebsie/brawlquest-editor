@@ -5,7 +5,7 @@ Static, browser-only editor for BrawlQuest's `bq-content.db`. It uses
 edited and saved in your browser tab. Nothing is uploaded unless you commit
 it to GitHub (see [Saving, history and GitHub](#saving-history-and-github)).
 
-Live: **https://tomlock.me/bq-editor/** (also https://tomlock.me/brawlquest-editor/)
+Live: **https://tomlock.me/brawlquest-editor/**
 
 ## Use
 
@@ -324,7 +324,7 @@ and the Quest Studio NPC sheet have slots to give them out.
 
 1. **Record**: tap Record, make the noise, tap Stop (up to 15 s). The first
    time, the browser asks for the mic (on an iPhone it needs the https site,
-   tomlock.me/bq-editor, and a tap; if it was refused: Settings > Safari >
+   tomlock.me/brawlquest-editor, and a tap; if it was refused: Settings > Safari >
    Microphone, or aA > Website Settings). Or upload a WAV, OGG, MP3 or M4A.
 2. **Trim**: the silence is trimmed for you; drag the yellow handles (mouse or
    finger) to change it.
