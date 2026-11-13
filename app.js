@@ -155,6 +155,32 @@ async function del(table, id) {
 }
 
 const npcName = id => (S.npcBy[id] ? S.npcBy[id].Name : id ? "#" + id : "—");
+// A talk objective's tracker text that came from picking the NPC rather than
+// the author: empty, "Talk to ?", "Talk to ..." or "Talk to <an NPC's
+// name>". Picking a new NPC rewrites only these (a new talk objective
+// starts aimed at the hand-in NPC, and the text used to stay "Talk to
+// <hand-in>" after picking someone else).
+const talkTextIsAuto = (text, oldNPC) => {
+  const t = String(text || "").trim();
+  if (!t) return true;
+  const m = /^Talk to (.*)$/.exec(t);
+  if (!m) return false;
+  const who = m[1].trim();
+  if (!who || who === "?" || who === "..." || who === "—" || who === npcName(oldNPC)) return true;
+  return Object.values(S.npcBy).some(n => n && String(n.Name || "").toLowerCase() === who.toLowerCase()); // "Talk to <an NPC's name>": generated
+};
+// setTalkNPC: aim talk step s at npc, keeping the author's own text.
+const setTalkNPC = (s, npc) => { if (talkTextIsAuto(s.Text, s.NPC)) s.Text = `Talk to ${npcName(npc)}`; s.NPC = npc; };
+// talkTextMismatch: "Talk to X" where X is another NPC, not the one it's aimed at.
+const talkTextMismatch = s => {
+  if (s.Type !== "talk" || !S.npcBy[s.NPC]) return "";
+  const m = /^Talk to (.+)$/.exec(String(s.Text || "").trim());
+  if (!m) return "";
+  const who = m[1].trim().toLowerCase();
+  if (who === S.npcBy[s.NPC].Name.toLowerCase()) return "";
+  const other = Object.values(S.npcBy).find(n => n && String(n.Name || "").toLowerCase() === who);
+  return other ? other.Name : "";
+};
 function npcSelect(val, onchange) {
   const s = h("select", { onchange }, h("option", { value: 0 }, "— none —"),
     S.c.npcs.map(n => h("option", { value: n.id }, `${n.Name} (${n.id})`)));
@@ -549,10 +575,10 @@ function questForm(form, q) {
       type.value = s.Type;
       const top = h("div", { class: "top" }, h("b", {}, `${i + 1}.`), type);
       const inputs = {};
-      let mini = null;
+      let mini = null, textEl = null;
       for (const k of STEP_FIELDS[s.Type] || []) {
         let el;
-        if (k === "NPC") { el = npcSelect(s.NPC, () => (s.NPC = +el.value)); }
+        if (k === "NPC") { el = npcSelect(s.NPC, () => { const was = s.Text; if (s.Type === "talk") setTalkNPC(s, +el.value); else s.NPC = +el.value; if (s.Text !== was && textEl) textEl.value = s.Text; }); }
         else if (k === "Consume") { el = h("input", { type: "checkbox", onchange: () => (s.Consume = el.checked) }); el.checked = !!s.Consume; }
         else if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) { el = enemySelect(s.Target); el.onchange = () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== el.value.toLowerCase())); drawSteps(); }; }
         else if (k === "Target" && (s.Type === "collect" || s.Type === "craft")) { el = itemSelect(s.Target, { as: "name", title: s.Type === "craft" ? "Crafted item" : "Collect item", allowNone: true, noneLabel: "Pick an item" }); el.addEventListener("change", () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== String(el.value).trim().toLowerCase())); drawSteps(); }); }
@@ -570,7 +596,7 @@ function questForm(form, q) {
       top.append(h("span", { style: "flex:1" }),
         h("button", { onclick: () => { if (i) { [steps[i - 1], steps[i]] = [steps[i], steps[i - 1]]; drawSteps(); } } }, "↑"),
         h("button", { onclick: () => { steps.splice(i, 1); drawSteps(); } }, "×"));
-      const text = txt(s.Text, "Objective shown in the tracker"); text.style.width = "100%"; text.oninput = () => (s.Text = text.value);
+      const text = txt(s.Text, "Objective shown in the tracker"); text.style.width = "100%"; text.oninput = () => (s.Text = text.value); textEl = text;
       const hint = txt(s.Hint, "Hint (optional, shown in the quest log)"); hint.style.width = "100%"; hint.oninput = () => (s.Hint = hint.value);
       if (s.Type === "reach") mini = reachMap(s, () => { inputs.X.value = s.X; inputs.Y.value = s.Y; });
       stepBox.append(h("div", { class: "step", id: "qstep-" + i }, top, h("div", { class: "hint" }, STEP_HELP[s.Type] || ""), mini ? mini.el : "", text, hint));
