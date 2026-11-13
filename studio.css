@@ -655,3 +655,12 @@ button.qs-tag{font:15px rainyhearts,sans-serif}
   .qq-cards{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
   .qq-grid{grid-template-columns:1fr}
 }
+.qq-chains{background:#1b1b1b;border:1px solid #444;padding:8px 10px;display:flex;flex-direction:column;gap:4px;font-size:18px}
+.qq-ch-h{font:12px BMmini,monospace;color:var(--gold);letter-spacing:1px}
+.qq-chain{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.qq-cq{color:#fff;text-decoration:none;border-bottom:1px dotted var(--line)}
+.qq-cq:hover{color:var(--gold);border-color:var(--gold)}
+.qq-cq.mark{color:var(--gold);border-bottom:2px solid var(--gold)}
+.qq-arrow{color:var(--dim)}
+.qq-follows{color:#c59bff;font-size:16px}.qq-follows small{color:var(--dim)}
+.qq-nextbtn{margin:6px 0 2px;font-size:18px !important;padding:12px 18px !important}

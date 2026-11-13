@@ -88,7 +88,11 @@ function qqAuto(st) {
   let mult = 1;
   if (st.objs.some(o => o.type === "boss")) mult += 1;
   mult += 0.5 * Math.max(0, st.objs.length - 1);
-  return { zone, level, why, MinLevel: Math.max(1, level - 2), XP: Math.round(sug.XP * mult / 5) * 5, Gold: Math.round(sug.Gold * mult / 5) * 5 };
+  let XP = Math.round(sug.XP * mult / 5) * 5, Gold = Math.round(sug.Gold * mult / 5) * 5;
+  // later in a story never pays less than the quest before it
+  const prev = st.after && qById(st.after);
+  if (prev) { XP = Math.max(XP, +prev.XP || 0); Gold = Math.max(Gold, +prev.Gold || 0); }
+  return { zone, level, why, MinLevel: Math.max(1, level - 2), XP, Gold };
 }
 // The live values: what you set under More wins over the suggestion.
 function qqVals(st) {
@@ -164,6 +168,7 @@ function qqChecks(st) {
   });
   if (!String(st.Offer || "").trim()) add("err", `Write what ${g ? g.Name : "they"} say${g ? "s" : ""} when they ask. It's the first thing players read.`);
   if (!String(st.Complete || "").trim()) add("warn", `Write what ${S.npcBy[st.TurnIn || st.Giver] ? S.npcBy[st.TurnIn || st.Giver].Name : "they"} says when you hand it in, or the hand-in box is empty.`);
+  if (st.after && qById(st.after)) add("info", `Follows “${qById(st.after).Title}”: players are offered it once they've handed that in.`);
   if (st.after && qById(st.after) && qById(st.after).Level > v.level) add("warn", `It comes after a level ${qById(st.after).Level} quest but is level ${v.level}.`);
   if (st.reward && v.level < 10 && S.itemBy[st.reward] && /wep|arm|shield|mount/i.test(S.itemBy[st.reward].Type)) add("info", "Gear as a quest reward is rare. Keep it for the end of a story.");
   if (g && S.c.quests.filter(q => q.Giver === g.id && !qPre(q).length).length >= 3 && !st.after) add("info", `${g.Name} already has ${S.c.quests.filter(q => q.Giver === g.id && !qPre(q).length).length} quests on offer from the start.`);
@@ -174,6 +179,40 @@ function qqChecks(st) {
 function qqNew(giver) {
   QQ.st = { Giver: giver || 0, TurnIn: 0, objs: [], Offer: "", Complete: "", Title: "", titleSet: false, inOrder: false, after: 0, reward: 0, rewardN: 1, over: {}, open: null };
   QQ.done = null;
+}
+// "What happens next?": the same giver, after the quest just made, a level up.
+function qqNext(prevId) {
+  const prev = qById(prevId); if (!prev) { qqNew(0); return; }
+  qqNew(prev.Giver);
+  QQ.st.after = prev.id;
+  QQ.st.over.level = Math.min(BQBal.C.maxLevel, (+prev.Level || 1) + 1);
+  QQ.st.levelWhy = `one up from “${prev.Title}” (level ${prev.Level})`;
+}
+
+// ---------------------------------------------------------------- chains
+// Story chains through an NPC, from the prerequisite links: each starts at a
+// quest of theirs that doesn't follow another of theirs and follows the
+// quests that need it (the chain may move on to someone else).
+function qqChains(nid) {
+  const mine = S.c.quests.filter(q => q.Giver === nid || q.TurnIn === nid), ids = new Set(mine.map(q => q.id));
+  const next = id => S.c.quests.filter(q => qPre(q).includes(id)).sort((a, b) => a.Level - b.Level || a.id - b.id);
+  const heads = mine.filter(q => !qPre(q).some(p => ids.has(p))).sort((a, b) => a.Level - b.Level || a.id - b.id);
+  const out = [];
+  for (const hq of heads) {
+    const ch = [hq], seen = new Set([hq.id]);
+    for (let n = next(hq.id)[0]; n && !seen.has(n.id) && ch.length < 12; n = next(n.id)[0]) { ch.push(n); seen.add(n.id); }
+    out.push(ch);
+  }
+  return out;
+}
+function qqChainRow(nid, o = {}) {
+  const n = S.npcBy[nid]; if (!n) return null;
+  const chains = qqChains(nid), linked = chains.filter(c => c.length > 1), lone = chains.filter(c => c.length === 1);
+  if (!chains.length) return h("div", { class: "qq-chains hint" }, `${n.Name} has no quests yet.`);
+  const link = q => h("a", { href: "#studio/journey/" + q.id, class: "qq-cq" + (o.mark === q.id ? " mark" : ""), "data-q": q.id, title: `Lv ${q.Level}: open in the quest sheet`, onclick: e => { e.preventDefault(); QS.sel = q.id; qsGo("journey", q.id); } }, q.Title);
+  return h("div", { class: "qq-chains" }, h("div", { class: "qq-ch-h" }, `${n.Name}'s stories`),
+    linked.map(c => h("div", { class: "qq-chain" }, c.map((q, i) => [i ? h("span", { class: "qq-arrow" }, "->") : null, link(q)]))),
+    lone.length ? h("div", { class: "qq-chain lone" }, h("small", { class: "hint" }, linked.length ? "On their own: " : "Quests on their own: "), lone.map((c, i) => [i ? ", " : null, link(c[0])])) : null);
 }
 function qsQuick(body, arg) {
   if (!QQ.st || (arg && +arg !== QQ.st.Giver && !QQ.st.objs.length)) qqNew(arg ? +arg : 0);
@@ -216,6 +255,7 @@ function qqFlow() {
   // 1. giver
   cards.push(qqCard(1, "Who gives it?", !!g, g ? [pix(g.ImgPath, "mi"), ` ${g.Name}`, h("small", {}, ` in ${qqZoneOf(g) || "the wilds"}`)] : null, qqNpcPicker(id => { st.Giver = id; st.open = null; qqDraw(); }, st.Giver), "giver"));
   if (!g) return cards;
+  cards.push(qqChainRow(g.id, { mark: st.after }));
   // 2. what to do
   const objsReady = st.objs.length && st.objs.every(qqObjReady);
   if (!objsReady) st.objsOk = false;
@@ -332,7 +372,7 @@ function qqWords() {
   const ta = (key, ph, rows) => { const e = h("textarea", { class: "qs-in rh", rows, "data-qq": key, placeholder: ph }); e.value = st[key]; e.addEventListener("input", () => { const was = !!st[key].trim(); st[key] = e.value; if (key === "Offer" && was !== !!e.value.trim()) qqDraw(); else qqSide(); }); return e; };
   const first = st.objs[0], what = first ? qqObjText(first, st).toLowerCase() : "";
   return [
-    h("label", { class: "qq-lab" }, `When ${g.Name} asks:`, ta("Offer", `In their own words: why they need you to ${what}. A sentence or two is plenty.`, 3)),
+    h("label", { class: "qq-lab" }, `When ${g.Name} asks:`, ta("Offer", st.after && qById(st.after) ? `Carry on from “${qById(st.after).Title}”: what has happened since, and why they now need you to ${what}.` : `In their own words: why they need you to ${what}. A sentence or two is plenty.`, 3)),
     h("label", { class: "qq-lab" }, `When you hand it in to ${t.Name}:`, ta("Complete", "What they say when it's done. Leave it for later if you like.", 2)),
     h("p", { class: "hint" }, "Plain and in character. Players answer with “I'll do it.” or “Not right now.”, which you can change in the quest sheet."),
     !String(st.Offer).trim() ? null : h("button", { class: "qs-btn hot", id: "qq-words-ok", onclick: () => { st.open = "reward"; qqDraw(); } }, "Next"),
@@ -340,6 +380,11 @@ function qqWords() {
 }
 function qqTitle(st) {
   if (st.titleSet || st.Title) return st.Title;
+  const t = qqTitleBase(st);
+  if (!t || !S.c.quests.some(q => q.Title === t)) return t;
+  for (let i = 2; ; i++) if (!S.c.quests.some(q => q.Title === `${t} ${i}`)) return `${t} ${i}`;
+}
+function qqTitleBase(st) {
   const g = S.npcBy[st.Giver], o = st.objs[0]; if (!g || !o || !qqObjReady(o)) return "";
   if (o.type === "kill") return `${qqPlural(o.target, 2)} for ${g.Name}`;
   if (o.type === "boss") return `${qqThe(o.target).replace(/^the/, "The")}`;
@@ -352,7 +397,7 @@ function qqReward() {
   const st = QQ.st, v = qqVals(st), g = S.npcBy[st.Giver], t = S.npcBy[st.TurnIn || st.Giver];
   const title = h("input", { class: "qs-in qq-title", "data-qq": "title", value: qqTitle(st), placeholder: "Title" });
   title.addEventListener("input", () => { st.Title = title.value; st.titleSet = !!title.value; qqSide(); });
-  const num = (k, min) => { const i = h("input", { type: "number", class: "qs-in num", min, "data-qq": "n" + k, value: v[k === "level" ? "level" : k] }); i.addEventListener("change", () => { st.over[k] = Math.max(min, +i.value || min); qqDraw(); }); return i; };
+  const num = (k, min) => { const i = h("input", { type: "number", class: "qs-in num", min, "data-qq": "n" + k, value: v[k === "level" ? "level" : k] }); i.addEventListener("change", () => { st.over[k] = Math.max(min, +i.value || min); if (k === "level") st.levelWhy = ""; qqDraw(); }); return i; };
   const rw = S.itemBy[st.reward];
   const sameLv = S.c.quests.filter(q => Math.abs(q.Level - v.level) <= 3), withItem = sameLv.filter(q => qRw(q).length).length;
   const chain = S.c.quests.filter(q => q.Giver === st.Giver || q.TurnIn === st.Giver).sort((a, b) => a.Level - b.Level);
@@ -363,12 +408,12 @@ function qqReward() {
       h("label", {}, "Title"), h("div", {}, title, !st.titleSet ? h("small", { class: "hint" }, " suggested, type to change") : null),
       h("label", {}, "Hand in to"), h("div", {}, h("button", { class: "qq-who", onclick: () => qsPickModal("Who takes the hand-in?", npcEntries(), id => { st.TurnIn = +id === st.Giver ? 0 : +id; qqDraw(); }) }, pix(t.ImgPath, "mi"), t.Name), st.TurnIn ? null : h("small", { class: "hint" }, " back to the same person")),
       h("label", {}, "Reward"), h("div", { class: "qq-rw" }, h("b", {}, `Level ${v.level}`), " quest: ", h("b", {}, `${v.XP} XP`), " and ", h("b", {}, `${v.Gold} gold`), rw ? [" and ", h("span", { class: "qq-thing" }, pix(rw.ImgPath, "mi"), `${st.rewardN} ${qqPlural(rw.Name, st.rewardN)}`)] : null,
-        h("div", { class: "hint" }, `Level from ${v.why}${st.over.level != null ? " (you set it)" : ""}. XP and gold match quests around level ${v.level}.`))),
+        h("div", { class: "hint" }, `Level ${st.levelWhy ? st.levelWhy : "from " + v.why + (st.over.level != null ? " (you set it)" : "")}. XP and gold match quests around level ${v.level}.`))),
     h("details", { class: "qq-more", open: !!st.moreOpen, ontoggle: e => { st.moreOpen = e.target.open; } }, h("summary", {}, "More options"),
       h("div", { class: "qq-grid" },
         h("label", {}, "Part of a story?"), after,
         h("label", {}, "Level"), h("div", {}, num("level", 1), " players can take it from level ", num("MinLevel", 1)),
-        h("label", {}, "XP / gold"), h("div", {}, num("XP", 0), " XP ", num("Gold", 0), " gold ", Object.keys(st.over).length ? h("button", { class: "qs-mini", onclick: () => { st.over = {}; qqDraw(); } }, "back to suggested") : null),
+        h("label", {}, "XP / gold"), h("div", {}, num("XP", 0), " XP ", num("Gold", 0), " gold ", Object.keys(st.over).length ? h("button", { class: "qs-mini", onclick: () => { st.over = {}; st.levelWhy = ""; qqDraw(); } }, "back to suggested") : null),
         h("label", {}, "Item reward"), h("div", {}, rw ? [h("span", { class: "qq-thing" }, pix(rw.ImgPath, "mi"), rw.Name), " x ", (() => { const i = h("input", { type: "number", class: "qs-in num", min: 1, value: st.rewardN, "data-qq": "rewardN" }); i.addEventListener("change", () => { st.rewardN = Math.max(1, +i.value || 1); qqDraw(); }); return i; })(), h("button", { class: "qs-mini", onclick: () => { st.reward = 0; qqDraw(); } }, "none")]
           : h("button", { class: "qs-mini", onclick: () => qsPickModal("Item reward", itemEntries(), id => { st.reward = +id; qqDraw(); }) }, "add an item"),
           h("div", { class: "hint" }, `Keep these rare: ${withItem} of ${sameLv.length} quests around this level give an item.`)),
@@ -396,6 +441,7 @@ function qqPreview() {
     h("div", { class: "qq-logb" },
       h("div", { class: "qq-lt" }, row.Title || "Untitled quest"),
       h("div", { class: "qq-ll" }, `Act ${row.Act}  -  ${row.Zone}  -  Recommended level ${row.Level}`),
+      st.after && qById(st.after) ? h("div", { class: "qq-follows", id: "qq-follows" }, `Follows: ${qById(st.after).Title}`, h("small", {}, " (editor note: on offer once that is handed in)")) : null,
       h("div", { class: "qq-lstat" }, "In progress"),
       steps.length ? [h("div", { class: "qq-ll" }, "STEPS"), steps.map((s, i) => [h("div", { class: "qq-ls" + (i === 0 || !row.Sequential ? " now" : "") }, `Step ${i + 1} of ${steps.length} (${i === 0 || !row.Sequential ? "Now" : "Later"}): ${s.Text} 0/${s.Count}`),
         s.Hint && (i === 0 || !row.Sequential) ? h("div", { class: "qq-lh" }, "How: " + s.Hint) : null])] : h("div", { class: "qq-ll" }, "No steps yet"),
@@ -431,8 +477,11 @@ function qqDone() {
     h("div", { class: "qs-wbody" },
       h("p", { class: "rh" }, `“${q.Title}” is quest ${q.id}. It's in the open db and History has it.`),
       issues.length ? h("div", {}, h("p", { class: "hint" }, "The journey map flags:"), issues.map(x => h("div", { class: "qq-chk warn" }, x.msg))) : h("p", { class: "hint" }, "The journey map has no problems with it."),
+      h("button", { class: "qs-btn hot big qq-nextbtn", id: "qq-next", onclick: () => { qqNext(q.id); qqDraw(); } }, "What happens next?"),
+      h("p", { class: "hint" }, `Starts the next quest in this story: ${g ? g.Name : "the same person"} again (you can change who you hand it in to), after this one, at level ${Math.min(BQBal.C.maxLevel, q.Level + 1)}.`),
+      qqChainRow(q.Giver, { mark: q.id }),
       h("div", { class: "qq-actions" },
-        h("button", { class: "qs-btn hot", id: "qq-play", onclick: () => qsPreviewQuest(q, "offer") }, "Play the conversation"),
+        h("button", { class: "qs-btn", id: "qq-play", onclick: () => qsPreviewQuest(q, "offer") }, "Play the conversation"),
         h("button", { class: "qs-btn", id: "qq-another", onclick: () => { qqNew(g ? g.id : 0); qqDraw(); } }, `Another from ${g ? g.Name : "them"}`),
         h("button", { class: "qs-btn", onclick: () => { qqNew(0); qqDraw(); } }, "A new idea"),
         h("button", { class: "qs-btn", id: "qq-open", onclick: () => { QS.sel = q.id; qsGo("journey", q.id); } }, "Open the full quest sheet"))))];
