@@ -164,9 +164,210 @@ function enemySelect(val) {
   const s = h("select", {}, h("option", { value: "" }, "— none —"), S.c.enemies.map(e => h("option", { value: e.Name }, e.Name)));
   s.value = val || ""; return s;
 }
-function itemSelect(val) {
-  const s = h("select", {}, S.c.items.map(i => h("option", { value: i.id }, `${i.Name} (${i.id})`)));
-  s.value = val; return s;
+function typeSelect(vals, current) {
+  const known = [], seen = new Set();
+  for (const v of vals || []) { const s = String(v ?? "").trim(); if (s && !seen.has(s)) { seen.add(s); known.push(s); } }
+  const cur = String(current ?? "").trim();
+  if (cur && !seen.has(cur)) known.push(cur);
+  const wrap = h("div", { class: "typesel" });
+  const sel = h("select", { "data-role": "type" }, known.map(v => h("option", { value: v }, v)), h("option", { value: "__other__" }, "Other…"));
+  const other = h("input", { type: "text", class: "typesel-other", placeholder: "New type…", "data-role": "type-other" });
+  const isKnown = !!(cur && known.includes(cur));
+  sel.value = isKnown ? cur : (cur ? "__other__" : (known[0] || "__other__"));
+  other.value = isKnown ? "" : cur;
+  other.hidden = sel.value !== "__other__";
+  Object.defineProperty(wrap, "value", {
+    get: () => sel.value === "__other__" ? other.value.trim() : sel.value,
+    set: v => {
+      const s = String(v ?? "").trim();
+      if (known.includes(s)) { sel.value = s; other.hidden = true; other.value = ""; }
+      else { sel.value = "__other__"; other.hidden = false; other.value = s; }
+    }
+  });
+  sel.addEventListener("change", () => {
+    other.hidden = sel.value !== "__other__";
+    if (!other.hidden) { other.focus(); other.select(); }
+    wrap.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  other.addEventListener("input", () => wrap.dispatchEvent(new Event("input", { bubbles: true })));
+  wrap.append(sel, other);
+  return wrap;
+}
+function itemByValue(v, asName) {
+  if (v == null || v === "") return null;
+  if (asName) { const n = String(v).toLowerCase(); return (S.c.items || []).find(i => i.Name.toLowerCase() === n) || null; }
+  return S.itemBy[+v] || null;
+}
+function itemsMatching(q) {
+  const f = String(q || "").trim().toLowerCase(), all = S.c.items || [];
+  if (!f) return all.slice();
+  return all.filter(it => it.Name.toLowerCase().includes(f) || String(it.id).includes(f) || String(it.Type || "").toLowerCase().includes(f));
+}
+function openItemPicker(o) {
+  const PAGE = 80, asName = o.as === "name";
+  const valOf = it => asName ? it.Name : it.id;
+  const exclude = new Set((o.exclude || []).map(x => String(x).toLowerCase()));
+  let filter = "", shown = PAGE, hi = 0, gen = 0;
+  const selected = new Set((o.selected || (o.value != null && o.value !== "" ? [o.value] : [])).map(x => String(x)));
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const q = h("input", { type: "search", class: "picker-q", placeholder: "Search by name, id or type…", "data-ip": "q" });
+  const count = h("div", { class: "hint picker-count" });
+  const grid = h("div", { class: "ip-list", "data-scroll": "item-picker" });
+  const sentinel = h("div", { class: "picker-sentinel", "aria-hidden": "true" });
+  const actions = h("div", { class: "ip-actions" });
+  const custom = h("div", { class: "ip-custom" });
+  const filtered = () => itemsMatching(filter).filter(it => !exclude.has(String(valOf(it)).toLowerCase()));
+  const row = (it, i) => {
+    const v = String(valOf(it)), on = o.multi ? selected.has(v) : (o.value != null && String(o.value) === v);
+    return h("button", { type: "button", class: "ip-row" + (on ? " sel" : "") + (i === hi ? " on" : ""), "data-val": v, "data-i": String(i),
+      onclick: () => {
+        if (o.multi) { selected.has(v) ? selected.delete(v) : selected.add(v); draw(false); }
+        else { close(); o.onPick(asName ? it.Name : it.id); }
+      } }, sprite(it.ImgPath), h("span", { class: "ip-lab" }, h("b", {}, it.Name), h("small", { class: "hint" }, `${it.Type || "?"} · #${it.id}`)));
+  };
+  const updateCount = list => {
+    const n = Math.min(shown, list.length);
+    count.textContent = list.length ? `Showing ${n} of ${list.length}` : (filter ? "No items match." : "No items.");
+  };
+  let io = null;
+  const stopIo = () => { if (io) { io.disconnect(); io = null; } };
+  const nearBottom = () => grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 200;
+  const loadMore = () => {
+    const list = filtered();
+    if (shown >= list.length) { if (sentinel.parentNode) sentinel.remove(); updateCount(list); return; }
+    const start = shown;
+    shown = Math.min(list.length, shown + PAGE);
+    const frag = document.createDocumentFragment();
+    for (let i = start; i < shown; i++) frag.append(row(list[i], i));
+    if (sentinel.parentNode) grid.insertBefore(frag, sentinel); else grid.append(frag);
+    if (shown >= list.length && sentinel.parentNode) sentinel.remove();
+    updateCount(list);
+    if (shown < list.length && grid.scrollHeight <= grid.clientHeight + 40) loadMore();
+  };
+  const watch = () => {
+    stopIo();
+    if (!sentinel.parentNode) return;
+    if (typeof IntersectionObserver === "function") {
+      io = new IntersectionObserver(ents => { if (ents.some(e => e.isIntersecting)) loadMore(); }, { root: grid, rootMargin: "200px" });
+      io.observe(sentinel);
+    }
+    if (nearBottom()) loadMore();
+  };
+  const paintCustom = list => {
+    custom.textContent = "";
+    if (!o.allowCustom) return;
+    const raw = filter.trim();
+    if (!raw) return;
+    const exact = list.some(it => it.Name.toLowerCase() === raw.toLowerCase());
+    if (exact) return;
+    custom.append(h("button", { type: "button", class: "ip-use", onclick: () => { close(); o.onPick(raw); } }, `Use “${raw}”`));
+  };
+  const draw = reset => {
+    const my = ++gen;
+    const list = filtered();
+    if (reset) { shown = PAGE; hi = 0; grid.scrollTop = 0; if (typeof BQScroll !== "undefined" && BQScroll.note) BQScroll.note(grid); }
+    shown = Math.min(Math.max(shown, 0), list.length);
+    if (reset) shown = Math.min(PAGE, list.length);
+    const cells = [];
+    if (o.allowNone && !o.multi && !filter.trim()) {
+      cells.push(h("button", { type: "button", class: "ip-row" + ((o.value == null || o.value === "") ? " sel" : ""), "data-val": "", onclick: () => { close(); o.onPick(asName ? "" : 0); } },
+        h("span", { class: "itemsel-none" }, "—"), h("span", { class: "ip-lab" }, h("b", {}, o.noneLabel || "None"), h("small", { class: "hint" }, "no item"))));
+    }
+    for (let i = 0; i < Math.min(shown, list.length); i++) cells.push(row(list[i], i));
+    stopIo();
+    grid.replaceChildren(...cells);
+    if (shown < list.length) grid.append(sentinel);
+    if (!cells.length) grid.append(h("div", { class: "hint wide" }, filter ? "No items match." : "No items."));
+    updateCount(list);
+    paintCustom(list);
+    requestAnimationFrame(() => { if (my === gen) watch(); });
+  };
+  const pickHi = () => {
+    const list = filtered();
+    if (o.multi) return;
+    if (hi < 0 || hi >= list.length) return;
+    const it = list[hi];
+    close(); o.onPick(asName ? it.Name : it.id);
+  };
+  const onKey = ev => {
+    if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); close(); return; }
+    const list = filtered();
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      if (!list.length) return;
+      hi = ev.key === "ArrowDown" ? Math.min(list.length - 1, hi + 1) : Math.max(0, hi - 1);
+      if (hi >= shown) { shown = Math.min(list.length, hi + 1); draw(false); }
+      const el = grid.querySelector(`.ip-row[data-i="${hi}"]`);
+      grid.querySelectorAll(".ip-row.on").forEach(x => x.classList.remove("on"));
+      if (el) { el.classList.add("on"); el.scrollIntoView({ block: "nearest" }); }
+    } else if (ev.key === "Enter" && document.activeElement === q && o.allowCustom && filter.trim() && !list.some(it => it.Name.toLowerCase() === filter.trim().toLowerCase())) {
+      ev.preventDefault(); close(); o.onPick(filter.trim());
+    } else if (ev.key === "Enter" && !o.multi) { ev.preventDefault(); pickHi(); }
+  };
+  q.addEventListener("input", () => { filter = q.value; draw(true); });
+  grid.addEventListener("scroll", () => { if (nearBottom()) loadMore(); }, { passive: true });
+  if (o.multi) {
+    const use = () => { if (!selected.size) return; close(); o.onPick([...selected], false); };
+    actions.append(h("button", { type: "button", class: "primary", id: "ip-each", onclick: use }, o.group ? "Add each" : "Use these"));
+    if (o.group) actions.append(h("button", { type: "button", id: "ip-group", onclick: () => { if (!selected.size) return; close(); o.onPick([...selected], true); } }, "Add as one group (any counts)"));
+    actions.append(h("span", { class: "hint" }, o.hint || "Tap to toggle. Search the full list."));
+  }
+  const ov = h("div", { class: "modal", onclick: e => { if (e.target === ov) close(); } },
+    h("div", { class: "modal-box ip-box" },
+      h("div", { class: "modal-head" }, h("b", {}, o.title || "Pick an item"), h("button", { type: "button", onclick: close }, "Close (Esc)")),
+      q, count, grid, custom, actions));
+  document.body.append(ov);
+  document.addEventListener("keydown", onKey, true);
+  draw(true);
+  q.focus();
+  return close;
+}
+function itemSelect(val, o = {}) {
+  const asName = o.as === "name";
+  const wrap = h("div", { class: "itemsel" });
+  let value = asName ? (val ?? "") : (val == null || val === "" ? 0 : +val);
+  const current = () => itemByValue(value, asName);
+  const open = () => openItemPicker({
+    title: o.title || "Pick an item", value, as: asName ? "name" : "id",
+    allowNone: o.allowNone, noneLabel: o.noneLabel, allowCustom: o.allowCustom, exclude: o.exclude,
+    onPick: v => { value = asName ? v : (v == null || v === "" ? 0 : +v); draw(); wrap.dispatchEvent(new Event("change", { bubbles: true })); if (typeof wrap.onchange === "function") wrap.onchange(); o.onPick && o.onPick(v); }
+  });
+  const draw = () => {
+    const it = current();
+    const lab = it ? it.Name : (asName && value ? String(value) : (o.noneLabel || "None"));
+    const note = it ? `${it.Type || "?"} · #${it.id}` : (asName && value && !it ? "custom" : "click to choose");
+    wrap.replaceChildren(h("button", { type: "button", class: "itemsel-btn", title: "Choose an item", onclick: open },
+      it ? sprite(it.ImgPath) : h("span", { class: "itemsel-none" }, "—"),
+      h("span", { class: "ip-lab" }, h("b", {}, lab), h("small", { class: "hint" }, note))));
+  };
+  Object.defineProperty(wrap, "value", {
+    get: () => value,
+    set: v => { value = asName ? (v ?? "") : (v == null || v === "" ? 0 : +v); draw(); }
+  });
+  draw();
+  return wrap;
+}
+function itemsGivenField(initial) {
+  let list = parseJSON(initial, []);
+  if (!Array.isArray(list)) list = [];
+  const wrap = h("div", { class: "itemsgiven" });
+  const sync = () => wrap.dispatchEvent(new Event("input", { bubbles: true }));
+  const draw = () => {
+    wrap.replaceChildren(h("div", { class: "hint" }, "Items given (optional gift):"));
+    list.forEach((r, i) => {
+      const it = itemSelect(r.ItemID, { title: "Gift item", onPick: v => { r.ItemID = +v; } });
+      it.addEventListener("change", () => { r.ItemID = +it.value; sync(); });
+      const am = num(r.Amount || 1); am.oninput = () => { r.Amount = +am.value || 1; sync(); };
+      wrap.append(h("div", { class: "rw" }, it, "×", am, h("button", { type: "button", onclick: () => { list.splice(i, 1); draw(); sync(); } }, "×")));
+    });
+    wrap.append(h("button", { type: "button", onclick: () => { list.push({ ItemID: (S.c.items[0] || {}).id || 1, Amount: 1 }); draw(); sync(); } }, "+ Gift item"));
+  };
+  Object.defineProperty(wrap, "value", {
+    get: () => list.length ? JSON.stringify(list) : "",
+    set: v => { list = parseJSON(v, []); if (!Array.isArray(list)) list = []; draw(); }
+  });
+  draw();
+  return wrap;
 }
 function sprite(path) { return h("img", { class: "sprite", src: assetURL(path), onerror: e => { e.target.style.opacity = .3; } }); }
 const field = (lbl, el) => [h("label", {}, lbl), el];
@@ -271,16 +472,20 @@ function setStepExtras(s, extras) {
   if (!String(s.Target || "").trim() && extras.length) s.Target = extras.shift();
   if (extras.length) s.Targets = [s.Target, ...extras]; else delete s.Targets;
 }
-function alsoCounts(s, names, redraw) {
+function alsoCounts(s, names, redraw, o = {}) {
   const extras = stepExtras(s);
   const box = h("span", { class: "also" });
   extras.forEach((n, i) => box.append(h("span", { class: "chip" }, n,
     h("button", { title: "Remove", onclick: () => { extras.splice(i, 1); setStepExtras(s, extras); redraw(); } }, "×"))));
   const taken = new Set([String(s.Target || "").toLowerCase(), ...extras.map(x => x.toLowerCase())]);
-  const add = h("select", { class: "also-add" }, h("option", { value: "" }, "+ also counts…"),
-    names.filter(n => !taken.has(n.toLowerCase())).map(n => h("option", { value: n }, n)));
-  add.onchange = () => { if (add.value) { extras.push(add.value); setStepExtras(s, extras); redraw(); } };
-  box.append(add);
+  if (o.items) {
+    box.append(h("button", { type: "button", class: "also-add", onclick: () => openItemPicker({ title: "Also counts as…", as: "name", exclude: [...taken], onPick: v => { if (v) { extras.push(v); setStepExtras(s, extras); redraw(); } } }) }, "+ also counts…"));
+  } else {
+    const add = h("select", { class: "also-add" }, h("option", { value: "" }, "+ also counts…"),
+      names.filter(n => !taken.has(n.toLowerCase())).map(n => h("option", { value: n }, n)));
+    add.onchange = () => { if (add.value) { extras.push(add.value); setStepExtras(s, extras); redraw(); } };
+    box.append(add);
+  }
   return box;
 }
 
@@ -350,7 +555,8 @@ function questForm(form, q) {
         if (k === "NPC") { el = npcSelect(s.NPC, () => (s.NPC = +el.value)); }
         else if (k === "Consume") { el = h("input", { type: "checkbox", onchange: () => (s.Consume = el.checked) }); el.checked = !!s.Consume; }
         else if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) { el = enemySelect(s.Target); el.onchange = () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== el.value.toLowerCase())); drawSteps(); }; }
-        else if (k === "Target" && s.Type === "collect") { el = txt(s.Target); el.setAttribute("list", "bq-item-names"); el.onchange = () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== el.value.trim().toLowerCase())); drawSteps(); }; el.oninput = () => (s.Target = el.value); }
+        else if (k === "Target" && (s.Type === "collect" || s.Type === "craft")) { el = itemSelect(s.Target, { as: "name", title: s.Type === "craft" ? "Crafted item" : "Collect item", allowNone: true, noneLabel: "Pick an item" }); el.addEventListener("change", () => { const ex = stepExtras(s); s.Target = el.value; setStepExtras(s, ex.filter(x => x.toLowerCase() !== String(el.value).trim().toLowerCase())); drawSteps(); }); }
+        else if (k === "Target" && s.Type === "equip") { el = itemSelect(s.Target, { as: "name", title: "Item or slot", allowNone: true, allowCustom: true, noneLabel: "Pick an item or type a slot" }); el.addEventListener("change", () => { s.Target = el.value; }); }
         else if (k === "Target") { el = txt(s.Target); el.oninput = () => (s.Target = el.value); }
         else if (k === "Line" && saved) { el = h("a", { href: "#", class: "hint", onclick: ev => { ev.preventDefault(); highlight("qline-step-" + i); } }, s.Tree ? "a conversation: edit it in the dialogue above" : "edit it in the dialogue above"); }
         else if (k === "Line") { el = txt(s.Line || "", "What the NPC says"); el.classList.add("qline-in"); el.dataset.step = i; el.oninput = () => { s.Line = el.value; if (conv) conv.refresh(); }; }
@@ -358,7 +564,7 @@ function questForm(form, q) {
         inputs[k] = el;
         top.append(h("span", { class: "hint" }, k), el);
         if (k === "Target" && (s.Type === "kill" || s.Type === "boss")) top.append(alsoCounts(s, S.c.enemies.map(e => e.Name), drawSteps));
-        if (k === "Target" && s.Type === "collect") top.append(alsoCounts(s, S.c.items.map(i => i.Name), drawSteps));
+        if (k === "Target" && s.Type === "collect") top.append(alsoCounts(s, S.c.items.map(i => i.Name), drawSteps, { items: true }));
       }
       if (!["kill", "boss", "collect"].includes(s.Type)) delete s.Targets;
       top.append(h("span", { style: "flex:1" }),
@@ -531,7 +737,7 @@ function nodeEditor(c, isRoot, n) {
   if (c.missing) return h("div", { class: "node err" }, `Missing node ${c.Identifier}`);
   const ident = txt(c.Identifier); ident.style.width = "260px";
   const title = area(c.Title);
-  const given = txt(c.ItemsGiven, '[{"ItemID":9,"Amount":1}]  (optional gift)'); given.style.width = "100%";
+  const given = itemsGivenField(c.ItemsGiven);
   const opts = parseOptions(c.Options);
   const optBox = h("div", { class: "opts" });
   const ids = S.c.conversations.map(x => x.Identifier);
@@ -1643,8 +1849,8 @@ function itemForm(form, it) {
   const dl = (id, vals) => { let d = document.getElementById(id); if (!d) { d = h("datalist", { id }); document.body.append(d); } d.replaceChildren(...vals.map(v => h("option", { value: v }))); };
   dl("itemTypes", S.c.itemTypes); dl("itemSubtypes", S.c.subtypes.concat(["None"]));
   const f = {
-    Name: txt(it.Name), Type: h("input", { type: "text", list: "itemTypes", value: it.Type }), Val: txt(it.Val),
-    Desc: area(it.Desc), Worth: num(it.Worth), Subtype: h("input", { type: "text", list: "itemSubtypes", value: it.Subtype || "None" }),
+    Name: txt(it.Name), Type: typeSelect(S.c.itemTypes, it.Type), Val: txt(it.Val),
+    Desc: area(it.Desc), Worth: num(it.Worth), Subtype: typeSelect((S.c.subtypes || []).concat(["None"]), it.Subtype || "None"),
     Cooldown: num(it.Cooldown),
   };
   let imgPath = it.ImgPath;
@@ -1693,7 +1899,7 @@ function itemForm(form, it) {
 function renderLoot(m) {
   const form = h("div", { class: "form" });
   const pick = e => { S.lootEnemy = e; m.replaceChildren(listPanel(() => S.c.enemies, e => `${e.Name} (${S.c.loot.filter(l => l.EnemyID === e.id).length})`, () => S.lootEnemy && S.lootEnemy.id, it => go("#loot/" + it.id), null), form); lootForm(form, e); };
-  pick(S.lootEnemy ? S.enemyBy[S.lootEnemy.id] : S.c.enemies[0]);
+  pick((S.lootEnemy && S.enemyBy[S.lootEnemy.id]) || S.c.enemies[0]);
 }
 function lootForm(form, e) {
   form.textContent = "";
@@ -1764,7 +1970,7 @@ async function applyRoute() {
     target = "node-" + a;
   }
   else if (kind === "item") { S.tab = "items"; S.item = { id: +a }; }
-  else if (kind === "loot") { S.tab = "loot"; S.lootEnemy = { id: +a }; }
+  else if (kind === "loot") { S.tab = "loot"; if (a) S.lootEnemy = { id: +a }; }
   else if (kind === "mob") { S.tab = "mobs"; S.mob = { id: +a }; }
   else if (kind === "effect") { S.tab = "effects"; S.effect = { id: +a }; }
   else if (kind === "sounds") { S.tab = "sounds"; S.sfxSel = a ? { id: +a } : S.sfxSel; }

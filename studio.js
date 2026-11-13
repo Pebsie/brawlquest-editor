@@ -659,7 +659,7 @@ function qsQuestSheet(id) {
       h("button", { class: "qs-mini", title: "Pick the enemies that count", onclick: () => qsPickModal("Which enemies count?", enemyEntries(), list => upd(x => { x.Target = list[0] || ""; setStepExtras(x, list.slice(1)); }, `Objective ${i + 1}: ${list.join(" or ")}`), { multi: true, selected: names.filter(n => !isPh(n)) }) }, names.length ? "change" : "+ enemy"),
       names.some(isPh) ? null : varBtns("mob", k => upd(x => { x.Target = "{" + k + "}"; delete x.Targets; }, `Objective ${i + 1}: the daily's {${k}}`)));
     else if (s.Type === "collect" || s.Type === "craft" || s.Type === "equip") targets = h("span", { class: "qs-targets" }, names.map(n => isPh(n) ? phChip(n) : h("span", { class: "qs-chip" + (itemByName()[n.toLowerCase()] || s.Type === "equip" ? "" : " bad") }, itemByName()[n.toLowerCase()] ? pix(itemByName()[n.toLowerCase()].ImgPath, "mi") : null, n)),
-      h("button", { class: "qs-mini", onclick: () => qsPickModal("Which item?", itemEntries(), v => upd(x => { x.Target = S.itemBy[v].Name; delete x.Targets; }, `Objective ${i + 1}: ${S.itemBy[v].Name}`)) }, names.length ? "change" : "+ item"),
+      h("button", { class: "qs-mini", onclick: () => openItemPicker({ title: "Which item?", onPick: v => upd(x => { x.Target = S.itemBy[v].Name; delete x.Targets; }, `Objective ${i + 1}: ${S.itemBy[v].Name}`) }) }, names.length ? "change" : "+ item"),
       s.Type === "collect" && !names.some(isPh) ? varBtns("item", k => upd(x => { x.Target = "{" + k + "}"; delete x.Targets; }, `Objective ${i + 1}: the daily's {${k}}`)) : null);
     else if (s.Type === "talk") targets = h("span", { class: "qs-targets" }, h("button", { class: "qs-chip", onclick: () => qsPickModal("Talk to whom?", npcEntries(), v => upd(x => (x.NPC = +v), `Objective ${i + 1}: talk to ${npcName(+v)}`)) }, S.npcBy[s.NPC] ? [pix(S.npcBy[s.NPC].ImgPath, "mi"), S.npcBy[s.NPC].Name] : "pick an NPC"));
     else if (s.Type === "use") { const sel = h("select", { class: "qs-sel" }, USE_ACTIONS.map(a => h("option", { value: a }, a))); sel.value = s.Target; sel.onchange = () => upd(x => (x.Target = sel.value), `Objective ${i + 1}: ${sel.value}`); targets = sel; }
@@ -696,7 +696,7 @@ function qsQuestSheet(id) {
     h("span", { class: "qs-chip" }, pix("assets/ui/studio/gold.png", "mi"), qsInline(String(q.Gold), v => P({ Gold: Math.max(0, +v || 0) }, `Gold ${v}`), { num: true }), " gold"),
     rw.map((r, i) => h("span", { class: "qs-chip" }, S.itemBy[r.ItemID] ? pix(S.itemBy[r.ItemID].ImgPath, "mi") : null, S.itemBy[r.ItemID] ? S.itemBy[r.ItemID].Name : `item ${r.ItemID}?`, " x", qsInline(String(r.Amount), v => { const a = qRw(q); a[i].Amount = Math.max(1, +v || 1); return P({ Rewards: JSON.stringify(a) }, "Reward amount"); }, { num: true }),
       h("button", { onclick: () => { const a = qRw(q); a.splice(i, 1); P({ Rewards: JSON.stringify(a) }, "Removed a reward"); } }, "x"))),
-    h("button", { class: "qs-mini", onclick: () => qsPickModal("Reward item", itemEntries(), v => { const a = qRw(q); a.push({ ItemID: +v, Amount: 1 }); P({ Rewards: JSON.stringify(a) }, `Reward: ${S.itemBy[v].Name}`); }) }, "+ item"));
+    h("button", { class: "qs-mini", onclick: () => openItemPicker({ title: "Reward item", onPick: v => { const a = qRw(q); a.push({ ItemID: +v, Amount: 1 }); P({ Rewards: JSON.stringify(a) }, `Reward: ${S.itemBy[v].Name}`); } }) }, "+ item"));
   const zones = [...new Set(S.c.quests.map(x => x.Zone).filter(Boolean))].sort();
   if (!$("#qs-zones")) document.body.append(h("datalist", { id: "qs-zones" }));
   $("#qs-zones").replaceChildren(...zones.map(z => h("option", { value: z })));
@@ -1348,7 +1348,7 @@ function qsNewQuest(afterId, giverId, o = {}) {
       h("button", { class: "qs-btn", onclick: () => qsPickModal("Which enemies count?", enemyEntries(), l => { st.targets = l; draw(); }, { multi: true, selected: st.targets }) }, st.targets.length ? "change enemies" : "pick enemies (any of them count)"),
       st.type === "kill" ? h("label", {}, " how many ", numIn("count")) : null);
     else if (st.type === "collect") cfg = h("div", { class: "qs-row wrap" }, st.item ? h("span", { class: "qs-chip" }, pix(itemByName()[st.item.toLowerCase()].ImgPath, "mi"), st.item) : null,
-      h("button", { class: "qs-btn", onclick: () => qsPickModal("Which item?", itemEntries(), v => { st.item = S.itemBy[v].Name; draw(); }) }, st.item ? "change item" : "pick an item"), h("label", {}, " how many ", numIn("count")));
+      h("button", { class: "qs-btn", onclick: () => openItemPicker({ title: "Which item?", as: "name", onPick: v => { st.item = v; draw(); } }) }, st.item ? "change item" : "pick an item"), h("label", {}, " how many ", numIn("count")));
     else if (st.type === "reach") { cfg = h("div", {}, h("div", { class: "hint" }, `Click the map where they should go: ${st.x},${st.y} (a blue ground aura shows there in game)`), qsWorldCanvas({ cx: st.x, cy: st.y, w: 420, h: 200, sc: 12, pin: { x: st.x, y: st.y }, onPick: (x, y) => { st.x = x; st.y = y; draw(); } })); }
     else if (st.type === "talk") cfg = h("button", { class: "qs-btn", onclick: () => qsPickModal("Talk to whom?", npcEntries(), v => { st.npc = +v; draw(); }) }, S.npcBy[st.npc] ? [pix(S.npcBy[st.npc].ImgPath, "mi"), " " + S.npcBy[st.npc].Name] : "pick who");
     else if (st.type === "use") { const s = h("select", { class: "qs-sel" }, USE_ACTIONS.map(a => h("option", { value: a }, a))); s.value = st.use; s.onchange = () => (st.use = s.value); cfg = h("div", { class: "qs-row" }, s, h("label", {}, " times ", numIn("count"))); }
@@ -1540,12 +1540,20 @@ function qsPoolEditor(q) {
   const pickNames = (kind, slot, k) => {
     const rows = pool.filter(r => keyOf(r) === k), first = rows.find(r => +r.Min || +r.Max);
     const range = first ? { Min: +first.Min, Max: +first.Max } : used.has(BQDaily.key("count", slot)) && !BQDaily.gives(pool).has(BQDaily.key("count", slot)) ? { Min: 3, Max: 6 } : {};
-    const entries = kind === "mob" ? enemyEntries() : itemEntries().map(e => ({ ...e, value: S.itemBy[e.value].Name }));
-    qsPickModal(kind === "mob" ? `Enemies for {${k}}` : `Items for {${k}}`, entries, (list, group) => {
-      if (!list.length) return;
-      const rows2 = group ? [{ ...blank(kind, slot), Name: list.join("|"), ...range }] : list.map(n => ({ ...blank(kind, slot), Name: n, ...range }));
-      addRows(rows2, group ? `{${k}} can be any of ${list.join(", ")}` : `{${k}}: ${list.length} more to pick from`);
-    }, { multi: true, group: true });
+    if (kind === "mob") {
+      qsPickModal(`Enemies for {${k}}`, enemyEntries(), (list, group) => {
+        if (!list.length) return;
+        const rows2 = group ? [{ ...blank(kind, slot), Name: list.join("|"), ...range }] : list.map(n => ({ ...blank(kind, slot), Name: n, ...range }));
+        addRows(rows2, group ? `{${k}} can be any of ${list.join(", ")}` : `{${k}}: ${list.length} more to pick from`);
+      }, { multi: true, group: true });
+    } else {
+      openItemPicker({ title: `Items for {${k}}`, as: "name", multi: true, group: true, hint: "Tap to toggle. Search the full list.",
+        onPick: (list, group) => {
+          if (!list.length) return;
+          const rows2 = group ? [{ ...blank(kind, slot), Name: list.join("|"), ...range }] : list.map(n => ({ ...blank(kind, slot), Name: n, ...range }));
+          addRows(rows2, group ? `{${k}} can be any of ${list.join(", ")}` : `{${k}}: ${list.length} more to pick from`);
+        } });
+    }
   };
   const addPlace = (slot, k) => {
     const g = S.npcBy[q.Giver];
@@ -1597,10 +1605,14 @@ function qsPoolRow(q, r, total, k) {
     const names = nm.split("|").map(x => x.trim()).filter(Boolean);
     const by = kind === "mob" ? enemyByName() : itemByName();
     const img = n => (by[n.toLowerCase()] ? (kind === "mob" ? by[n.toLowerCase()].Image : by[n.toLowerCase()].ImgPath) : "assets/error.png");
-    const entries = kind === "mob" ? enemyEntries() : itemEntries().map(e => ({ ...e, value: S.itemBy[e.value].Name }));
+    const entries = kind === "mob" ? enemyEntries() : null;
     const ck = BQDaily.key("count", c.Slot);
+    const pickItem = () => kind === "mob"
+      ? qsPickModal("Which enemies? Several = a group, any counts", entries, list => list.length && save({ Name: list.join("|"), RefID: 0 }, `{${k}}: ${list.join(" or ")}`), { multi: true, selected: names, hint: "Several make one group: any of them counts" })
+      : openItemPicker({ title: "Which items? Several = a group", as: "name", multi: true, selected: names, hint: "Several make one group: any of them counts",
+          onPick: list => list.length && save({ Name: list.join("|"), RefID: 0 }, `{${k}}: ${list.join(" or ")}`) });
     main = [h("button", { class: "qs-cpic", title: names.length > 1 ? "A group: any of these counts. Tap to change it." : "Tap to change it (pick several for a group: any of them counts)",
-        onclick: () => qsPickModal(kind === "mob" ? "Which enemies? Several = a group, any counts" : "Which items? Several = a group", entries, list => list.length && save({ Name: list.join("|"), RefID: 0 }, `{${k}}: ${list.join(" or ")}`), { multi: true, selected: names, hint: "Several make one group: any of them counts" }) },
+        onclick: pickItem },
         names.length ? names.slice(0, 4).map(n => pix(img(n), "pc2" + (by[n.toLowerCase()] ? "" : " bad"), n)) : h("span", { class: "big none" }, "?")),
       h("div", { class: "qs-ct" }, h("b", { class: names.some(n => !by[n.toLowerCase()]) || !names.length ? "bad" : "" }, names.join(" or ") || "nothing picked", names.length > 1 ? h("small", { class: "hint" }, " (group)") : null),
         h("div", {}, h("small", {}, "reads "), qsInline(c.Label, v => save({ Label: v }, `{${k}} reads "${v || names.join(" or ")}"`), { ph: names.join(" or ") || "-", title: `What {${k}} says in the text (empty: the name)` })),
