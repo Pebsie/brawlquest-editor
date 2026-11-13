@@ -244,10 +244,81 @@ function renderStudio(m) {
   qsRerender();
 }
 function qsGo(view, arg) { go("#studio/" + view + (arg != null ? "/" + arg : "")); }
+// Scroll/focus in Quest Studio: qsRerender replaces the whole tree, so the
+// drawer (and the other panels) are new empty nodes at first and the browser
+// clamps scrollTop to 0. Capture first, restore after the new content is in.
+const QS_SCROLL_SELS = ["#qs-drawer", "#qs-body", ".qs-cast", ".qs-sheetpage", ".qs-play", ".qs-problems", ".qq-flow", ".qq-side", ".qs-speech", ".qs-log"];
+function qsCaptureScroll() {
+  const snaps = {};
+  for (const sel of QS_SCROLL_SELS) {
+    const el = document.querySelector(sel);
+    if (el) snaps[sel] = { top: el.scrollTop, left: el.scrollLeft };
+  }
+  const ae = document.activeElement;
+  let focus = null;
+  if (ae && QS.root && QS.root.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) {
+    focus = {
+      id: ae.id || "", dataKey: (ae.dataset && (ae.dataset.key || ae.dataset.act || ae.dataset.k)) || "",
+      name: ae.name || "", type: ae.type || "", placeholder: ae.placeholder || "", cls: ae.className || "",
+      tag: ae.tagName
+    };
+    try { focus.start = ae.selectionStart; focus.end = ae.selectionEnd; } catch {}
+  }
+  QS._scroll = { snaps, focus, view: QS.view, sel: QS.sel, arg: QS.arg, gen: (QS._scrollGen = (QS._scrollGen || 0) + 1) };
+  return QS._scroll;
+}
+function qsFindFocus(f) {
+  if (!f) return null;
+  if (f.id) { const el = document.getElementById(f.id); if (el) return el; }
+  const root = QS.root || document;
+  if (f.dataKey) {
+    const hit = root.querySelector(`[data-key="${CSS.escape(f.dataKey)}"], [data-act="${CSS.escape(f.dataKey)}"], [data-k="${CSS.escape(f.dataKey)}"]`);
+    if (hit) return hit;
+  }
+  if (f.placeholder) {
+    const els = [...root.querySelectorAll((f.tag || "INPUT") + "[placeholder]")];
+    const hit = els.find(e => e.placeholder === f.placeholder && (!f.type || e.type === f.type));
+    if (hit) return hit;
+  }
+  if (f.cls) {
+    const els = [...root.querySelectorAll((f.tag || "INPUT") + "." + String(f.cls).trim().split(/\s+/).filter(Boolean)[0])];
+    const hit = els.find(e => e.className === f.cls && (!f.type || e.type === f.type));
+    if (hit) return hit;
+  }
+  return null;
+}
+function qsRestoreScroll() {
+  const s = QS._scroll; if (!s) return;
+  const gen = s.gen;
+  const apply = () => {
+    if (QS._scrollGen !== gen || !s.snaps) return;
+    if (s.view && s.view !== QS.view) return;
+    for (const [sel, pos] of Object.entries(s.snaps)) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      if (el.scrollTop !== pos.top) el.scrollTop = pos.top;
+      if (el.scrollLeft !== pos.left) el.scrollLeft = pos.left;
+      if (typeof BQScroll !== "undefined" && BQScroll.note) BQScroll.note(el);
+    }
+    if (s.focus) {
+      const el = qsFindFocus(s.focus);
+      if (el && el.focus && document.activeElement !== el) {
+        try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+      }
+      if (el && s.focus.start != null && el.setSelectionRange) {
+        try { el.setSelectionRange(s.focus.start, s.focus.end); } catch {}
+      }
+    }
+  };
+  apply();
+  requestAnimationFrame(() => { apply(); requestAnimationFrame(apply); });
+  for (const ms of [0, 50, 100, 200]) setTimeout(apply, ms);
+}
 function qsRerender() {
   // the quest's dialogue embedded in the classic quest form
   if (QS.embed && QS.embed.el.isConnected && (!QS.root || !QS.root.isConnected)) { QS.embed.draw(); return; }
   const root = QS.root; if (!root || !root.isConnected) return;
+  qsCaptureScroll();
   root.replaceChildren(qsNav(), h("div", { class: "qs-body", id: "qs-body" }));
   const body = $("#qs-body");
   if (QS.view === "cast") qsCast(body);
@@ -257,6 +328,7 @@ function qsRerender() {
   else if (QS.view === "quick") qsQuick(body, QS.arg);
   else qsJourney(body);
   qsBar();
+  qsRestoreScroll();
 }
 function qsNav() {
   const an = qsAnalyse();
@@ -445,7 +517,7 @@ function qsJourney(body) {
     S.c.quests.some(qsIsDaily) ? h("span", {}, qsDailyBadge(), " daily") : null,
     h("span", {}, pix("assets/ui/studio/target.png", "mi"), "→", pix("assets/ui/studio/loot.png", "mi"), " in order"), h("span", {}, pix("assets/ui/studio/target.png", "mi"), pix("assets/ui/studio/loot.png", "mi"), " all at once"),
     h("span", { class: "hint" }, "Drag to pan, pinch or Ctrl+scroll to zoom. Drag a card's + onto another quest to link them."));
-  const wrap = h("div", { class: "qs-jwrap" }, tools, view, legend, QS.showProbs ? probList.el : null, h("div", { class: "qs-drawer", id: "qs-drawer" }));
+  const wrap = h("div", { class: "qs-jwrap" }, tools, view, legend, QS.showProbs ? probList.el : null, h("div", { class: "qs-drawer", id: "qs-drawer", "data-scroll": "qs-drawer" }));
   body.append(wrap);
   // camera
   const fit = () => {
@@ -619,7 +691,8 @@ const itemEntries = () => S.c.items.map(i => ({ value: i.id, img: i.ImgPath, lab
 function qsQuestSheet(id) {
   const d = $("#qs-drawer"); if (!d) return;
   const q = qById(id); if (!q) { d.classList.remove("open"); return; }
-  const keep = d.dataset.id === String(id) ? d.scrollTop : 0;
+  const saved = QS._scroll && QS._scroll.view === "journey" && +QS._scroll.sel === +id && QS._scroll.snaps && QS._scroll.snaps["#qs-drawer"];
+  const keep = saved ? saved.top : (d.dataset.id === String(id) ? d.scrollTop : 0);
   d.dataset.id = id; d.classList.add("open"); d.classList.toggle("wide", !!QS.wide);
   const an = qsAnalyse(), iss = an.issues.get(id) || [];
   const P = (patch, label) => qsPatchQuest(id, patch, label);
@@ -724,6 +797,7 @@ function qsQuestSheet(id) {
       daily ? qsRollPreview(q) : null,
       h("h4", {}, "Rewards"), rwBox));
   d.scrollTop = keep;
+  if (typeof BQScroll !== "undefined" && BQScroll.note) BQScroll.note(d);
 }
 function qsBlankStep(t, q) {
   const g = S.npcBy[q.Giver];
