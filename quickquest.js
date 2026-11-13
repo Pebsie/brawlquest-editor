@@ -364,8 +364,9 @@ function qqItemPicker(o) {
   const f = (QQ.itemFind || "").trim().toLowerCase();
   const find = h("input", { type: "search", class: "qs-in", "data-qq": "itemfind", placeholder: "Find any item...", value: QQ.itemFind || "" });
   find.addEventListener("input", () => { QQ.itemFind = find.value; qqDraw(); });
+  const browse = h("button", { type: "button", class: "qs-mini", onclick: () => openItemPicker({ title: "Find any item", onPick: id => { o.item = id; o.picking = false; o.count = qqCollectCount(id); qqDraw(); } }) }, "Browse all items…");
   return [h("p", { class: "hint" }, `Dropped by enemies near ${g.Name}:`), near.length ? h("div", { class: "qq-cards" }, near.slice(0, 24).map(d => cell(d.it, `${d.from}, ${d.chance}%`))) : h("p", { class: "hint" }, "Nothing nearby drops anything."),
-    find, f ? h("div", { class: "qq-cards" }, S.c.items.filter(i => i.Name.toLowerCase().includes(f)).slice(0, 40).map(i => cell(i, i.Type))) : null];
+    h("div", { class: "qq-row" }, find, browse), f ? h("div", { class: "qq-cards" }, S.c.items.filter(i => i.Name.toLowerCase().includes(f)).map(i => cell(i, i.Type))) : null];
 }
 function qqWords() {
   const st = QQ.st, g = S.npcBy[st.Giver], t = S.npcBy[st.TurnIn || st.Giver];
@@ -415,7 +416,7 @@ function qqReward() {
         h("label", {}, "Level"), h("div", {}, num("level", 1), " players can take it from level ", num("MinLevel", 1)),
         h("label", {}, "XP / gold"), h("div", {}, num("XP", 0), " XP ", num("Gold", 0), " gold ", Object.keys(st.over).length ? h("button", { class: "qs-mini", onclick: () => { st.over = {}; st.levelWhy = ""; qqDraw(); } }, "back to suggested") : null),
         h("label", {}, "Item reward"), h("div", {}, rw ? [h("span", { class: "qq-thing" }, pix(rw.ImgPath, "mi"), rw.Name), " x ", (() => { const i = h("input", { type: "number", class: "qs-in num", min: 1, value: st.rewardN, "data-qq": "rewardN" }); i.addEventListener("change", () => { st.rewardN = Math.max(1, +i.value || 1); qqDraw(); }); return i; })(), h("button", { class: "qs-mini", onclick: () => { st.reward = 0; qqDraw(); } }, "none")]
-          : h("button", { class: "qs-mini", onclick: () => qsPickModal("Item reward", itemEntries(), id => { st.reward = +id; qqDraw(); }) }, "add an item"),
+          : h("button", { class: "qs-mini", onclick: () => openItemPicker({ title: "Item reward", onPick: id => { st.reward = +id; qqDraw(); } }) }, "add an item"),
           h("div", { class: "hint" }, `Keep these rare: ${withItem} of ${sameLv.length} quests around this level give an item.`)),
         h("label", {}, "Zone"), h("div", {}, (() => { const i = h("input", { class: "qs-in", value: v.zone, "data-qq": "zone" }); i.addEventListener("change", () => { st.over.zone = i.value; qqDraw(); }); return i; })(), h("small", { class: "hint" }, " shown in the quest log"))),
       h("p", { class: "hint" }, "Branching conversations, daily quests and other kinds of objective (use, craft, equip, level) are in the quest sheet once it's made.")),

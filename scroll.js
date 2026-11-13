@@ -6,7 +6,7 @@
 const BQScroll = (() => {
   const SCOPE = "#main, .modal, .qs-drawer, .qs-body, .qs-cast, .qs-sheetpage, .qs-play";
   const CLASSES = [
-    "list", "form", "side", "modal-body", "picker-grid", "arealist", "npclist",
+    "list", "form", "side", "modal-body", "picker-grid", "ip-list", "arealist", "npclist",
     "sfx-lib", "qs-body", "qs-drawer", "qs-cast", "qs-sheetpage", "qs-play",
     "qs-problems", "qs-speech", "qs-log", "qs-wbody", "qs-pgrid", "steps", "opts"
   ];

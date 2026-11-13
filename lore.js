@@ -37,7 +37,11 @@ function loreSection(sec, d) {
     const inputs = {};
     const tr = h("tr", {}, ...cols.map(c => {
       const long = /Desc|Greeting|Attributes|Buys/.test(c);
-      const el = h("input", { type: "text", value: row[c] ?? "", style: `width:${long ? 260 : /Name/.test(c) ? 150 : 64}px`, "data-key": c });
+      let el;
+      if (c === "ItemID") el = itemSelect(row[c], { title: "Item" });
+      else el = h("input", { type: "text", value: row[c] ?? "", style: `width:${long ? 260 : /Name/.test(c) ? 150 : 64}px`, "data-key": c });
+      if (c !== "ItemID") el.setAttribute("data-key", c);
+      else el.dataset.key = "ItemID";
       inputs[c] = el;
       return h("td", { style: "padding:1px 3px" }, el);
     }), h("td", { style: "padding:1px 3px;white-space:nowrap" }, h("button", { class: "primary", onclick: async () => {
