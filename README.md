@@ -496,9 +496,18 @@ whatever art source is selected here. The **Sprites** tab picks where art comes 
 * **Local folder**: pick your `BrawlQuest-Client` folder for the newest art.
 * **URL**: any server that serves the client folder.
 
-The client repo is private, so GitHub raw / jsDelivr links don't work.
-`assets/index.json` lists the bundled sprites for the image pickers; refresh with
-`git archive` from the client and the snippet in the commit history.
+The client repo is private, so GitHub raw / jsDelivr links don't work; use
+Bundled, a local folder, or a URL you host yourself.
+`assets/index.json` lists the bundled sprites for the image pickers. Refresh the
+copy from a `new-ui` client checkout with:
+
+```
+python3 tools/sync-client-assets.py /path/to/BrawlQuest-Client
+```
+
+That copies the folders the pickers use (items, gear, monsters, NPCs, world
+tiles, fx, skills, and so on) and rewrites `assets/index.json`. Editor-only
+art such as `assets/ui/studio` is left in place.
 
 ## Notes
 

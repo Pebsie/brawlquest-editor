@@ -1,0 +1,11 @@
+The skill tree icons in this folder are cut by tools/build_skill_icons.py from the
+"Tome" tileset by David E. Gervais (CC BY 3.0, https://creativecommons.org/licenses/by/3.0/,
+http://pousse.rapiere.free.fr/tome/), already credited on the login screen:
+the spell icons (DO_SysPics Spells.PNG) and Tome item sprites (DO_Items, AngbandTk
+dg_armor, dg_potions, dg_magic and others) already used for the game's items.
+tools/skill_icon_sources.json lists the tile each icon comes from, and the content
+repo's lore/sprites/skill-icons.txt lists the node it belongs to.
+
+Changes: the backdrop is made transparent, each tile is cropped to its pixels and
+set centred on a 32x32 cell. Pixels are never scaled, redrawn or recoloured, and no
+generated art is used.
