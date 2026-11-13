@@ -527,7 +527,7 @@ Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
 `headless-mob-sprites.mjs` (monster sprite groups in the mob picker),
 `balance.test.mjs` (the balance guide's maths against the API's cases),
 `headless-balance.mjs` (speed, passive, sleeps at night, flip and the guide) and
-`headless-scroll.mjs` (scroll position and input focus stay put when a panel re-renders), `headless-list-filter.mjs` (list search, filtered rows and scroll stay when you pick a row), `headless-picker-page.mjs` (the Everything sprite picker pages in as you scroll), `headless-item-type.mjs` (the item Type and Subtype dropdowns), `headless-item-picker.mjs` (the shared item picker on loot, quest rewards and collect steps), `headless-studio-scroll.mjs` (Quest Studio sidebar and sheet scroll stay put when you edit),
+`headless-scroll.mjs` (scroll position and input focus stay put when a panel re-renders), `headless-list-filter.mjs` (list search, filtered rows and scroll stay when you pick a row), `headless-picker-page.mjs` (the Everything sprite picker pages in as you scroll), `headless-item-type.mjs` (the item Type and Subtype dropdowns), `headless-item-picker.mjs` (the shared item picker on loot, quest rewards and collect steps), `headless-studio-scroll.mjs` (Quest Studio sidebar and sheet scroll stay put when you edit), `itembalance.test.mjs` and `headless-item-balance.mjs` (the item Balance panel: suggested level from stats, peers, live updates without jumping scroll or focus), `headless-quick-goto.mjs` (Quick Quest can make a quest with three Go-to destinations),
 `headless-github.mjs` (GitHub sync against a mocked api.github.com,
 `tests/github-mock.mjs`; it never talks to GitHub).
 

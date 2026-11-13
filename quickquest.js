@@ -139,7 +139,7 @@ function qqStep(o, st) {
   if (hint) s.Hint = hint;
   return s;
 }
-const qqObjReady = o => (o.type === "kill" || o.type === "boss" ? !!o.target : o.type === "collect" ? !!S.itemBy[o.item] : o.type === "talk" ? !!S.npcBy[o.npc] : o.x != null);
+const qqObjReady = o => (o.type === "kill" || o.type === "boss" ? !!o.target : o.type === "collect" ? !!S.itemBy[o.item] : o.type === "talk" ? !!S.npcBy[o.npc] : o.type === "reach" ? (o.x != null && !o.unset) : o.x != null);
 
 // ---------------------------------------------------------------- checks, in plain words
 function qqChecks(st) {
@@ -177,12 +177,12 @@ function qqChecks(st) {
 
 // ---------------------------------------------------------------- the page
 function qqNew(giver) {
-  QQ.st = { Giver: giver || 0, TurnIn: 0, objs: [], Offer: "", Complete: "", Title: "", titleSet: false, inOrder: false, after: 0, reward: 0, rewardN: 1, over: {}, open: null };
+  QQ.st = { Giver: giver == null || giver === "" ? null : +giver, TurnIn: 0, objs: [], Offer: "", Complete: "", Title: "", titleSet: false, inOrder: false, after: 0, reward: 0, rewardN: 1, over: {}, open: null };
   QQ.done = null;
 }
 // "What happens next?": the same giver, after the quest just made, a level up.
 function qqNext(prevId) {
-  const prev = qById(prevId); if (!prev) { qqNew(0); return; }
+  const prev = qById(prevId); if (!prev) { qqNew(null); return; }
   qqNew(prev.Giver);
   QQ.st.after = prev.id;
   QQ.st.over.level = Math.min(BQBal.C.maxLevel, (+prev.Level || 1) + 1);
@@ -215,7 +215,7 @@ function qqChainRow(nid, o = {}) {
     lone.length ? h("div", { class: "qq-chain lone" }, h("small", { class: "hint" }, linked.length ? "On their own: " : "Quests on their own: "), lone.map((c, i) => [i ? ", " : null, link(c[0])])) : null);
 }
 function qsQuick(body, arg) {
-  if (!QQ.st || (arg && +arg !== QQ.st.Giver && !QQ.st.objs.length)) qqNew(arg ? +arg : 0);
+  if (!QQ.st || (arg && +arg !== QQ.st.Giver && !QQ.st.objs.length)) qqNew(arg ? +arg : null);
   const wrap = h("div", { class: "qq" });
   const left = h("div", { class: "qq-flow", id: "qq-flow" }), right = h("div", { class: "qq-side", id: "qq-side" });
   wrap.append(left, right);
@@ -251,7 +251,7 @@ function qqFlow() {
   const st = QQ.st, g = S.npcBy[st.Giver];
   if (!S.world) return [h("p", { class: "hint" }, "Loading the world...")];
   const cards = [h("div", { class: "qq-intro" }, h("h2", {}, "Quick quest"), h("p", {}, "Start with an idea. Pick who asks, what they want and what they say. Level, rewards and the fiddly bits are filled in for you."),
-    h("button", { class: "qs-mini", onclick: () => { qqNew(0); qqDraw(); } }, "Start again"))];
+    h("button", { class: "qs-mini", onclick: () => { qqNew(null); qqDraw(); } }, "Start again"))];
   // 1. giver
   cards.push(qqCard(1, "Who gives it?", !!g, g ? [pix(g.ImgPath, "mi"), ` ${g.Name}`, h("small", {}, ` in ${qqZoneOf(g) || "the wilds"}`)] : null, qqNpcPicker(id => { st.Giver = id; st.open = null; qqDraw(); }, st.Giver), "giver"));
   if (!g) return cards;
@@ -301,13 +301,32 @@ function qqObjectives() {
     adding ? [st.objs.length ? h("p", { class: "hint" }, "And then:") : h("p", { class: "hint" }, `Pick one. You can add more after.`), typeBtns,
       st.objs.length ? h("button", { class: "qs-mini", onclick: () => { st.adding = false; qqDraw(); } }, "cancel") : null] :
       h("div", { class: "qs-row" }, last && qqObjReady(last) ? h("button", { class: "qs-mini", id: "qq-add", onclick: () => { st.adding = true; qqDraw(); } }, "+ and also...") : null,
-        st.objs.length > 1 ? h("div", { class: "qs-seg" }, h("button", { class: st.inOrder ? "" : "on", onclick: () => { st.inOrder = false; qqDraw(); } }, "Any order"), h("button", { class: st.inOrder ? "on" : "", onclick: () => { st.inOrder = true; qqDraw(); } }, "In this order")) : null,
+        st.objs.length > 1 ? h("div", { class: "qs-seg" }, h("button", { class: st.inOrder ? "" : "on", onclick: () => { st.inOrder = false; st.inOrderTouched = true; qqDraw(); } }, "Any order"), h("button", { class: st.inOrder ? "on" : "", onclick: () => { st.inOrder = true; st.inOrderTouched = true; qqDraw(); } }, "In this order")) : null,
         st.objs.length && qqObjReady(last) ? h("button", { class: "qs-btn hot", id: "qq-objs-ok", onclick: () => { st.open = null; st.objsOk = true; qqDraw(); } }, "That's it") : null),
   ];
+}
+function qqMoveObj(i, dir) {
+  const st = QQ.st, j = i + dir;
+  if (j < 0 || j >= st.objs.length) return;
+  const [row] = st.objs.splice(i, 1);
+  st.objs.splice(j, 0, row);
+  qqDraw();
+}
+function qqAddReach(after) {
+  const st = QQ.st, prev = st.objs[after];
+  const o = { type: "reach", target: "", item: 0, npc: 0, count: 1, x: null, y: null, line: "", unset: true };
+  if (prev && prev.type === "reach" && prev.x != null) {
+    o.x = prev.x; o.y = prev.y; o.view = { cx: prev.x, cy: prev.y, sc: (prev.view && prev.view.sc) || 12 };
+  }
+  st.objs.splice(after + 1, 0, o);
+  if (st.objs.filter(x => x.type === "reach").length >= 2 && !st.inOrderTouched) st.inOrder = true;
+  qqDraw();
 }
 function qqObjRow(o, i) {
   const st = QQ.st, g = S.npcBy[st.Giver];
   const rm = h("button", { class: "qs-mini", title: "Remove", onclick: () => { st.objs.splice(i, 1); qqDraw(); } }, "x");
+  const up = i > 0 ? h("button", { class: "qs-mini qq-up", title: "Move up", onclick: () => qqMoveObj(i, -1) }, "↑") : null;
+  const down = i < st.objs.length - 1 ? h("button", { class: "qs-mini qq-down", title: "Move down", onclick: () => qqMoveObj(i, 1) }, "↓") : null;
   const stepper = () => h("span", { class: "qq-count" },
     h("button", { class: "qs-mini", onclick: () => { o.count = Math.max(1, o.count - 1); qqDraw(); } }, "-"), h("b", {}, o.count),
     h("button", { class: "qs-mini", onclick: () => { o.count = Math.min(99, o.count + 1); qqDraw(); } }, "+"));
@@ -330,17 +349,32 @@ function qqObjRow(o, i) {
     if (!n || o.picking) picker = qqNpcPicker(id => { o.npc = id; o.picking = false; qqDraw(); }, o.npc);
     else { const ta = h("textarea", { class: "qs-in rh", rows: 2, "data-qq": "line" + i, placeholder: `What does ${n.Name} say when you get there?` }); ta.value = o.line; ta.addEventListener("input", () => { o.line = ta.value; qqSide(); }); picker = h("label", { class: "qq-lab" }, `${n.Name} says:`, ta); }
   } else {
-    if (o.x == null) { o.x = g.SpawnX + 6; o.y = g.SpawnY; o.unset = true; }
-    sentence = ["Go to ", o.unset ? h("i", {}, "click the map") : h("span", { class: "qq-thing" }, pix("assets/ui/studio/arrow.png", "mi"), o.place || zoneAt(o.x, o.y) || `${o.x},${o.y}`)];
+    if (o.x == null && g) { o.x = g.SpawnX + 6; o.y = g.SpawnY; o.unset = true; }
+    sentence = ["Go to ", o.unset || o.x == null ? h("i", {}, "click the map") : h("span", { class: "qq-thing" }, pix("assets/ui/studio/arrow.png", "mi"), o.place || zoneAt(o.x, o.y) || `${o.x},${o.y}`)];
     o.view = o.view || { cx: o.x, cy: o.y, sc: 12 };
-    const pl = h("input", { class: "qs-in", "data-qq": "place" + i, placeholder: "Name the place (optional), e.g. the old well", value: o.place || "" });
-    pl.addEventListener("input", () => { o.place = pl.value; qqSide(); });
-    picker = [qsWorldCanvas({ w: 560, h: 220, st: o.view, pin: o.unset ? null : { x: o.x, y: o.y }, onPick: (x, y) => { o.x = x; o.y = y; o.unset = false; qqDraw(); } }), h("div", { class: "hint" }, "Drag to look around, scroll to zoom, click to set the spot. Players need to get within 3 tiles."), pl];
+    const showMap = !ready || o.picking || o.unset;
+    if (showMap) {
+      const pl = h("input", { class: "qs-in", "data-qq": "place" + i, placeholder: "Name the place (optional), e.g. the old well", value: o.place || "" });
+      pl.addEventListener("input", () => { o.place = pl.value; qqSide(); });
+      const overlay = (ctx, px, py, sc) => {
+        st.objs.forEach((other, j) => {
+          if (other.type !== "reach" || other.unset || other.x == null || (other === o && !o.unset)) return;
+          const x = px(other.x), y = py(other.y);
+          ctx.strokeStyle = "#8ab4ff"; ctx.lineWidth = 2;
+          ctx.strokeRect(x - 1, y - 1, sc + 2, sc + 2);
+          ctx.fillStyle = "#8ab4ff"; ctx.font = "11px sans-serif";
+          ctx.fillText(String(j + 1), x + 2, y - 2);
+        });
+      };
+      picker = [qsWorldCanvas({ w: 560, h: 220, st: o.view, pin: o.unset ? null : { x: o.x, y: o.y }, overlay, onPick: (x, y) => { o.x = x; o.y = y; o.unset = false; o.picking = false; qqDraw(); } }),
+        h("div", { class: "hint" }, "Drag to look around, scroll to zoom, click to set the spot. Players need to get within 3 tiles. Add more places if they should visit several."), pl];
+    }
     note = null;
   }
-  const change = ready && (o.type !== "reach") && !o.picking ? h("button", { class: "qs-mini", onclick: () => { o.picking = true; qqDraw(); } }, "change") : null;
-  return h("div", { class: "qq-obj" + (ready ? " ready" : ""), "data-obj": i },
-    h("div", { class: "qq-sentence" }, pix(QQ_TYPES.find(t => t[0] === o.type)[2], "ti"), h("span", {}, sentence), h("span", { class: "qs-sp" }), change, rm),
+  const change = ready && !o.picking ? h("button", { class: "qs-mini", onclick: () => { o.picking = true; qqDraw(); } }, "change") : null;
+  const addPlace = o.type === "reach" && ready && !o.picking ? h("button", { class: "qs-mini qq-add-place", "data-qq": "add-place", onclick: () => qqAddReach(i) }, "Add another place") : null;
+  return h("div", { class: "qq-obj" + (ready ? " ready" : ""), "data-obj": i, "data-type": o.type },
+    h("div", { class: "qq-sentence" }, pix(QQ_TYPES.find(t => t[0] === o.type)[2], "ti"), h("span", {}, sentence), h("span", { class: "qs-sp" }), addPlace, up, down, change, rm),
     note ? h("div", { class: "hint qq-note" }, note) : null, picker ? h("div", { class: "qq-pick" }, picker) : null);
 }
 function qqEnemyPicker(o) {
@@ -391,7 +425,14 @@ function qqTitleBase(st) {
   if (o.type === "boss") return `${qqThe(o.target).replace(/^the/, "The")}`;
   if (o.type === "collect" && S.itemBy[o.item]) return `${qqPlural(S.itemBy[o.item].Name, 2)} for ${g.Name}`;
   if (o.type === "talk" && S.npcBy[o.npc]) return `A Word with ${S.npcBy[o.npc].Name}`;
-  if (o.type === "reach") return `To ${o.place || zoneAt(o.x, o.y) || "the Marked Place"}`;
+  if (o.type === "reach") {
+    const stops = st.objs.filter(x => x.type === "reach" && qqObjReady(x));
+    if (stops.length > 1) {
+      const names = stops.map(x => x.place || zoneAt(x.x, x.y) || `${x.x},${x.y}`);
+      return "To " + names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+    }
+    return `To ${o.place || zoneAt(o.x, o.y) || "the Marked Place"}`;
+  }
   return "";
 }
 function qqReward() {
@@ -484,6 +525,6 @@ function qqDone() {
       h("div", { class: "qq-actions" },
         h("button", { class: "qs-btn", id: "qq-play", onclick: () => qsPreviewQuest(q, "offer") }, "Play the conversation"),
         h("button", { class: "qs-btn", id: "qq-another", onclick: () => { qqNew(g ? g.id : 0); qqDraw(); } }, `Another from ${g ? g.Name : "them"}`),
-        h("button", { class: "qs-btn", onclick: () => { qqNew(0); qqDraw(); } }, "A new idea"),
+        h("button", { class: "qs-btn", onclick: () => { qqNew(null); qqDraw(); } }, "A new idea"),
         h("button", { class: "qs-btn", id: "qq-open", onclick: () => { QS.sel = q.id; qsGo("journey", q.id); } }, "Open the full quest sheet"))))];
 }
