@@ -15,7 +15,7 @@ const BQ = (() => {
     item_set: { key: "id", create: "CREATE TABLE IF NOT EXISTS item_set (id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Desc TEXT NOT NULL DEFAULT '');" },
     item_set_bonus: { key: "id", create: "CREATE TABLE IF NOT EXISTS item_set_bonus (id INTEGER PRIMARY KEY, SetID INTEGER NOT NULL, Pieces INTEGER NOT NULL, Attributes TEXT NOT NULL DEFAULT '', Desc TEXT NOT NULL DEFAULT '');" },
     // Seasonal decoration (the API's season.go and content/migrations/2026-11-10-christmas.sql): the switch and the props.
-    season: { key: "id", create: "CREATE TABLE IF NOT EXISTS season (id INTEGER PRIMARY KEY, Name TEXT NOT NULL UNIQUE, Mode TEXT NOT NULL DEFAULT 'off', AutoFrom TEXT NOT NULL DEFAULT '12-01', AutoTo TEXT NOT NULL DEFAULT '01-06', Snowfall INTEGER NOT NULL DEFAULT 1);" },
+    season: { key: "id", create: "CREATE TABLE IF NOT EXISTS season (id INTEGER PRIMARY KEY, Name TEXT NOT NULL UNIQUE, Mode TEXT NOT NULL DEFAULT 'off', AutoFrom TEXT NOT NULL DEFAULT '12-19', AutoTo TEXT NOT NULL DEFAULT '01-04', Snowfall INTEGER NOT NULL DEFAULT 1, WorldSnow INTEGER NOT NULL DEFAULT 0);" },
     season_deco: { key: "id", create: "CREATE TABLE IF NOT EXISTS season_deco (id INTEGER PRIMARY KEY, Season TEXT NOT NULL, Town TEXT NOT NULL DEFAULT '', Kind TEXT NOT NULL, X INTEGER NOT NULL, Y INTEGER NOT NULL, X2 INTEGER, Y2 INTEGER, Variant INTEGER NOT NULL DEFAULT 0, Colour TEXT NOT NULL DEFAULT '', Note TEXT NOT NULL DEFAULT '');" },
     npc_vendor: { key: "NPC", create: "CREATE TABLE IF NOT EXISTS npc_vendor (NPC INTEGER PRIMARY KEY, BuyPct INTEGER NOT NULL DEFAULT 100, Greeting TEXT NOT NULL DEFAULT '', Buys TEXT NOT NULL DEFAULT '');" },
     // Skill trees (the API's skills.go and content/migrations/2026-11-10-skilltree.sql).
@@ -480,6 +480,13 @@ const BQ = (() => {
       const L = LORE[table];
       if (!L) throw new Error("not an extra table: " + table);
       if (!has(table)) apply([L.create], `create ${table} table`);
+      if (table === "season" && has("season") && !cols("season").includes("WorldSnow")) {
+        apply(["ALTER TABLE season ADD COLUMN WorldSnow INTEGER NOT NULL DEFAULT 0;"], "season WorldSnow");
+      }
+      if (table === "season") {
+        const cur = +row.id > 0 ? q("SELECT * FROM season WHERE id = ?", [+row.id])[0] : null;
+        if (cur) for (const k of ["WorldSnow", "Snowfall"]) if (!(k in row)) row[k] = cur[k];
+      }
       const c = cols(table);
       const lit = v => typeof v === "number" ? (Number.isFinite(v) ? String(v) : "0") : "'" + String(v ?? "").replace(/'/g, "''") + "'";
       const keys = c.filter(k => k in row);
