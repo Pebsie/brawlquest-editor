@@ -115,6 +115,7 @@ function qsAnalyse() {
       if ((s.Type === "kill" || s.Type === "boss")) { const bad = names.filter(n => !enemyByName()[n.toLowerCase()]); if ((!names.length && !ph) || bad.length) add(q.id, "err", "target", `Objective ${i + 1}: no enemy called ${bad.join(", ") || "(blank)"}`); }
       if (s.Type === "collect" || s.Type === "craft") { const bad = names.filter(n => !itemByName()[n.toLowerCase()]); if ((!names.length && !ph) || bad.length) add(q.id, "warn", "target", `Objective ${i + 1}: no item called ${bad.join(", ") || "(blank)"}`); }
       if (s.Type === "talk" && !S.npcBy[s.NPC]) add(q.id, "err", "target", `Objective ${i + 1}: talk to a missing NPC`);
+      if (talkTextMismatch(s)) add(q.id, "warn", "text", `Objective ${i + 1} says "${s.Text}" but you talk to ${npcName(s.NPC)} (the game shows "Talk to ${npcName(s.NPC)}")`);
       if (s.Type === "talk" && !String(s.Line || "").trim() && !(s.Tree && S.convBy[s.Tree])) add(q.id, "warn", "line", `Objective ${i + 1}: the NPC has nothing to say`);
       if (!String(s.Text || "").trim()) add(q.id, "warn", "text", `Objective ${i + 1} has no tracker text`);
     });
@@ -734,7 +735,7 @@ function qsQuestSheet(id) {
     else if (s.Type === "collect" || s.Type === "craft" || s.Type === "equip") targets = h("span", { class: "qs-targets" }, names.map(n => isPh(n) ? phChip(n) : h("span", { class: "qs-chip" + (itemByName()[n.toLowerCase()] || s.Type === "equip" ? "" : " bad") }, itemByName()[n.toLowerCase()] ? pix(itemByName()[n.toLowerCase()].ImgPath, "mi") : null, n)),
       h("button", { class: "qs-mini", onclick: () => openItemPicker({ title: "Which item?", onPick: v => upd(x => { x.Target = S.itemBy[v].Name; delete x.Targets; }, `Objective ${i + 1}: ${S.itemBy[v].Name}`) }) }, names.length ? "change" : "+ item"),
       s.Type === "collect" && !names.some(isPh) ? varBtns("item", k => upd(x => { x.Target = "{" + k + "}"; delete x.Targets; }, `Objective ${i + 1}: the daily's {${k}}`)) : null);
-    else if (s.Type === "talk") targets = h("span", { class: "qs-targets" }, h("button", { class: "qs-chip", onclick: () => qsPickModal("Talk to whom?", npcEntries(), v => upd(x => (x.NPC = +v), `Objective ${i + 1}: talk to ${npcName(+v)}`)) }, S.npcBy[s.NPC] ? [pix(S.npcBy[s.NPC].ImgPath, "mi"), S.npcBy[s.NPC].Name] : "pick an NPC"));
+    else if (s.Type === "talk") targets = h("span", { class: "qs-targets" }, h("button", { class: "qs-chip", onclick: () => qsPickModal("Talk to whom?", npcEntries(), v => upd(x => setTalkNPC(x, +v), `Objective ${i + 1}: talk to ${npcName(+v)}`)) }, S.npcBy[s.NPC] ? [pix(S.npcBy[s.NPC].ImgPath, "mi"), S.npcBy[s.NPC].Name] : "pick an NPC"));
     else if (s.Type === "use") { const sel = h("select", { class: "qs-sel" }, USE_ACTIONS.map(a => h("option", { value: a }, a))); sel.value = s.Target; sel.onchange = () => upd(x => (x.Target = sel.value), `Objective ${i + 1}: ${sel.value}`); targets = sel; }
     const sc = BQDaily.stepCount(s.Count);
     const count = !["kill", "collect", "use", "craft", "level"].includes(s.Type) ? null
@@ -944,6 +945,8 @@ function qsTalk(P, n, key) {
   }
   else if (kind === "talk" && q && qsTalkStep(P, q, n.id) >= 0) {
     const i = qsTalkStep(P, q, n.id), s = qSteps(d)[i]; P.talked = P.talked || {}; (P.talked[id] = P.talked[id] || new Set()).add(i);
+    // every objective a talk and all said: ready to hand in, as in game (other objective types need "do objectives")
+    if (qSteps(d).every((x, j) => x.Type === "talk" && P.talked[id].has(j))) P.state[id] = "ready";
     const reply = { t: String(s.Reply || "").trim() ? s.Reply : BQTalk.TALK_REPLY, k: "" };
     if (BQTalk.norm(s.Tree) && qsTreeNode(P, q, s.Tree, v, f)) { if (!v.options.length) v.options = [reply]; } else { v.text = s.Line || ""; v.options = [reply]; }
     v.quest = id; v.line = "step:" + i;
