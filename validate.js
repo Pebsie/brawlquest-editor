@@ -192,7 +192,7 @@ const BQCheck = (() => {
         if (tree && type === "talk" && nodeIds && !nodeIds.has(tree)) add("warning", "quest_def", w, `${at}: its conversation "${tree}" doesn't exist, so the NPC says its Line instead`, sr);
         if (extra.length && ["talk", "reach", "equip", "level"].includes(type)) add("warning", "quest_def", w, `${at}: Targets is ignored on ${type} steps`, sr);
         if (type === "craft" && target && itemNames && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: no item named "${target}"`, sr);
-        if (type === "equip" && target && itemNames && !["weapon", "shield", "head", "chest", "legs", "mount"].includes(target.toLowerCase()) && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: "${target}" is not an item or a slot`, sr);
+        if (type === "equip" && target && itemNames && !["weapon", "head", "chest", "legs", "mount"].includes(target.toLowerCase()) && !itemNames.has(target.toLowerCase())) add("error", "quest_def", w, `${at}: "${target}" is not an item or a slot`, sr);
         if (type === "talk" && npcIds && !npcIds.has(+g("NPC"))) add("error", "quest_def", w, `${at}: NPC ${g("NPC") ?? "(none)"} doesn't exist`, sr);
       });
       if (daily && typeof BQDaily !== "undefined" && itemNames && enemyNames) {

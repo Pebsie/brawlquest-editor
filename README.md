@@ -438,7 +438,7 @@ client) by the client's `tools/build_fx_sprites.py`; existing client art
   `Progress`, complete = `Complete`, "(step N)" = that talk step's `Line` inside
   `Steps`. Saving writes only that field to the stored quest (marked unsaved
   for Save .db / Export SQL) and to the form above; other unsaved form edits
-  are left for the quest's own Save. Tokens such as `{SHIELD}` stay as typed.
+  are left for the quest's own Save. Tokens such as `{INTERACT}` stay as typed.
   The talk step's Line box below is kept in step both ways.
 * **Portraits**: the game's conversation panel shows the node's `ImgPath` if it
   is set, otherwise the speaking NPC's sprite. Each node shows "Portrait: NPC

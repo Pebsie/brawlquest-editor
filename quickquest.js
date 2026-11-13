@@ -170,7 +170,7 @@ function qqChecks(st) {
   if (!String(st.Complete || "").trim()) add("warn", `Write what ${S.npcBy[st.TurnIn || st.Giver] ? S.npcBy[st.TurnIn || st.Giver].Name : "they"} says when you hand it in, or the hand-in box is empty.`);
   if (st.after && qById(st.after)) add("info", `Follows “${qById(st.after).Title}”: players are offered it once they've handed that in.`);
   if (st.after && qById(st.after) && qById(st.after).Level > v.level) add("warn", `It comes after a level ${qById(st.after).Level} quest but is level ${v.level}.`);
-  if (st.reward && v.level < 10 && S.itemBy[st.reward] && /wep|arm|shield|mount/i.test(S.itemBy[st.reward].Type)) add("info", "Gear as a quest reward is rare. Keep it for the end of a story.");
+  if (st.reward && v.level < 10 && S.itemBy[st.reward] && /wep|arm|mount/i.test(S.itemBy[st.reward].Type)) add("info", "Gear as a quest reward is rare. Keep it for the end of a story.");
   if (g && S.c.quests.filter(q => q.Giver === g.id && !qPre(q).length).length >= 3 && !st.after) add("info", `${g.Name} already has ${S.c.quests.filter(q => q.Giver === g.id && !qPre(q).length).length} quests on offer from the start.`);
   return out;
 }

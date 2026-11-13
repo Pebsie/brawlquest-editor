@@ -420,7 +420,7 @@ const BQ = (() => {
         items: q("SELECT * FROM items ORDER BY Name"),
         loot: q("SELECT * FROM loot ORDER BY EnemyID, id"),
         crafts: has("craft") ? q("SELECT id, ItemID FROM craft") : [],
-        itemTypes: q("SELECT DISTINCT Type FROM items WHERE Type <> '' ORDER BY Type").map(r => r.Type),
+        itemTypes: q("SELECT DISTINCT Type FROM items WHERE Type <> '' AND Type <> 'shield' ORDER BY Type").map(r => r.Type),
         subtypes: q("SELECT DISTINCT Subtype FROM items WHERE Subtype <> '' ORDER BY Subtype").map(r => r.Subtype),
       };
     },

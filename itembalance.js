@@ -2,7 +2,7 @@
 // Item editor Balance panel. Suggested level is a least-squares fit of
 // required level (Worth) from Val and stat bonuses, using the items currently
 // in the open database, per type (and falling back to the same slot family).
-// Gear only: weapons, armour and shields. Other types have no level curve like
+// Gear only: weapons and armour. Other types have no level curve like
 // that, so the panel just compares them to others of the same type.
 //
 // For a type (or family) the fit is:
@@ -14,17 +14,16 @@ const BQItemBal = (() => {
   const STATS = ["STR", "INT", "STA"];
   const MAX_LEVEL = 40;
   const TOOL = /Pickaxe|Fishing Rod|Trident/;
-  const GEAR = new Set(["wep", "arm_head", "arm_chest", "arm_legs", "arm_leg", "shield"]);
+  const GEAR = new Set(["wep", "arm_head", "arm_chest", "arm_legs", "arm_leg"]);
   const FAMILY = {
     wep: ["wep"],
     arm_head: ["arm_head", "arm_chest", "arm_legs", "arm_leg"],
     arm_chest: ["arm_head", "arm_chest", "arm_legs", "arm_leg"],
     arm_legs: ["arm_head", "arm_chest", "arm_legs", "arm_leg"],
-    arm_leg: ["arm_head", "arm_chest", "arm_legs", "arm_leg"],
-    shield: ["shield"]
+    arm_leg: ["arm_head", "arm_chest", "arm_legs", "arm_leg"]
   };
-  const TYPE_WORDS = { wep: "weapons", arm_head: "head pieces", arm_chest: "chest pieces", arm_legs: "leg pieces", arm_leg: "leg pieces", shield: "shields" };
-  const famLabel = { wep: "weapons", arm_head: "armour", arm_chest: "armour", arm_legs: "armour", arm_leg: "armour", shield: "shields" };
+  const TYPE_WORDS = { wep: "weapons", arm_head: "head pieces", arm_chest: "chest pieces", arm_legs: "leg pieces", arm_leg: "leg pieces" };
+  const famLabel = { wep: "weapons", arm_head: "armour", arm_chest: "armour", arm_legs: "armour", arm_leg: "armour" };
 
   const numVal = it => { const n = parseInt(it && it.Val, 10); return Number.isFinite(n) ? n : null; };
   const worth = it => Math.max(0, +((it && it.Worth) || 0));
