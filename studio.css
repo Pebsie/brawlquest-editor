@@ -17,7 +17,7 @@
 .qs-tab,.qs-btn,.qs-mini,.qs-x,.qs-type,.qs-seg button{flex:none;font:16px/16px BMmini,monospace;background:#000;color:#fff;border:2px solid #fff;border-radius:0;padding:5px 9px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;box-shadow:2px 2px 0 #000}
 .qs-tab:hover,.qs-btn:hover,.qs-mini:hover,.qs-x:hover,.qs-type:hover,.qs-seg button:hover,.qs-tab.on,.qs-btn.on,.qs-type.on,.qs-seg button.on{background:var(--hot)}
 .qs-btn.hot{border-color:var(--gold);color:var(--gold)}
-.qs-btn.big{font-size:16px;padding:9px 16px}
+.qs-btn.big{font-size:16px;padding:9px 16px;width:auto;height:auto}
 .qs-btn:disabled{opacity:.4;cursor:default;background:#000}
 .qs-mini{font:16px/16px rainyhearts,sans-serif;padding:1px 6px;border-width:1px;box-shadow:none}
 .qs-mini.add{margin:4px 0 0 44px}
@@ -575,3 +575,83 @@ button.qs-tag{font:15px rainyhearts,sans-serif}
 .qs-sfx button:hover{background:var(--hot)}
 .qs-sfx .sfx-add{border-color:var(--gold);color:var(--gold);margin-left:0}
 .qs-sfx .sfx-x{color:var(--err)}
+
+/* Quick quest (quickquest.js): one idea at a time, the game's look beside it. */
+.qq{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,460px);gap:16px;padding:14px 16px;min-height:0;max-width:1400px;margin:0 auto;width:100%}
+.qq-flow,.qq-side{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:12px;padding-bottom:40px}
+.qq-side{position:relative}
+.qq-flow.made .qq-card{opacity:.45;pointer-events:none}
+.qq-intro h2{font:16px BMmini,monospace;color:var(--gold);margin:4px 0 6px;font-weight:normal;letter-spacing:1px}
+.qq-intro p{margin:0 0 6px;color:var(--dim);font-size:18px}
+.qq-card{background:var(--panel);border:2px solid var(--line);box-shadow:4px 4px 0 #000}
+.qq-card.done:not(.open){border-color:#555}
+.qq-chead{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bar)}
+.qq-chead h3{font:16px BMmini,monospace;margin:0;font-weight:normal;color:#fff;white-space:nowrap}
+.qq-num{width:26px;height:26px;flex:none;display:inline-flex;align-items:center;justify-content:center;background:var(--hot);border:2px solid #fff;font:16px BMmini,monospace}
+.qq-card.done .qq-num{background:#2f5f2f}
+.qq-sum{display:flex;align-items:center;gap:4px;color:var(--ink);font-size:18px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qq-sum small{color:var(--dim)}
+.qq-cbody{padding:12px;display:flex;flex-direction:column;gap:10px}
+.qq-cbody > .qs-btn,.qq-cbody > .qs-mini,.qq-pick > .qs-mini{align-self:flex-start}
+.qq-zones{display:flex;flex-wrap:wrap;gap:6px}
+.qq-zone{font:17px rainyhearts,sans-serif;background:#000;color:#ddd;border:1px solid var(--line);padding:3px 9px;cursor:pointer}
+.qq-zone small{color:var(--dim)}
+.qq-zone.on,.qq-zone:hover{background:var(--hot);color:#fff;border-color:#fff}
+.qq-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.qq-pc{display:flex;flex-direction:column;align-items:center;gap:3px;background:#1b1b1b;border:2px solid #444;color:#fff;padding:6px 4px;cursor:pointer;font:17px/1.05 rainyhearts,sans-serif;text-align:center}
+.qq-pc:hover,.qq-pc.on{border-color:var(--gold);background:#2b2414}
+.qq-pc small{color:var(--dim);font-size:15px}
+.qq-pc .qs-scene.small{width:80px;height:80px}
+.qq-pc .pc{width:48px;height:48px;object-fit:contain}
+.qq-types{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.qq-type{display:flex;align-items:center;gap:10px;background:#000;border:2px solid #fff;color:#fff;padding:10px 12px;cursor:pointer;font:20px rainyhearts,sans-serif;box-shadow:2px 2px 0 #000;text-align:left}
+.qq-type:hover{background:var(--hot)}
+.qq-type .ti,.qq-sentence .ti{width:28px;height:28px;object-fit:contain}
+.qq-obj{border:1px dashed #666;padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:#202020}
+.qq-obj.ready{border-style:solid;border-color:#777}
+.qq-sentence{display:flex;align-items:center;gap:8px;font:22px rainyhearts,sans-serif;flex-wrap:wrap}
+.qq-sentence > span:not(.qs-sp){display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.qq-sentence i{color:var(--gold)}
+.qq-thing{display:inline-flex;align-items:center;gap:4px;border-bottom:2px solid var(--gold)}
+.qq-count{display:inline-flex;align-items:center;gap:4px}
+.qq-count b{min-width:26px;text-align:center;color:var(--gold)}
+.qq-note{margin-left:36px}
+.qq-pick{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.qq-pick canvas{max-width:100%;border:1px solid var(--line);cursor:crosshair}
+.qq-lab{display:flex;flex-direction:column;gap:4px;color:var(--dim);font-size:17px}
+.qq-lab textarea{width:100%;resize:vertical}
+.qq-grid{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px 12px;align-items:center}
+.qq-grid > label{color:var(--dim);font-size:17px}
+.qq-title{width:100%;max-width:420px}
+.qq-who{display:inline-flex;align-items:center;gap:6px;background:#000;border:1px solid var(--line);color:#fff;padding:2px 8px;font:18px rainyhearts,sans-serif;cursor:pointer}
+.qq-rw{font-size:19px}
+.qq-rw b{color:var(--gold);font-weight:normal}
+.qq-more{border-top:1px solid #444;padding-top:8px}
+.qq-more summary{cursor:pointer;color:var(--dim);font-size:18px;margin-bottom:8px}
+.qq-more .qs-sel{max-width:100%}
+.qq-log .qq-logb{padding:12px 14px;background:#141414;display:flex;flex-direction:column;gap:6px;font:18px rainyhearts,sans-serif}
+.qq-lt{font-size:24px;color:#fff}
+.qq-ll{color:#b3b3b3;font-size:15px;letter-spacing:.5px}
+.qq-lstat{color:#f2cc59}
+.qq-ls{color:#a6a6a6}.qq-ls.now{color:#fff}
+.qq-lh{color:#99ccff;margin-left:24px}
+.qq-lr{color:#ffd933;margin-top:4px}
+.qq-talk .qs-scene{width:120px;height:120px}
+.qq-tabs{display:inline-flex;gap:4px}
+.qq-tabs .on{background:var(--hot)}
+.qq-checks .qs-wbody{display:flex;flex-direction:column;gap:6px;padding:10px}
+.qq-chk{font-size:17px;border-left:4px solid var(--info);padding:2px 8px;background:#1b1b1b}
+.qq-chk b{font-weight:normal;font-family:BMmini,monospace;font-size:12px;margin-right:4px}
+.qq-chk.err{border-color:var(--err)}.qq-chk.err b{color:var(--err)}
+.qq-chk.warn{border-color:var(--warn)}.qq-chk.warn b{color:var(--warn)}
+.qq-chk.info b{color:var(--info)}
+.qq-chk.ok{border-color:#6c6}
+#qq-make[disabled]{opacity:.45;cursor:not-allowed;background:#000}
+.qq-made .qs-wbody{padding:12px}
+.qq-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+@media (max-width: 900px){
+  .qq{display:flex;flex-direction:column;overflow:auto;padding:10px}
+  .qq-flow,.qq-side{overflow:visible;flex:none;padding-bottom:10px}
+  .qq-cards{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+  .qq-grid{grid-template-columns:1fr}
+}

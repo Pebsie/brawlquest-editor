@@ -254,6 +254,7 @@ function qsRerender() {
   else if (QS.view === "npc") qsNpcSheet(body, +QS.arg);
   else if (QS.view === "play") qsPlay(body);
   else if (QS.view === "new") { qsJourney(body); qsNewQuest(QS.arg ? +QS.arg : 0); }
+  else if (QS.view === "quick") qsQuick(body, QS.arg);
   else qsJourney(body);
   qsBar();
 }
@@ -263,6 +264,7 @@ function qsNav() {
   const tab = (v, label, icon) => h("button", { class: "qs-tab" + (QS.view === v || (v === "cast" && QS.view === "npc") ? " on" : ""), onclick: () => qsGo(v) }, pix(icon, "ico"), label);
   return h("div", { class: "qs-nav" },
     h("span", { class: "qs-logo" }, "QUEST STUDIO"),
+    tab("quick", "Quick quest", "assets/ui/studio/alert.png"),
     tab("journey", "Journey", "assets/ui/studio/arrow.png"),
     tab("cast", "Cast", "assets/npc/Adventurer.png"),
     tab("play", "Playtest", "assets/ui/studio/xp.png"),
@@ -1351,7 +1353,7 @@ function qsNewQuest(afterId, giverId, o = {}) {
     else if (st.type === "talk") cfg = h("button", { class: "qs-btn", onclick: () => qsPickModal("Talk to whom?", npcEntries(), v => { st.npc = +v; draw(); }) }, S.npcBy[st.npc] ? [pix(S.npcBy[st.npc].ImgPath, "mi"), " " + S.npcBy[st.npc].Name] : "pick who");
     else if (st.type === "use") { const s = h("select", { class: "qs-sel" }, USE_ACTIONS.map(a => h("option", { value: a }, a))); s.value = st.use; s.onchange = () => (st.use = s.value); cfg = h("div", { class: "qs-row" }, s, h("label", {}, " times ", numIn("count"))); }
     else cfg = h("div", { class: "hint" }, "Build anything (use: build). Your plot or a free-build area.");
-    body.replaceChildren(
+    body.replaceChildren(...[
       h("div", { class: "qs-step1" }, h("h4", {}, "1. Who asks?"),
         h("div", { class: "qs-row wrap" }, h("button", { class: "qs-portrait", onclick: () => qsPickModal("Who gives it?", npcEntries(), v => { st.Giver = +v; const n = S.npcBy[v]; st.x = n.SpawnX + 5; st.y = n.SpawnY; if (!after) st.Zone = zoneAt(n.SpawnX, n.SpawnY); draw(); }) }, g ? pix(g.ImgPath, "big") : h("span", { class: "big none" }, "?")),
           h("div", {}, h("b", {}, g ? g.Name : "Pick a giver"), h("br"), h("small", {}, "hand in to "), h("button", { class: "qs-mini", onclick: () => qsPickModal("Who takes the hand-in?", npcEntries(), v => { st.TurnIn = +v; draw(); }) }, t ? t.Name : "same person")))),
@@ -1365,7 +1367,7 @@ function qsNewQuest(afterId, giverId, o = {}) {
           h("span", { class: "hint" }, st.daily ? (st.type === "kill" || st.type === "boss" ? "Each enemy you picked is one possible pick: a different one each day, with {mob} and {count} in the text." : st.type === "collect" ? "The item becomes the {item} list: add more in the quest sheet." : st.type === "reach" ? "The spot becomes the {place} list: add more in the quest sheet." : "Repeatable once a day; add variables in the quest sheet.") : "Done once per character."))] : null,
       h("details", { class: "qs-more" }, h("summary", {}, `Level ${st.Level} (min ${st.MinLevel}) - ${st.XP} XP - ${st.Gold} gold - ${st.Zone || "no zone"} `, h("small", {}, "suggested from nearby quests")),
         h("div", { class: "qs-grid2" }, h("label", {}, "Level"), numIn("Level"), h("label", {}, "Min level"), numIn("MinLevel"), h("label", {}, "XP"), numIn("XP"), h("label", {}, "Gold"), numIn("Gold"), h("label", {}, "Zone"), txtIn("Zone", "zone", "qs-zones"))),
-      h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot big", onclick: create }, "Make the quest"), h("span", { class: "hint" }, after ? `It unlocks when “${after.Title}” is done.` : "No prerequisite: it's on offer from the start (link it on the map).")));
+      h("div", { class: "qs-row" }, h("button", { class: "qs-btn hot big", onclick: create }, "Make the quest"), h("span", { class: "hint" }, after ? `It unlocks when “${after.Title}” is done.` : "No prerequisite: it's on offer from the start (link it on the map)."))].flat().filter(Boolean));
   };
   const numIn = k => { const i = h("input", { type: "number", class: "qs-in num", value: st[k] }); i.oninput = () => (st[k] = +i.value); return i; };
   const txtIn = (k, ph, list) => { const i = h("input", { class: "qs-in", value: st[k], placeholder: ph }); if (list) i.setAttribute("list", list); i.oninput = () => (st[k] = i.value); return i; };
