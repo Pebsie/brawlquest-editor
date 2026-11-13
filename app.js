@@ -177,7 +177,7 @@ const parseJSON = (s, d) => { try { return JSON.parse(s || ""); } catch { return
 
 // ------------------------------------------------------------------ list helper
 function listPanel(items, label, selKey, onPick, onNew) {
-  const box = h("div", { class: "list" });
+  const box = h("div", { class: "list", "data-scroll": "list:" + (S.tab || "") });
   const q = h("input", { type: "search", placeholder: "Filter…" });
   const rows = h("div");
   const draw = () => {
@@ -713,7 +713,7 @@ function imgFor(path) {
 function renderMap(m) {
   const cv = h("canvas", { id: "map", tabindex: 0 });
   const wrap = h("div", { class: "mapwrap" }, cv);
-  const side = h("div", { class: "side" + (M.tool === "paint" || M.tool === "spawn" ? " wide" : "") });
+  const side = h("div", { class: "side" + (M.tool === "paint" || M.tool === "spawn" ? " wide" : ""), "data-scroll": "side:" + (M.tool || "") });
   m.append(wrap, side);
   M.cv = cv; M.side = side; M.usage = null;
   if (S.focus) { M.cx = S.focus.x; M.cy = S.focus.y; M.scale = 24; S.focus = null; }
@@ -1852,6 +1852,7 @@ async function renderTab() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
   if (!S.routing && TABS.includes(S.tab) && !/^#(quest|npc|item|loot|mob|effect|dialog|map|plot|studio|sounds)\//.test(location.hash)) syncHash("#" + S.tab);
   document.body.classList.toggle("in-studio", S.tab === "studio");
+  return BQScroll.run(async () => {
   const m = $("#main"); m.textContent = ""; window.onmousemove = window.onmouseup = null; M.cv = null;
   try {
     if (S.tab === "map") { if (!S.world) { status("Loading world…"); await loadWorld(); status(""); } renderMap(m); }
@@ -1870,6 +1871,7 @@ async function renderTab() {
     else if (S.tab === "dialog") renderOrphan(m);
     else await renderExport(m);
   } catch (e) { status(e.message, true); }
+  });
 }
 
 document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => { switchTab(b.dataset.tab); setMenu(false); }));

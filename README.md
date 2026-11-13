@@ -526,6 +526,7 @@ Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
 `headless-mob-sprites.mjs` (monster sprite groups in the mob picker),
 `balance.test.mjs` (the balance guide's maths against the API's cases),
 `headless-balance.mjs` (speed, passive, sleeps at night, flip and the guide) and
+`headless-scroll.mjs` (scroll position and input focus stay put when a panel re-renders),
 `headless-github.mjs` (GitHub sync against a mocked api.github.com,
 `tests/github-mock.mjs`; it never talks to GitHub).
 
