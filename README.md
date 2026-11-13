@@ -491,7 +491,7 @@ same .db is opened): `#npc/ID`, `#quest/ID`, `#quest/ID/line/Offer`,
 ## Sprites
 
 Sprite pickers (paint brush, mobs, NPC sprite, item image) show thumbnails of
-whatever art source is selected here. The **Sprites** tab picks where art comes from:
+whatever art source is selected here. Large sets (the item picker's Everything chip, All world art, and so on) load in batches as you scroll — you can browse every sprite without searching — with a count such as “Showing 160 of 1995”; search still filters the full set and starts again from the top. The **Sprites** tab picks where art comes from:
 
 * **Bundled** (default): `assets/` here, a copy of the client's `new-ui` art.
 * **Local folder**: pick your `BrawlQuest-Client` folder for the newest art.
@@ -527,7 +527,7 @@ Tests: `node tests/mobsim.test.cjs` (preview simulator vs the API rules);
 `headless-mob-sprites.mjs` (monster sprite groups in the mob picker),
 `balance.test.mjs` (the balance guide's maths against the API's cases),
 `headless-balance.mjs` (speed, passive, sleeps at night, flip and the guide) and
-`headless-scroll.mjs` (scroll position and input focus stay put when a panel re-renders), `headless-list-filter.mjs` (list search, filtered rows and scroll stay when you pick a row),
+`headless-scroll.mjs` (scroll position and input focus stay put when a panel re-renders), `headless-list-filter.mjs` (list search, filtered rows and scroll stay when you pick a row), `headless-picker-page.mjs` (the Everything sprite picker pages in as you scroll),
 `headless-github.mjs` (GitHub sync against a mocked api.github.com,
 `tests/github-mock.mjs`; it never talks to GitHub).
 
