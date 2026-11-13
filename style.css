@@ -99,6 +99,8 @@ img.missing{opacity:.25}
 .picker-chips button.on{background:#3b6fd4;border-color:#4f80e0;color:#fff}
 .picker-recent{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;overflow:auto;overflow-anchor:none;max-height:50vh;padding:2px;align-content:start}
+.picker-count{font-size:13px;color:#9ab;margin:0 2px}
+.picker-sentinel{grid-column:1/-1;height:1px;pointer-events:none}
 .pcell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;background:#0f1216;border:2px solid #2e3440;border-radius:5px;min-width:0}
 .pcell:hover{border-color:#6b8fd8;background:#18202c}
 .pcell.sel{border-color:#ffd34d;background:#3a3214;box-shadow:0 0 0 2px #ffd34d55}

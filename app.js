@@ -602,10 +602,22 @@ function recentGet(key) { try { return JSON.parse(localStorage.getItem("bqRecent
 function recentPush(key, v) { const r = recentGet(key).filter(x => x !== v); r.unshift(v); localStorage.setItem("bqRecent-" + key, JSON.stringify(r.slice(0, RECENT_MAX))); }
 const spriteLabel = p => String(p || "").split("/").pop().replace(/\.png$/i, "");
 function spritePicker(o) {
-  let group = o.group || (o.groups()[0] || {}).id, filter = "";
+  const PAGE = 160;
+  S.pickerUi = S.pickerUi || {};
+  const sk = o.recentKey || o.title || "picker";
+  const st = S.pickerUi[sk] || (S.pickerUi[sk] = { filter: "", group: null, shown: PAGE, scroll: 0 });
+  const groupsNow = () => o.groups() || [];
+  const groupOk = g => groupsNow().some(x => x.id === g);
+  let group = (st.group && groupOk(st.group) ? st.group : null) || o.group || (groupsNow()[0] || {}).id;
+  let filter = st.filter || "";
+  let shown = Math.max(PAGE, st.shown || PAGE);
+  let gen = 0;
   const box = h("div", { class: "picker" });
-  const q = h("input", { type: "search", class: "picker-q", placeholder: o.placeholder || "Search sprites by name…" });
-  const chips = h("div", { class: "picker-chips" }), recent = h("div", { class: "picker-recent" }), grid = h("div", { class: "picker-grid" });
+  const q = h("input", { type: "search", class: "picker-q", placeholder: o.placeholder || "Search sprites by name…", value: filter });
+  const chips = h("div", { class: "picker-chips" }), recent = h("div", { class: "picker-recent" });
+  const count = h("div", { class: "hint picker-count" });
+  const grid = h("div", { class: "picker-grid", "data-scroll": "picker:" + sk });
+  const sentinel = h("div", { class: "picker-sentinel", "aria-hidden": "true" });
   if (o.height) grid.style.maxHeight = o.height;
   const cell = (e, small) => {
     const c = h("button", { type: "button", class: "pcell" + (e.value === box.value ? " sel" : "") + (small ? " small" : ""), title: e.value || o.noneLabel || "none",
@@ -615,30 +627,95 @@ function spritePicker(o) {
     c.dataset.value = e.value;
     return c;
   };
-  const draw = () => {
-    const groups = o.groups(), byVal = new Map();
+  const currentList = () => {
+    const groups = groupsNow(), byVal = new Map();
     for (const g of groups) for (const e of g.entries) if (!byVal.has(e.value)) byVal.set(e.value, e);
-    chips.replaceChildren(...groups.map(g => h("button", { type: "button", class: g.id === group ? "on" : "", onclick: () => { group = g.id; draw(); } }, `${g.label} (${g.entries.length})`)));
+    const f = filter.trim().toLowerCase();
+    const list = f ? [...byVal.values()].filter(e => (e.value + " " + (e.label || "")).toLowerCase().includes(f))
+      : (groups.find(g => g.id === group) || groups[0] || { entries: [] }).entries;
+    return { groups, byVal, list, f };
+  };
+  const updateCount = list => {
+    const n = Math.min(shown, list.length);
+    count.textContent = list.length ? `Showing ${n} of ${list.length}` : "";
+    count.hidden = !list.length;
+  };
+  const fillRecent = byVal => {
     const rec = recentGet(o.recentKey).filter(v => byVal.has(v));
     recent.replaceChildren(...(rec.length ? [h("span", { class: "plabel" }, "Recent:"), ...rec.map(v => cell(byVal.get(v), true))] : []));
-    const f = filter.trim().toLowerCase();
-    let list = f ? [...byVal.values()].filter(e => (e.value + " " + (e.label || "")).toLowerCase().includes(f))
-      : (groups.find(g => g.id === group) || groups[0] || { entries: [] }).entries;
-    const cells = o.allowNone && !f ? [cell({ value: "", img: null, label: o.noneLabel || "None" })] : [];
-    for (const e of list.slice(0, 500)) cells.push(cell(e));
-    grid.replaceChildren(...cells);
-    if (list.length > 500) grid.append(h("div", { class: "hint wide" }, `${list.length - 500} more. Type to narrow it down.`));
-    if (!cells.length) grid.append(h("div", { class: "hint wide" }, "No sprites match."));
   };
-  const pick = v => { box.value = v; if (v) recentPush(o.recentKey, v); draw(); o.onPick(v); };
-  q.addEventListener("input", () => { filter = q.value; draw(); });
+  let io = null;
+  const stopIo = () => { if (io) { io.disconnect(); io = null; } };
+  const nearBottom = () => grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 240;
+  const loadMore = () => {
+    const { list } = currentList();
+    if (shown >= list.length) { if (sentinel.parentNode) sentinel.remove(); updateCount(list); return; }
+    const start = shown;
+    shown = Math.min(list.length, shown + PAGE);
+    st.shown = shown;
+    const frag = document.createDocumentFragment();
+    for (const e of list.slice(start, shown)) frag.append(cell(e));
+    if (sentinel.parentNode) grid.insertBefore(frag, sentinel);
+    else grid.append(frag);
+    if (shown >= list.length && sentinel.parentNode) sentinel.remove();
+    updateCount(list);
+    if (shown < list.length && grid.scrollHeight <= grid.clientHeight + 40) loadMore();
+  };
+  const watch = () => {
+    stopIo();
+    if (!sentinel.parentNode) return;
+    if (typeof IntersectionObserver === "function") {
+      io = new IntersectionObserver(ents => { if (ents.some(e => e.isIntersecting)) loadMore(); }, { root: grid, rootMargin: "240px" });
+      io.observe(sentinel);
+    }
+    if (nearBottom()) loadMore();
+  };
+  const draw = resetPage => {
+    const my = ++gen;
+    const { groups, byVal, list, f } = currentList();
+    if (resetPage) { shown = PAGE; st.shown = PAGE; st.scroll = 0; }
+    shown = Math.min(Math.max(shown, PAGE), Math.max(list.length, 0) || 0);
+    if (!list.length) shown = 0;
+    st.group = group; st.filter = filter; st.shown = shown;
+    chips.replaceChildren(...groups.map(g => h("button", { type: "button", class: g.id === group ? "on" : "", onclick: () => { group = g.id; st.group = g.id; grid.scrollTop = 0; if (typeof BQScroll !== "undefined" && BQScroll.note) BQScroll.note(grid); draw(true); } }, `${g.label} (${g.entries.length})`)));
+    fillRecent(byVal);
+    const cells = o.allowNone && !f ? [cell({ value: "", img: null, label: o.noneLabel || "None" })] : [];
+    const n = Math.min(shown, list.length);
+    for (const e of list.slice(0, n)) cells.push(cell(e));
+    stopIo();
+    grid.replaceChildren(...cells);
+    if (n < list.length) grid.append(sentinel);
+    if (!cells.length) grid.append(h("div", { class: "hint wide" }, "No sprites match."));
+    updateCount(list);
+    const keep = resetPage ? 0 : (st.scroll || 0);
+    const place = () => {
+      if (my !== gen) return;
+      grid.scrollTop = keep;
+      if (typeof BQScroll !== "undefined" && BQScroll.note) BQScroll.note(grid);
+      watch();
+    };
+    requestAnimationFrame(place);
+  };
+  const pick = v => {
+    box.value = v;
+    if (v) recentPush(o.recentKey, v);
+    for (const c of box.querySelectorAll(".pcell")) c.classList.toggle("sel", (c.dataset.value || "") === (v || ""));
+    fillRecent(currentList().byVal);
+    o.onPick(v);
+  };
+  q.addEventListener("input", () => { filter = q.value; st.filter = filter; grid.scrollTop = 0; if (typeof BQScroll !== "undefined" && BQScroll.note) BQScroll.note(grid); draw(true); });
+  grid.addEventListener("scroll", () => { st.scroll = grid.scrollTop; if (nearBottom()) loadMore(); }, { passive: true });
   box.value = o.value;
-  box.setValue = v => { box.value = v; draw(); };
-  box.setGroups = (groups, g) => { o.groups = groups; group = g || (groups()[0] || {}).id; draw(); };
-  box.append(q, chips, recent, grid);
-  draw();
+  box.setValue = v => {
+    box.value = v;
+    for (const c of box.querySelectorAll(".pcell")) c.classList.toggle("sel", (c.dataset.value || "") === (v || ""));
+  };
+  box.setGroups = (groups, g) => { o.groups = groups; group = g || (groups()[0] || {}).id; st.group = group; draw(true); };
+  box.append(q, chips, recent, count, grid);
+  draw(false);
   return box;
 }
+
 function openPicker(o) {
   const close = () => { ov.remove(); document.removeEventListener("keydown", esc, true); };
   const esc = e => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
