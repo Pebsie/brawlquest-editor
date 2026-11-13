@@ -79,3 +79,33 @@ server maths changes, the Go test fails until the file is regenerated
   middling level; the quest chip is usually the better guide.
 * The chart's "out of line" list is a prompt, not a verdict: no XP at its level,
   150+ kills a level, gone in one swing, or past elite for an ordinary mob.
+
+# Balance panel (Items tab)
+
+Under every item's form. For gear (weapons, armour, shields) it suggests a
+level from the stats you have typed, next to the item's required level
+(`Worth`), and compares it to other items of the same type around that level.
+
+## The formula
+
+There is no hard-coded budget. Each time the panel draws, it looks at the
+other items of that type in the open database (pickaxes, fishing rods and the
+trident are left out of the weapon fit) and fits
+
+    suggested level ≈ a + b × Val + c × (STR + INT + STA)
+
+by ordinary least squares, with a little ridge so a thin set of items doesn't
+blow up. `b` has to come out positive. If the stat-bonus term is unusable
+(negative, or there aren't enough items with bonuses) it is dropped and the
+fit is Val only. If that type has fewer than three usable items, the same
+family is used instead (all armour slots together; shields stay on their own).
+
+Power, used to rank peers, is `Val + (c / b) × stat bonuses` — Val plus how
+much Val one bonus point is worth on this type.
+
+Consumables, mounts, reagents and the rest are not level-gated the same way,
+so the panel does not invent a suggested level for them; it only compares Val
+(and cooldown, when it matters) to others of the same type.
+
+The coefficients are printed at the bottom of the panel, in plain words, from
+the current database.

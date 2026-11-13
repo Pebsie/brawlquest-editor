@@ -1853,6 +1853,7 @@ function itemForm(form, it) {
     Desc: area(it.Desc), Worth: num(it.Worth), Subtype: typeSelect((S.c.subtypes || []).concat(["None"]), it.Subtype || "None"),
     Cooldown: num(it.Cooldown),
   };
+  f.Name.dataset.k = "Name"; f.Val.dataset.k = "Val"; f.Worth.dataset.k = "Worth"; f.Cooldown.dataset.k = "Cooldown"; f.Desc.dataset.k = "Desc";
   let imgPath = it.ImgPath;
   const img = sprite(imgPath);
   const imgIn = assetInput(imgPath, v => { imgPath = v; img.src = assetURL(v); });
@@ -1882,7 +1883,7 @@ function itemForm(form, it) {
     h("div", { class: "grid" },
       field("Name", f.Name), field("Image", h("div", {}, img, " ", h("button", { onclick: pickImg }, "Pick…"), " ", imgIn)), field("Type", f.Type),
       field("Val", h("div", {}, f.Val, h("div", { class: "hint" }, "Power for gear, HP for potions, mount speed, spell id… depends on Type."))),
-      field("Description", f.Desc), field("Worth", f.Worth), field("Attributes", attrBox),
+      field("Description", f.Desc), field("Worth", h("div", {}, f.Worth, h("div", { class: "hint" }, "For gear, the level you have to be to use it."))), field("Attributes", attrBox),
       field("Subtype", h("div", {}, f.Subtype, h("div", { class: "hint" }, "Gear weight (Light / Medium / Heavy / High Mastery) or None."))),
       field("Cooldown", h("div", {}, f.Cooldown, " seconds"))),
     h("p", { class: "hint" }, "Ids 1-3 (starter gear), 11 (Gold), 23, 53, 116-118 and 135 are used by the game code: edit them but don't delete them."),
@@ -1893,6 +1894,7 @@ function itemForm(form, it) {
     h("h3", {}, "Dropped by"),
     drops.length ? drops.map(l => h("div", {}, `${(S.enemyBy[l.EnemyID] || {}).Name || "#" + l.EnemyID}: ${l.Chance}% × ${l.Amount} (±${l.AmountVariance})`)) : h("div", { class: "hint" }, "Nothing drops this."),
     h("p", { class: "hint" }, "Edit drops in the Loot tab."));
+  if (typeof BQItemBal !== "undefined" && BQItemBal.mount) BQItemBal.mount(form, collect);
 }
 
 // ------------------------------------------------------------------ loot
