@@ -18,7 +18,7 @@ const QS = {
 };
 const QS_ICON = { kill: "assets/ui/studio/target.png", boss: "assets/ui/studio/crown.png", collect: "assets/ui/studio/loot.png", talk: "assets/ui/studio/alert.png",
   reach: "assets/ui/studio/arrow.png", use: "assets/ui/studio/alert-item.png", craft: "assets/items/reagent/Hilt.png", equip: "assets/items/reagent/Metal.png", level: "assets/ui/studio/xp.png" };
-const USE_ACTIONS = ["swing", "shield", "sprint", "potion", "mount", "spell", "build", "stat", "forge", "party", "enchant"];
+const USE_ACTIONS = ["swing", "sprint", "potion", "mount", "spell", "build", "stat", "forge", "party", "enchant"];
 const LINE_COLOURS = ["#f2cc59", "#7ac8ff", "#99e699", "#ff9ad5", "#ffb45a", "#c59bff", "#6be3d6", "#ff7b6b", "#d8e07a", "#a0a8ff"];
 const qsImg = p => assetURL(p && p !== "None" ? p : "assets/npc/Person.png");
 const pix = (path, cls, title) => h("img", { class: "px " + (cls || ""), src: qsImg(path), alt: "", title: title || null, draggable: "false", onerror: e => { e.target.src = "assets/error.png"; } });

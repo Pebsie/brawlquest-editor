@@ -1,6 +1,6 @@
 "use strict";
 
-const ITEM_TYPES = ["wep","arm_head","arm_chest","arm_legs","arm_leg","shield","mount","hp_potion","mana_potion","spell","reagent","buddy","currency","quest","furniture","floor","wall","ore"];
+const ITEM_TYPES = ["wep","arm_head","arm_chest","arm_legs","arm_leg","mount","hp_potion","mana_potion","spell","reagent","buddy","currency","quest","furniture","floor","wall","ore"];
 const ITEM_SUBTYPES = ["None","Light","Medium","Heavy","High Mastery"];
 const QUEST_TYPES = ["kill","gather","go"];
 const SPELL_NAMES = ["Spawn","Death","Spawn At Target","Spawn Nearby","Poison","Spawn on Death"];

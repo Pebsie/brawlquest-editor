@@ -46,7 +46,7 @@ server maths changes, the Go test fails until the file is regenerated
   had at all: a drop, a craft, a quest reward or the starting kit. Staves,
   pickaxes, rods and the trident are left out. "A few levels behind" (the
   default) caps the gear at five levels under theirs; "the best they can get"
-  does not. Shields only count while blocking, so they are left out.
+  does not.
 * **Swings.** A swing costs 10 stamina and standing still refills 20 a second,
   so 2 swings a second is what anyone can keep up; crits make that 1.2x on
   average. Every swing lands.

@@ -436,7 +436,7 @@ const STEP_HELP = {
   boss: "Target = boss enemy name (\"+ also counts\" for more than one)",
   collect: "Target = item name; Consume takes the items at hand-in. \"+ also counts\" adds more items: held amounts add up, Consume takes them in list order",
   talk: "Talk to an NPC; Line is what they say", reach: "Walk within Radius tiles of X,Y",
-  use: "Target = action: swing, shield, sprint, potion, mount, spell, build, stat, forge, party, enchant…",
+  use: "Target = action: swing, sprint, potion, mount, spell, build, stat, forge, party, enchant…",
   craft: "Target = item name crafted", equip: "Target = item name or slot", level: "Count = level to reach",
 };
 
@@ -653,7 +653,7 @@ function questForm(form, q) {
       field("Summary", f.Summary),
       saved ? null : [field("Offer", f.Offer), field("Accept", f.Accept), field("In progress", f.Progress), field("Complete", f.Complete)],
       field("XP / Gold", h("div", {}, f.XP, " XP  ", f.Gold, " gold"))),
-    h("p", { class: "hint" }, "Text can use {SHIELD}, {INTERACT}, {MOUNTS}, {CHARACTER} for the player's keys."),
+    h("p", { class: "hint" }, "Text can use {INTERACT}, {MOUNTS}, {CHARACTER} for the player's keys."),
     saved ? questDialogueEmbed(q) : q.id ? (conv = questConversation(q, f, steps, stepBox)) : h("p", { class: "hint" }, "Save the quest to write its conversations: greeting, offer and answers, talk objectives, hand-in."),
     h("h3", {}, "Steps"),
     h("label", { class: "chk", title: "Off: every objective counts at once (kill 3 Spiders and kill 3 Cave Spiders fill together). On: one objective at a time, in order: only the current one counts." },
@@ -2123,7 +2123,7 @@ function questConversation(q, f, steps, stepBox) {
     });
     b.append(speaker, ta, h("div", { class: "bar", style: "margin:4px 0 0" },
       h("button", { class: "primary", onclick: () => done(true) }, "Save"), h("button", { onclick: () => done(false) }, "Cancel"),
-      h("span", { class: "hint" }, "Enter saves, Shift+Enter new line, Esc cancels. Tokens like {SHIELD} and {INTERACT} are kept as typed.")));
+      h("span", { class: "hint" }, "Enter saves, Shift+Enter new line, Esc cancels. Tokens like {INTERACT} are kept as typed.")));
     requestAnimationFrame(() => { grow(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); });
     return b;
   }

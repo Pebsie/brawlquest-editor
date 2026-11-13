@@ -65,7 +65,7 @@ const pick = B.analyse(items.find(i => i.id === 42), items);
 ok(pick.tool, "a pickaxe is treated as a tool, not on the weapon curve");
 
 const shield = B.analyse(items.find(i => i.id === 51), items);
-ok(shield.suggested && Math.abs(shield.suggested.level - 10) <= 3, "Iron Shield suggests around 10, got ~" + (shield.suggested && shield.suggested.level));
+ok(!shield.suggested && !shield.gear, "a shield is not on the gear curve");
 
 // live fit against the real db, when asked
 const db = process.env.ITEM_DB;

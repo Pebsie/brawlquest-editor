@@ -109,7 +109,7 @@ const BQDB = (() => {
   /** Validate references before download. Never recreate schema — only UPDATE/INSERT. */
   function validateContent() {
     const issues = [];
-    const ITEM_TYPES = new Set(["wep","arm_head","arm_chest","arm_legs","arm_leg","shield","mount","hp_potion","mana_potion","spell","reagent","buddy","currency","quest","furniture","floor","wall","ore"]);
+    const ITEM_TYPES = new Set(["wep","arm_head","arm_chest","arm_legs","arm_leg","mount","hp_potion","mana_potion","spell","reagent","buddy","currency","quest","furniture","floor","wall","ore"]);
     const ITEM_SUBTYPES = new Set(["None","Light","Medium","Heavy","High Mastery",""]);
     const QUEST_TYPES = new Set(["kill","gather","go"]);
 
