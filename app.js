@@ -14,7 +14,7 @@ const h = (tag, attrs = {}, ...kids) => {
 };
 
 const S = { tab: new URLSearchParams(location.search).get("tab") || "map", c: null, world: null,
-  quest: null, npc: null, item: null, dirty: false };
+  quest: null, npc: null, item: null, dirty: false, listFilter: {} };
 
 function status(msg, err) { const s = $("#status"); s.textContent = msg; s.className = err ? "err" : ""; }
 
@@ -178,10 +178,12 @@ const parseJSON = (s, d) => { try { return JSON.parse(s || ""); } catch { return
 // ------------------------------------------------------------------ list helper
 function listPanel(items, label, selKey, onPick, onNew) {
   const box = h("div", { class: "list", "data-scroll": "list:" + (S.tab || "") });
-  const q = h("input", { type: "search", placeholder: "Filter…" });
+  const key = S.tab || "";
+  const q = h("input", { type: "search", placeholder: "Filter…", value: S.listFilter[key] || "" });
   const rows = h("div");
   const draw = () => {
     rows.textContent = "";
+    S.listFilter[key] = q.value;
     const f = q.value.toLowerCase();
     for (const it of items()) {
       const l = label(it);
