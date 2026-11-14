@@ -30,7 +30,7 @@ ok(B.player(c, 10, { behind: 5 }).gear.wep.Name === "Long Stick", "five levels b
 const rat = { Name: "Rat", HP: 20, ATK: 3, XP: 10, CanMove: 1, AttackSpeed: 1, Range: 1 };
 const f = B.fight(p1, rat);
 ok(f.swings === Math.ceil(20 / (p1.hit * 1.2)) && Math.abs(f.ttk - f.swings / 2) < 1e-9, "swings and seconds");
-ok(f.xp === 10 && f.killsPerLevel === 40, "XP 10 at level 1: 40 kills a level");
+ok(f.xp === 10 && f.killsPerLevel === 35, "XP 10 at level 1: 35 kills a level");
 ok(B.fight(p1, rat, { pack: 3 }).taken === f.taken * 6, "a pack of 3 costs 1+2+3 times one");
 ok(B.fight(p1, { ...rat, CanMove: 0, HP: 6 }).swings === 6, "stationary things lose 1 a swing");
 const st = B.stageOf(c, rat, { Rat: ["Farm"] });

@@ -9,7 +9,7 @@ const BQBal = (() => {
   // ---- the server's own numbers -------------------------------------------
   const C = {
     combatTicksPerSecond: 20,      // enemies.go combatTicksPerSecond
-    xpPerLevel: 400,               // players.go xpPerLevel (flat curve)
+    xpPerLevel: 350,               // players.go xpPerLevel (flat curve)
     maxLevel: 40,                  // players.go maxLevel
     walkTilesPerSecond: 2.5,       // movement.go walkTilesPerSecond
     sprintMultiplier: 1.4,         // movement.go sprintMultiplier
