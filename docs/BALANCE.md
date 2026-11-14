@@ -21,7 +21,7 @@ function:
 | Your HP | `players.go getMaxHP` | 100 + 10 x STA + 5 x STR (orders differ) |
 | Points to spend | `players.go cpGains` | per level, 1/1/1 at the start |
 | Kill XP | `players.go givePlayerXP` | XP / your level, rounded down; nothing if that is 1 or less |
-| Levels | `players.go xpPerLevel`, `maxLevel` | 400 XP each, level 40 cap |
+| Levels | `players.go xpPerLevel`, `maxLevel` | 350 XP each, level 40 cap |
 | Exotic spawns | `enemies.go` | 1 in 10: 3x HP, double XP |
 | Speeds | `movement.go` | you walk 2.5 tiles/s, sprint 1.4x; mobs `enemies.Speed` (1 by default, 0.25 to 6) |
 | Passive | `enemies.go passiveCalmTicks` | never starts a fight; calms after 8 s left alone |

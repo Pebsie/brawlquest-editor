@@ -11,7 +11,7 @@
   "staminaRegenStill": 20,
   "staminaSprintDrain": 15,
   "walkTilesPerSecond": 2.5,
-  "xpPerLevel": 400
+  "xpPerLevel": 350
  },
  "melee": [
   [
