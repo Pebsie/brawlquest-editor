@@ -57,6 +57,7 @@ function skillIssues(nodes, effectIds) {
     else if (!/\.png$/i.test(n.Icon)) add(n, "icon must be a .png path");
     if (!(+n.MaxRank >= 1)) add(n, "MaxRank must be at least 1");
     if (!(+n.Cost >= 1)) add(n, "Cost must be at least 1 point");
+    else if (+n.Cost !== 1) add(n, "each rank should cost 1 point");
     if (!(+n.Tier >= 1 && +n.Tier <= 6)) add(n, "Tier must be 1 to 6");
     if (!(+n.Col >= 0 && +n.Col <= 2)) add(n, "Col must be 0, 1 or 2");
     const pos = `${n.Tree}/${n.Branch}/${n.Tier}/${n.Col}`;
@@ -256,8 +257,8 @@ function skillForm(n, treeNodes, allNodes, effects) {
       ...field("Name", f.Name), ...field("Description", h("div", {}, f.Desc, h("span", { class: "hint" }, "plain words: the tooltip shows this, then the numbers"))),
       ...field("Tree", tree), ...field("Branch", f.Branch), ...field("Kind", kind), ...field("Icon", icon),
       ...field("Tier", h("div", {}, f.Tier, h("span", { class: "hint" }, " row, 1 at the top"))), ...field("Column", h("div", {}, f.Col, h("span", { class: "hint" }, " 0 left, 1 middle, 2 right"))),
-      ...field("Max rank", f.MaxRank), ...field("Cost (points a rank)", f.Cost),
-      ...field("Needs level", f.ReqLevel), ...field("Points in branch", h("div", {}, f.ReqBranch, h("span", { class: "hint" }, " spent in this branch before it opens"))),
+      ...field("Max rank", f.MaxRank), ...field("Cost (points a rank)", h("div", {}, f.Cost, h("span", { class: "hint" }, " every rank costs 1"))),
+      ...field("Needs level", f.ReqLevel), ...field("Points in branch", h("div", {}, f.ReqBranch, h("span", { class: "hint" }, " spent in this branch before it opens; a single connecting path is enough"))),
       ...field("Requires one of", reqBox),
       h("label", {}, "Stats a rank gives"), modWrap,
       h("label", {}, "Ability"), abBox),
